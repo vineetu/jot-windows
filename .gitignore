@@ -1,0 +1,19 @@
+# .NET build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+
+# Rider / VS
+.idea/
+.vs/
+
+# Local runtime data
+*.log
+
+# STT models (large, re-downloadable)
+models/
+*.onnx
