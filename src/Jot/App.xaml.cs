@@ -67,7 +67,11 @@ public partial class App : System.Windows.Application
             Forms.ToolTipIcon.Info);
 
         // Dev affordance: `--show` surfaces the main window immediately (Jot normally boots to tray).
-        if (e.Args.Contains("--show") || e.Args.Contains("--detail")) ShowMainWindow();
+        if (e.Args.Contains("--show") || e.Args.Contains("--detail") || e.Args.Contains("--settings"))
+            ShowMainWindow();
+        if (e.Args.Contains("--settings"))
+            Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.SettingsPage)),
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         // Dev affordance: `--pilldemo` drives the pill with a speech-like envelope (no mic needed).
         if (e.Args.Contains("--pilldemo")) RunPillDemo();
         // Dev affordance: `--detail` opens the first recording's detail view.
@@ -133,6 +137,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<Navigator>();
         services.AddSingleton<INavigator>(sp => sp.GetRequiredService<Navigator>());
         services.AddSingleton<RecentsViewModel>();
+        services.AddSingleton<SettingsViewModel>();
 
         services.AddSingleton<MainWindow>();
         return services.BuildServiceProvider();

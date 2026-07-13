@@ -10,3 +10,4 @@ global using Point = System.Windows.Point;
 global using FontFamily = System.Windows.Media.FontFamily;
 global using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 global using Binding = System.Windows.Data.Binding;
+global using UserControl = System.Windows.Controls.UserControl;
