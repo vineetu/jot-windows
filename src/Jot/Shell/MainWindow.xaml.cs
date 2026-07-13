@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Jot.Services.Abstractions;
+using Jot.Services.Navigation;
 using Jot.Views;
 using Wpf.Ui.Controls;
 
@@ -12,9 +13,10 @@ namespace Jot.Shell;
 /// </summary>
 public partial class MainWindow : FluentWindow
 {
-    public MainWindow(IThemeService theme)
+    public MainWindow(IThemeService theme, Navigator navigator)
     {
         InitializeComponent();
+        navigator.View = RootNavigation; // view-models navigate through this
         theme.Initialize(this);
         Loaded += (_, _) => RootNavigation.Navigate(typeof(RecentsPage));
     }

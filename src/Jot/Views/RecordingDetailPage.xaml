@@ -1,0 +1,211 @@
+<Page x:Class="Jot.Views.RecordingDetailPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Recording">
+    <Grid Margin="{StaticResource PagePadding}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Top bar -->
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ui:Button Grid.Column="0" Appearance="Secondary" Command="{Binding BackCommand}"
+                       Icon="{ui:SymbolIcon ArrowLeft24}" ToolTip="Back" Margin="0,0,12,0"
+                       AutomationProperties.Name="Back" />
+
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding Item.Title}" Style="{DynamicResource SubtitleTextBlockStyle}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="· edited" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                               Visibility="{Binding Item.IsEdited, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+                <TextBlock Margin="0,2,0,0" FontSize="12" Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                    <Run Text="{Binding Item.ModelLabel, Mode=OneWay}" />
+                    <Run Text="·" />
+                    <Run Text="{Binding Item.DurationText, Mode=OneWay}" />
+                </TextBlock>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <ui:Button Appearance="Secondary" Content="Edit" Icon="{ui:SymbolIcon Edit24}"
+                           Margin="0,0,8,0" Command="{Binding ToggleEditCommand}"
+                           Visibility="{Binding IsDictation, Converter={StaticResource BoolToVis}}" />
+                <ui:Button Appearance="Secondary" Content="Copy" Icon="{ui:SymbolIcon Copy24}"
+                           Margin="0,0,8,0" Command="{Binding CopyCommand}" />
+                <ui:Button Appearance="Secondary" Icon="{ui:SymbolIcon MoreHorizontal24}" ToolTip="More">
+                    <ui:Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Detect speakers" Command="{Binding DetectSpeakersCommand}" />
+                            <MenuItem Header="Export as WebVTT…" Command="{Binding ExportVttCommand}" />
+                            <MenuItem Header="Reveal in File Explorer" Command="{Binding RevealInExplorerCommand}" />
+                            <Separator />
+                            <MenuItem Header="Delete" Command="{Binding DeleteCommand}" />
+                        </ContextMenu>
+                    </ui:Button.ContextMenu>
+                </ui:Button>
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
+            <StackPanel MaxWidth="760" HorizontalAlignment="Stretch">
+
+                <!-- Pending banner -->
+                <ui:Card Margin="0,0,0,14" Visibility="{Binding Item.IsPending, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="Needs transcription" FontWeight="SemiBold" />
+                            <TextBlock Text="This recording was saved but not transcribed yet."
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
+                        </StackPanel>
+                        <ui:Button Grid.Column="1" Appearance="Primary" Content="Re-transcribe"
+                                   Command="{Binding ReTranscribeCommand}" />
+                    </Grid>
+                </ui:Card>
+
+                <!-- Rewrite session: Instruction / Original / Rewritten -->
+                <StackPanel Visibility="{Binding IsRewrite, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="INSTRUCTION" Style="{DynamicResource CaptionTextBlockStyle}"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="2,0,0,4" />
+                    <ui:Card Margin="0,0,0,14">
+                        <TextBlock Text="{Binding Item.Instruction}" TextWrapping="Wrap" />
+                    </ui:Card>
+                    <TextBlock Text="ORIGINAL" Style="{DynamicResource CaptionTextBlockStyle}"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="2,0,0,4" />
+                    <ui:Card Margin="0,0,0,14">
+                        <TextBlock Text="{Binding Item.Original}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </ui:Card>
+                    <TextBlock Text="REWRITTEN" Style="{DynamicResource CaptionTextBlockStyle}"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="2,0,0,4" />
+                    <ui:Card>
+                        <TextBlock Text="{Binding Item.Transcript}" TextWrapping="Wrap" FontSize="15" />
+                    </ui:Card>
+                </StackPanel>
+
+                <!-- Dictation body -->
+                <StackPanel Visibility="{Binding IsDictation, Converter={StaticResource BoolToVis}}">
+
+                    <!-- Playback bar -->
+                    <ui:Card Margin="0,0,0,14" Visibility="{Binding CanPlay, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ui:Button Grid.Column="0" Appearance="Secondary" Width="40" Height="40" CornerRadius="20"
+                                       Command="{Binding PlayPauseCommand}" Margin="0,0,12,0"
+                                       AutomationProperties.Name="Play or pause">
+                                <Grid>
+                                    <ui:SymbolIcon Symbol="Play24"
+                                                   Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                                    <ui:SymbolIcon Symbol="Pause24"
+                                                   Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
+                            </ui:Button>
+                            <ProgressBar Grid.Column="1" VerticalAlignment="Center"
+                                         Value="{Binding Position}" Maximum="{Binding Duration}" />
+                            <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0"
+                                       FontFamily="{StaticResource JotMonoFont}" FontSize="12"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                                <Run Text="{Binding Position, Converter={StaticResource SecondsToTime}, Mode=OneWay}" />
+                                <Run Text="/" />
+                                <Run Text="{Binding Duration, Converter={StaticResource SecondsToTime}, Mode=OneWay}" />
+                            </TextBlock>
+                        </Grid>
+                    </ui:Card>
+                    <TextBlock Text="Audio playback is available for recordings you dictate. (Sample rows have no audio.)"
+                               Margin="2,0,0,14" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                               Visibility="{Binding CanPlay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+
+                    <!-- Tags -->
+                    <WrapPanel Margin="0,0,0,14">
+                        <ItemsControl ItemsSource="{Binding Item.Tags}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,6,6" Padding="8,3" CornerRadius="12"
+                                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding}" FontSize="12" VerticalAlignment="Center" />
+                                            <ui:Button Padding="4,0" Margin="4,0,0,0" Appearance="Transparent"
+                                                       Icon="{ui:SymbolIcon Dismiss12}"
+                                                       Command="{Binding DataContext.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                       CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <ui:TextBox PlaceholderText="Add tag" Width="120" Margin="0,0,0,6"
+                                    Text="{Binding NewTag, UpdateSourceTrigger=PropertyChanged}">
+                            <ui:TextBox.InputBindings>
+                                <KeyBinding Key="Return" Command="{Binding AddTagCommand}" />
+                            </ui:TextBox.InputBindings>
+                        </ui:TextBox>
+                    </WrapPanel>
+
+                    <!-- Transcript: read vs edit -->
+                    <TextBlock Text="{Binding Item.Transcript}" TextWrapping="Wrap" FontSize="16" LineHeight="26"
+                               Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+
+                    <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
+                        <ui:TextBox Text="{Binding EditableTranscript, UpdateSourceTrigger=PropertyChanged}"
+                                    AcceptsReturn="True" TextWrapping="Wrap" MinHeight="160" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                            <ui:Button Content="Cancel" Appearance="Secondary" Margin="0,0,8,0"
+                                       Command="{Binding CancelEditCommand}" />
+                            <ui:Button Content="Done" Appearance="Primary" Command="{Binding SaveEditCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Speaker turns -->
+                    <StackPanel Margin="0,16,0,0"
+                                Visibility="{Binding HasSpeakers, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Speakers" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <ui:ToggleSwitch Content="Show plain" Margin="16,0,0,0"
+                                             IsChecked="{Binding ShowPlain}" />
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding SpeakerTurns}"
+                                      Visibility="{Binding ShowPlain, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="4" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" CornerRadius="2" Background="{Binding Color}" />
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                            <TextBlock Text="{Binding Speaker}" FontWeight="SemiBold" FontSize="12"
+                                                       Foreground="{Binding Color}" />
+                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

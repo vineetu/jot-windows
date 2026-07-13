@@ -5,7 +5,14 @@
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+                    xmlns:ds="clr-namespace:Jot.DesignSystem">
+
+    <!-- Shared value converters. -->
+    <ds:BoolToVisibilityConverter x:Key="BoolToVis" />
+    <ds:StringToVisibilityConverter x:Key="StringToVis" />
+    <ds:InverseBooleanConverter x:Key="InverseBool" />
+    <ds:SecondsToTimeConverter x:Key="SecondsToTime" />
 
     <!-- 4px spacing unit (matches the Mac scale; Fluent-legal). -->
     <sys:Double x:Key="Space1">4</sys:Double>
