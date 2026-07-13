@@ -24,7 +24,8 @@ public sealed class RecorderController : IDisposable
     private readonly ITranscriber _transcriber;
     private readonly ISettingsStore _settings;
     private readonly IRecordingStore _store;
-    private readonly LiveCaptionSession _live;
+    private readonly LiveTranscription? _live;   // null if the engine can't stream
+    private bool _liveActive;                     // is this recording being live-streamed?
     private IntPtr _originWindow; // the app that was focused when this recording began
 
     public RecorderController(AudioRecorder recorder, ITranscriber transcriber,
@@ -34,8 +35,11 @@ public sealed class RecorderController : IDisposable
         _transcriber = transcriber;
         _settings = settings;
         _store = store;
-        _live = new LiveCaptionSession(recorder, transcriber);
-        _live.PartialReady += text => PartialTranscript?.Invoke(text);
+        if (transcriber is IStreamingTranscriber streaming)
+        {
+            _live = new LiveTranscription(recorder, streaming);
+            _live.PartialReady += text => PartialTranscript?.Invoke(text);
+        }
     }
 
     public RecorderState State { get; private set; } = RecorderState.Idle;
@@ -66,8 +70,8 @@ public sealed class RecorderController : IDisposable
             _originWindow = Delivery.TextInjector.CaptureForegroundWindow();
             _recorder.Start();
             SetState(RecorderState.Recording);
-            if (_settings.Current.LiveCaptions)
-                _live.Start();
+            _liveActive = _settings.Current.LiveCaptions && _live is not null;
+            if (_liveActive) _live!.Start();
         }
         catch (Exception ex)
         {
@@ -78,12 +82,16 @@ public sealed class RecorderController : IDisposable
     private async Task StopAndDeliverAsync()
     {
         SetState(RecorderState.Transcribing);
-        await _live.StopAsync(); // end live captioning before the authoritative final decode
         try
         {
             string wav = Path.Combine(RecordingsDir, $"{DateTime.Now:yyyyMMdd-HHmmss}.wav");
+
+            // Native streaming: the transcript is already built as the user spoke, so finishing (while
+            // the recorder is still capturing, to catch the last words) is near-instant. Only fall back
+            // to a full decode when live captions were off.
+            string? liveText = _liveActive ? (await _live!.FinishAsync()).Trim() : null;
             RecordingResult result = await Task.Run(() => _recorder.Stop(wav));
-            string text = (await _transcriber.TranscribeAsync(result.Samples, result.SampleRate)).Trim();
+            string text = liveText ?? (await _transcriber.TranscribeAsync(result.Samples, result.SampleRate)).Trim();
 
             if (string.IsNullOrWhiteSpace(text))
                 NothingTranscribed?.Invoke();
@@ -111,7 +119,7 @@ public sealed class RecorderController : IDisposable
         CreatedAt = DateTime.Now,
         DurationSeconds = result.Duration.TotalSeconds,
         WavPath = result.WavPath,
-        ModelLabel = "Parakeet",
+        ModelLabel = "Nemotron",
         Title = TitleFrom(transcript),
         Transcript = transcript,
         Status = Models.RecordingStatus.Complete,
@@ -133,7 +141,7 @@ public sealed class RecorderController : IDisposable
 
     public void Dispose()
     {
-        _live.StopAsync().GetAwaiter().GetResult();
+        _live?.CancelAsync().GetAwaiter().GetResult();
         _recorder.Dispose();
     }
 }

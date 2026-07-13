@@ -11,15 +11,17 @@ namespace Jot.Transcription.Nemotron;
 /// On-device speech-to-text using NVIDIA Nemotron 3.5 ASR streaming multilingual 0.6B (int4 ONNX).
 ///
 /// A cache-aware streaming FastConformer encoder + LSTM prediction decoder + joint (RNNT transducer).
-/// Ports the validated Python reference: 128-mel front-end → per-560ms-chunk encoder passes that thread
-/// cache tensors chunk-to-chunk (with a 9-frame pre-encode carryover) → greedy transducer decode
-/// (joint argmax; on a non-blank, advance the LSTM state; ≤10 symbols/frame) → SentencePiece detok.
+/// The engine is genuinely streaming: a <see cref="Session"/> keeps the encoder cache + decoder state
+/// open and consumes each 560 ms chunk exactly once (threading the cache forward), so a live dictation
+/// is essentially finished the moment you stop — no re-decoding of the whole clip. The batch
+/// <see cref="ITranscriber"/> path just opens a session, feeds the whole clip, and finishes.
 ///
-/// For the batch <see cref="ITranscriber"/> contract, the whole clip is fed through the streaming loop
-/// and the full transcript returned. All three graphs run on CPU by default; the encoder can honour a
-/// GPU backend. Model loads lazily on first use, off the UI thread.
+/// Ports the validated Python reference: 128-mel front-end → per-chunk encoder with a 9-frame
+/// pre-encode carryover → greedy transducer decode (joint argmax; advance LSTM on a non-blank;
+/// ≤10 symbols/frame) → SentencePiece detok. All graphs run on CPU by default; the encoder can
+/// honour a GPU backend. Loads lazily on first use, off the UI thread.
 /// </summary>
-public sealed class NemotronTranscriber : ITranscriber, IDisposable
+public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, IDisposable
 {
     private const int RequiredSampleRate = 16_000;
     private const int BlankId = 13_087;
@@ -27,9 +29,9 @@ public sealed class NemotronTranscriber : ITranscriber, IDisposable
     private const int WindowFrames = 65;       // 9 carryover + 56 new
     private const int NewFramesPerChunk = 56;
     private const int PreEncodeCache = 9;
-    private const long EnglishLangId = 0;      // Nemotron language-embedding index for English
+    private const int EndPadGuardFrames = 4;   // trailing mel frames affected by center end-pad; defer them
+    private const long EnglishLangId = 0;
 
-    // Cache tensor dims (from the model's input shapes).
     private const int EncLayers = 24, ChannelCache = 56, Hidden = 1024, TimeCache = 8;
     private const int DecLstmLayers = 2, DecDim = 640;
 
@@ -38,7 +40,7 @@ public sealed class NemotronTranscriber : ITranscriber, IDisposable
     private readonly ComputeBackend _encoderBackend;
     private readonly MelFrontend _mel = new();
     private readonly object _loadGate = new();
-    private readonly object _inferenceGate = new();
+    private readonly object _inferenceGate = new();  // the ONNX sessions can't Run() concurrently
 
     private InferenceSession? _encoder;
     private InferenceSession? _decoder;
@@ -59,90 +61,139 @@ public sealed class NemotronTranscriber : ITranscriber, IDisposable
 
     public bool IsModelInstalled => _model.IsInstalled;
 
-    /// <summary>Sets the spoken-language embedding index (English = 0). Applied on the next call.</summary>
+    /// <summary>Sets the spoken-language embedding index (English = 0). Applied to new sessions.</summary>
     public void SetLanguageId(long langId) => _langId = langId;
 
+    /// <summary>Opens a live streaming session: feed audio as it arrives, read the growing transcript,
+    /// and <see cref="Session.Finish"/> when the user stops (near-instant — only the tail remains).</summary>
+    public Session OpenStream()
+    {
+        EnsureLoaded();
+        return new Session(this);
+    }
+
+    IStreamingSession IStreamingTranscriber.OpenStream() => OpenStream();
+
     public Task<string> TranscribeAsync(float[] samples, int sampleRate, CancellationToken ct = default)
-        => Task.Run(() => Transcribe(samples, sampleRate, ct), ct);
+        => Task.Run(() =>
+        {
+            if (sampleRate != RequiredSampleRate)
+                throw new ArgumentException($"Nemotron expects {RequiredSampleRate} Hz mono audio, got {sampleRate} Hz.", nameof(sampleRate));
+            if (samples.Length == 0) return string.Empty;
+
+            var session = OpenStream();
+            session.Accept(samples);
+            return session.Finish();
+        }, ct);
 
     public void WarmUp()
     {
         if (!_model.IsInstalled) return;
-        try { Transcribe(new float[RequiredSampleRate / 2], RequiredSampleRate, CancellationToken.None); }
+        try { TranscribeAsync(new float[RequiredSampleRate / 2], RequiredSampleRate).GetAwaiter().GetResult(); }
         catch { /* best effort */ }
     }
 
-    private string Transcribe(float[] samples, int sampleRate, CancellationToken ct)
+    // ---- a live streaming utterance ------------------------------------------------------------
+
+    /// <summary>
+    /// One in-flight utterance. Holds the persistent encoder cache + decoder LSTM state and the tokens
+    /// emitted so far. <see cref="Accept"/> feeds newly-arrived audio and processes every chunk that is
+    /// now stable (a one-chunk trailing margin is held back until <see cref="Finish"/>, since the mel
+    /// front-end's end padding perturbs the last few frames).
+    /// </summary>
+    public sealed class Session : IStreamingSession
     {
-        if (sampleRate != RequiredSampleRate)
-            throw new ArgumentException($"Nemotron expects {RequiredSampleRate} Hz mono audio, got {sampleRate} Hz.", nameof(sampleRate));
-        if (samples.Length == 0) return string.Empty;
+        private readonly NemotronTranscriber _t;
+        private readonly List<float> _audio = new();
+        private readonly List<int> _tokens = new();
+        private readonly float[] _cacheChannel = new float[EncLayers * ChannelCache * Hidden];
+        private readonly float[] _cacheTime = new float[EncLayers * Hidden * TimeCache];
+        private long _cacheLen;
+        private float[] _h = new float[DecLstmLayers * DecDim];
+        private float[] _c = new float[DecLstmLayers * DecDim];
+        private float[] _g = [];
+        private bool _primed;
+        private int _fedChunks;
 
-        EnsureLoaded();
-        ct.ThrowIfCancellationRequested();
+        internal Session(NemotronTranscriber t) => _t = t;
 
-        lock (_inferenceGate)
+        /// <summary>Feeds new 16 kHz mono samples; returns the transcript so far. Cheap to call often.</summary>
+        public string Accept(float[] newSamples)
         {
-            float[][] mel = _mel.Compute(samples);       // [T][128]
-            int t = mel.Length;
-            if (t == 0) return string.Empty;
-
-            // Encoder cache (zeros) + decoder LSTM state (zeros), threaded across chunks.
-            var cacheChannel = new float[EncLayers * ChannelCache * Hidden];      // [1,24,56,1024]
-            var cacheTime = new float[EncLayers * Hidden * TimeCache];            // [1,24,1024,8]
-            long cacheLen = 0;
-            var h = new float[DecLstmLayers * DecDim];                            // [2,1,640]
-            var c = new float[DecLstmLayers * DecDim];
-
-            // Prime the prediction network with the blank token and zero state.
-            var tokens = new List<int>();
-            float[] g = RunDecoder(BlankId, h, c, out h, out c);                  // [1,1,640]
-
-            int nChunks = (t + NewFramesPerChunk - 1) / NewFramesPerChunk;
-            var window = new float[WindowFrames * MelFrontend.NMels];             // [65,128] time-major
-
-            for (int chunk = 0; chunk < nChunks; chunk++)
+            _audio.AddRange(newSamples);
+            lock (_t._inferenceGate)
             {
-                ct.ThrowIfCancellationRequested();
-                int start = chunk * NewFramesPerChunk;                            // index into the 9-padded stream
-                int valid = Math.Min(WindowFrames, (t + PreEncodeCache) - start);
+                Prime();
+                float[][] mel = _t._mel.Compute(_audio.ToArray());
+                int total = mel.Length;
+                // Only process chunks whose frames are all clear of the end-pad zone.
+                int stableFrames = total - EndPadGuardFrames;
+                int stableChunks = stableFrames > 0 ? stableFrames / NewFramesPerChunk : 0;
+                for (int ci = _fedChunks; ci < stableChunks; ci++) ProcessChunk(ci, mel, total);
+                _fedChunks = Math.Max(_fedChunks, stableChunks);
+                return _t.Detokenize(_tokens);
+            }
+        }
 
-                // Fill the 65-frame window from the pre-padded mel stream (first 9 frames are zeros).
-                Array.Clear(window);
-                for (int wf = 0; wf < WindowFrames; wf++)
+        /// <summary>Processes the remaining tail and returns the final transcript.</summary>
+        public string Finish()
+        {
+            lock (_t._inferenceGate)
+            {
+                Prime();
+                float[][] mel = _t._mel.Compute(_audio.ToArray());
+                int total = mel.Length;
+                if (total > 0)
                 {
-                    int src = start + wf - PreEncodeCache;                        // -9..: <0 is pre-encode zero pad
-                    if (src < 0 || src >= t) continue;
-                    Array.Copy(mel[src], 0, window, wf * MelFrontend.NMels, MelFrontend.NMels);
+                    int chunks = (total + NewFramesPerChunk - 1) / NewFramesPerChunk;
+                    for (int ci = _fedChunks; ci < chunks; ci++) ProcessChunk(ci, mel, total);
+                    _fedChunks = chunks;
                 }
+                return _t.Detokenize(_tokens);
+            }
+        }
 
-                (float[] enc, int encLen, cacheChannel, cacheTime, cacheLen) =
-                    RunEncoder(window, valid, cacheChannel, cacheTime, cacheLen);
+        private void Prime()
+        {
+            if (_primed) return;
+            _g = _t.RunDecoder(BlankId, _h, _c, out _h, out _c); // prediction net primed on blank + zero state
+            _primed = true;
+        }
 
-                for (int ti = 0; ti < encLen; ti++)
-                {
-                    var frame = new float[Hidden];
-                    Array.Copy(enc, ti * Hidden, frame, 0, Hidden);
+        private void ProcessChunk(int ci, float[][] mel, int totalFrames)
+        {
+            int start = ci * NewFramesPerChunk;
+            int valid = Math.Min(WindowFrames, (totalFrames + PreEncodeCache) - start);
+            if (valid <= 0) return;
 
-                    for (int sym = 0; sym < MaxSymbolsPerStep; sym++)
-                    {
-                        float[] logits = RunJoint(frame, g);                      // [13088]
-                        int k = ArgMax(logits);
-                        if (k == BlankId) break;
-                        tokens.Add(k);
-                        g = RunDecoder(k, h, c, out h, out c);
-                    }
-                }
+            var window = new float[WindowFrames * MelFrontend.NMels];         // [65,128] time-major, zero-padded
+            for (int wf = 0; wf < WindowFrames; wf++)
+            {
+                int src = start + wf - PreEncodeCache;                        // first 9 are pre-encode zeros
+                if (src < 0 || src >= totalFrames) continue;
+                Array.Copy(mel[src], 0, window, wf * MelFrontend.NMels, MelFrontend.NMels);
             }
 
-            return Detokenize(tokens);
+            (float[] enc, int encLen) = _t.RunEncoder(window, valid, _cacheChannel, _cacheTime, ref _cacheLen);
+            for (int ti = 0; ti < encLen; ti++)
+            {
+                var frame = new float[Hidden];
+                Array.Copy(enc, ti * Hidden, frame, 0, Hidden);
+                for (int sym = 0; sym < MaxSymbolsPerStep; sym++)
+                {
+                    int k = ArgMax(_t.RunJoint(frame, _g));
+                    if (k == BlankId) break;
+                    _tokens.Add(k);
+                    _g = _t.RunDecoder(k, _h, _c, out _h, out _c);
+                }
+            }
         }
     }
 
-    // ---- encoder: one cache-aware chunk --------------------------------------------------------
+    // ---- encoder: one cache-aware chunk (updates the caches in place) --------------------------
 
-    private (float[] enc, int encLen, float[] cacheChannel, float[] cacheTime, long cacheLen) RunEncoder(
-        float[] window, int validFrames, float[] cacheChannel, float[] cacheTime, long cacheLen)
+    private (float[] enc, int encLen) RunEncoder(
+        float[] window, int validFrames, float[] cacheChannel, float[] cacheTime, ref long cacheLen)
     {
         var audioSignal = new DenseTensor<float>(window, [1, WindowFrames, MelFrontend.NMels]); // time-major
         var length = new DenseTensor<long>(new[] { (long)validFrames }, [1]);
@@ -163,13 +214,13 @@ public sealed class NemotronTranscriber : ITranscriber, IDisposable
 
         using var r = _encoder!.Run(inputs,
             ["outputs", "encoded_lengths", "cache_last_channel_next", "cache_last_time_next", "cache_last_channel_len_next"]);
-        var outputs = AsDense<float>(r, "outputs");                 // [1, 7, 1024]
         int encLen = (int)AsDense<long>(r, "encoded_lengths").Buffer.Span[0];
-        float[] enc = outputs.Buffer.ToArray();
-        float[] nextCh = AsDense<float>(r, "cache_last_channel_next").Buffer.ToArray();
-        float[] nextT = AsDense<float>(r, "cache_last_time_next").Buffer.ToArray();
-        long nextLen = AsDense<long>(r, "cache_last_channel_len_next").Buffer.Span[0];
-        return (enc, encLen, nextCh, nextT, nextLen);
+        float[] enc = AsDense<float>(r, "outputs").Buffer.ToArray();          // [1,7,1024]
+        // Thread the "next" caches back into the same buffers for the following chunk.
+        AsDense<float>(r, "cache_last_channel_next").Buffer.Span.CopyTo(cacheChannel);
+        AsDense<float>(r, "cache_last_time_next").Buffer.Span.CopyTo(cacheTime);
+        cacheLen = AsDense<long>(r, "cache_last_channel_len_next").Buffer.Span[0];
+        return (enc, encLen);
     }
 
     // ---- decoder: LSTM prediction network step -------------------------------------------------
@@ -188,8 +239,8 @@ public sealed class NemotronTranscriber : ITranscriber, IDisposable
         };
 
         using var r = _decoder!.Run(inputs, ["decoder_output", "h_out", "c_out"]);
-        // decoder_output is [1, 640, 1] (channel-major); with target_len=1 the 640 values are the
-        // prediction vector — reshaping to the joint's expected [1, 1, 640] is a no-op copy.
+        // decoder_output is [1, 640, 1]; with target_len=1 those 640 values are the prediction vector,
+        // and reshaping to the joint's expected [1, 1, 640] is a no-op copy.
         float[] g = AsDense<float>(r, "decoder_output").Buffer.ToArray();
         hOut = AsDense<float>(r, "h_out").Buffer.ToArray();
         cOut = AsDense<float>(r, "c_out").Buffer.ToArray();
@@ -210,7 +261,7 @@ public sealed class NemotronTranscriber : ITranscriber, IDisposable
         };
 
         using var r = _joint!.Run(inputs, ["joint_output"]);
-        return AsDense<float>(r, "joint_output").Buffer.ToArray();  // [1,1,1,13088] -> 13088
+        return AsDense<float>(r, "joint_output").Buffer.ToArray();            // [1,1,1,13088] -> 13088
     }
 
     // ---- detok ---------------------------------------------------------------------------------
@@ -223,7 +274,7 @@ public sealed class NemotronTranscriber : ITranscriber, IDisposable
             if (id < 0 || id >= _vocab.Length) continue;
             string piece = _vocab[id];
             if (piece.Length >= 2 && piece[0] == '<' && piece[^1] == '>') continue; // special / locale token
-            sb.Append(piece.Replace('▁', ' '));                                // SentencePiece metaspace
+            sb.Append(piece.Replace('▁', ' '));                                     // SentencePiece metaspace
         }
         return Regex.Replace(sb.ToString(), " {2,}", " ").Trim();
     }

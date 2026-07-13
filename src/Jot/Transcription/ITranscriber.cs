@@ -17,6 +17,26 @@ public interface ITranscriber
 }
 
 /// <summary>
+/// A transcriber whose model streams natively: open a live session, feed audio chunks as they arrive,
+/// and read the transcript as it grows. On stop the transcript is essentially already done — no
+/// re-decoding of the whole clip (which is what a non-streaming model would be forced to do).
+/// </summary>
+public interface IStreamingTranscriber
+{
+    IStreamingSession OpenStream();
+}
+
+/// <summary>One in-flight streaming utterance.</summary>
+public interface IStreamingSession
+{
+    /// <summary>Feeds newly-arrived 16 kHz mono samples; returns the transcript so far.</summary>
+    string Accept(float[] newSamples);
+
+    /// <summary>Processes the tail and returns the final transcript.</summary>
+    string Finish();
+}
+
+/// <summary>
 /// Milestone-1 placeholder: proves the record → transcribe → paste loop end to end
 /// without a real model. Emits a marker describing the captured audio.
 /// </summary>
