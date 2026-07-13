@@ -3,6 +3,7 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Jot.Services.Abstractions;
+using Jot.Transcription;
 using Microsoft.Win32;
 using NAudio.CoreAudioApi;
 
@@ -19,6 +20,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsStore _store;
     private readonly IThemeService _theme;
+    private readonly ParakeetModel _model;
+    private readonly ParakeetModelInstaller _installer;
     private JotSettings S => _store.Current;
 
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -29,6 +32,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         ["English", "Spanish", "French", "German", "Italian", "Portuguese", "Japanese"];
     public string[] Providers { get; } = ["None", "OpenAI", "Anthropic", "Gemini", "Ollama"];
     public string[] RetentionOptions { get; } = ["Forever", "7 days", "30 days", "90 days"];
+    public string[] TranscriptionDevices { get; } = ["CPU", "GPU (DirectML)"];
 
     public ObservableCollection<AudioInputDevice> InputDevices { get; } = new();
 
@@ -41,9 +45,20 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private AudioInputDevice? _selectedDevice;
 
     [ObservableProperty] private string _language = "English";
+    [ObservableProperty] private string _transcriptionDevice = "CPU";
     [ObservableProperty] private bool _autoPaste;
     [ObservableProperty] private bool _autoEnter;
     [ObservableProperty] private bool _keepInClipboard;
+
+    // On-device model download state (backed by ParakeetModelInstaller)
+    [ObservableProperty] private bool _isModelInstalled;
+    [ObservableProperty] private bool _isDownloadingModel;
+    [ObservableProperty] private double _modelDownloadProgress; // 0..100
+    [ObservableProperty] private string _modelStatusText = "";
+
+    public bool ShowDownloadButton => !IsModelInstalled && !IsDownloadingModel;
+    partial void OnIsModelInstalledChanged(bool value) => OnPropertyChanged(nameof(ShowDownloadButton));
+    partial void OnIsDownloadingModelChanged(bool value) => OnPropertyChanged(nameof(ShowDownloadButton));
 
     [ObservableProperty] private string _aiProvider = "None";
     [ObservableProperty] private string _aiBaseUrl = "";
@@ -60,10 +75,13 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool AiConfigured => AiProvider != "None";
 
-    public SettingsViewModel(ISettingsStore store, IThemeService theme)
+    public SettingsViewModel(ISettingsStore store, IThemeService theme,
+        ParakeetModel model, ParakeetModelInstaller installer)
     {
         _store = store;
         _theme = theme;
+        _model = model;
+        _installer = installer;
 
         // Seed backing fields directly so wiring the UI doesn't trigger a save storm.
         _themeMode = S.Theme;
@@ -73,6 +91,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _semanticSearch = S.SemanticSearch;
         _returnToOrigin = S.ReturnToOrigin;
         _language = S.Language;
+        _transcriptionDevice = S.TranscriptionDevice;
         _autoPaste = S.AutoPaste;
         _autoEnter = S.AutoEnter;
         _keepInClipboard = S.KeepInClipboard;
@@ -87,6 +106,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         _soundError = S.SoundError;
 
         LoadDevices();
+        RefreshModelStatus();
+    }
+
+    private void RefreshModelStatus()
+    {
+        IsModelInstalled = _model.IsInstalled;
+        if (IsModelInstalled)
+            ModelStatusText = "Installed";
+        else if (!IsDownloadingModel)
+            ModelStatusText = "Not installed (~630 MB)";
     }
 
     private void LoadDevices()
@@ -112,6 +141,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnReturnToOriginChanged(bool value) { S.ReturnToOrigin = value; Save(); }
     partial void OnRetentionChanged(string value) { S.RetentionDays = LabelToDays(value); Save(); }
     partial void OnLanguageChanged(string value) { S.Language = value; Save(); }
+    partial void OnTranscriptionDeviceChanged(string value) { S.TranscriptionDevice = value; Save(); }
     partial void OnAutoPasteChanged(bool value) { S.AutoPaste = value; Save(); }
     partial void OnAutoEnterChanged(bool value) { S.AutoEnter = value; Save(); }
     partial void OnKeepInClipboardChanged(bool value) { S.KeepInClipboard = value; Save(); }
@@ -195,6 +225,34 @@ public sealed partial class SettingsViewModel : ObservableObject
         => TestConnectionResult = AiProvider == "None"
             ? "Choose a provider first."
             : $"Test Connection runs against {AiProvider} once the AI client is wired.";
+
+    [RelayCommand]
+    private async Task DownloadModel()
+    {
+        if (IsModelInstalled || IsDownloadingModel) return;
+
+        IsDownloadingModel = true;
+        ModelDownloadProgress = 0;
+        ModelStatusText = "Downloading… 0%";
+        try
+        {
+            var progress = new Progress<double>(p =>
+            {
+                ModelDownloadProgress = p * 100;
+                ModelStatusText = $"Downloading… {p * 100:0}%";
+            });
+            await _installer.EnsureInstalledAsync(progress);
+        }
+        catch (Exception ex)
+        {
+            ModelStatusText = "Download failed — " + ex.Message;
+            IsDownloadingModel = false;
+            return;
+        }
+
+        IsDownloadingModel = false;
+        RefreshModelStatus();
+    }
 
     // ---- vocabulary (custom terms) ----
 

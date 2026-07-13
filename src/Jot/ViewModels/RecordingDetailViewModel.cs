@@ -8,6 +8,8 @@ using CommunityToolkit.Mvvm.Input;
 using Jot.Models;
 using Jot.Services.Abstractions;
 using Jot.Services.Navigation;
+using Jot.Transcription;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jot.ViewModels;
 
@@ -148,14 +150,34 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ReTranscribe()
+    private async Task ReTranscribe()
     {
-        // Stub: a pending row becomes complete. Real re-transcription runs the on-device model
-        // over Item.WavPath in the STT milestone.
         if (!Item.IsPending) return;
-        Item.Transcript = "(Re-transcription will run the on-device model over this recording.)";
+
+        if (Item.WavPath is null || !File.Exists(Item.WavPath))
+        {
+            SetTranscript("(No audio file is available to transcribe.)");
+            return;
+        }
+
+        var transcriber = App.Services.GetRequiredService<ITranscriber>();
+        try
+        {
+            float[] samples = await Task.Run(() => WavAudio.ReadMono16k(Item.WavPath));
+            string text = await transcriber.TranscribeAsync(samples, WavAudio.SampleRate);
+            SetTranscript(string.IsNullOrWhiteSpace(text) ? "(Nothing was transcribed.)" : text.Trim());
+        }
+        catch (Exception ex)
+        {
+            SetTranscript($"(Transcription failed: {ex.Message})");
+        }
+    }
+
+    private void SetTranscript(string text)
+    {
+        Item.Transcript = text;
         Item.Status = RecordingStatus.Complete;
-        EditableTranscript = Item.Transcript;
+        EditableTranscript = text;
         OnPropertyChanged(nameof(CanPlay));
     }
 

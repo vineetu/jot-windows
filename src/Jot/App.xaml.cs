@@ -47,6 +47,26 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Dev affordance: `--transcribe <wav> [--dml]` runs the real engine headless and writes the
+        // transcript to %TEMP%\jot-transcribe-result.txt. Used for automated end-to-end verification.
+        int transcribeArg = Array.IndexOf(e.Args, "--transcribe");
+        if (transcribeArg >= 0 && transcribeArg + 1 < e.Args.Length)
+        {
+            RunHeadlessTranscribe(e.Args[transcribeArg + 1], e.Args.Contains("--dml"));
+            Shutdown();
+            return;
+        }
+
+        // Dev affordance: `--installmodel <dir>` runs the first-run model download into <dir> headless
+        // and writes the outcome to %TEMP%\jot-install-result.txt.
+        int installArg = Array.IndexOf(e.Args, "--installmodel");
+        if (installArg >= 0 && installArg + 1 < e.Args.Length)
+        {
+            RunHeadlessInstall(e.Args[installArg + 1]);
+            Shutdown();
+            return;
+        }
+
         if (!ClaimSingleInstance())
         {
             _showEvent?.Set(); // nudge the running instance to surface, then bow out
@@ -57,6 +77,11 @@ public partial class App : System.Windows.Application
         Services = BuildServices();
         _recorder = Services.GetRequiredService<RecorderController>();
         Services.GetRequiredService<PillController>().Attach(); // status pill now owns pipeline feedback
+
+        // Ensure the on-device speech model is present (downloaded on first run), then warm it up
+        // off the UI thread so the first dictation isn't a cold start.
+        if (Services.GetRequiredService<ITranscriber>() is ParakeetTranscriber parakeet)
+            _ = EnsureSpeechModelReadyAsync(parakeet);
 
         WireRecorderNotifications();
         SetupTray();
@@ -90,6 +115,83 @@ public partial class App : System.Windows.Application
                 Dispatcher.BeginInvoke(
                     () => nav.Navigate(typeof(Views.RecordingDetailPage), store.Items[0]),
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
+    }
+
+    private static void RunHeadlessInstall(string dir)
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-install-result.txt");
+        try
+        {
+            var model = new ParakeetModel(dir);
+            var installer = new ParakeetModelInstaller(model);
+            Task.Run(() => installer.EnsureInstalledAsync()).GetAwaiter().GetResult();
+            System.IO.File.WriteAllText(outPath, $"OK installed={model.IsInstalled}\n");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
+        }
+    }
+
+    private async Task EnsureSpeechModelReadyAsync(ParakeetTranscriber transcriber)
+    {
+        try
+        {
+            var installer = Services.GetRequiredService<ParakeetModelInstaller>();
+            if (!installer.IsInstalled)
+            {
+                Dispatcher.Invoke(() => Notify("Downloading speech model",
+                    "Jot is fetching the on-device speech model (~630 MB, one time). Dictation will be ready shortly.",
+                    Forms.ToolTipIcon.Info));
+                await installer.EnsureInstalledAsync();
+                Dispatcher.Invoke(() => Notify("Speech model ready",
+                    "Press Alt+Space to start dictating.", Forms.ToolTipIcon.Info));
+            }
+
+            await Task.Run(transcriber.WarmUp);
+        }
+        catch (Exception ex)
+        {
+            LogCrash(ex);
+            Dispatcher.Invoke(() => Notify("Speech model unavailable",
+                "Jot couldn't prepare the speech model. Check your connection and restart. " + ex.Message,
+                Forms.ToolTipIcon.Warning));
+        }
+    }
+
+    private static void RunHeadlessTranscribe(string wavPath, bool useDml)
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-transcribe-result.txt");
+        try
+        {
+            var backend = useDml
+                ? Transcription.Onnx.ComputeBackend.DirectML
+                : Transcription.Onnx.ComputeBackend.Cpu;
+            using var transcriber = new ParakeetTranscriber(
+                new ParakeetModel(), new Transcription.Onnx.OnnxSessionFactory(), backend);
+
+            float[] samples = WavAudio.ReadMono16k(wavPath);
+
+            // First pass warms the model (session load + ORT graph optimisation + kernel priming).
+            var loadTimer = System.Diagnostics.Stopwatch.StartNew();
+            string text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
+            loadTimer.Stop();
+
+            // Second pass is the true warm-inference cost.
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
+            sw.Stop();
+
+            double seconds = samples.Length / (double)WavAudio.SampleRate;
+            double rtx = sw.Elapsed.TotalSeconds > 0 ? seconds / sw.Elapsed.TotalSeconds : 0;
+            System.IO.File.WriteAllText(outPath,
+                $"OK\nbackend={backend}\naudio_s={seconds:0.00}\ncold_ms={loadTimer.ElapsedMilliseconds}\n" +
+                $"warm_infer_ms={sw.ElapsedMilliseconds}\nwarm_RTx={rtx:0.0}\nTEXT={text}\n");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
         }
     }
 
@@ -137,13 +239,26 @@ public partial class App : System.Windows.Application
         return createdNew;
     }
 
+    private static Transcription.Onnx.ComputeBackend ParseBackend(string? device)
+        => device is not null && device.Contains("GPU", StringComparison.OrdinalIgnoreCase)
+            ? Transcription.Onnx.ComputeBackend.DirectML
+            : Transcription.Onnx.ComputeBackend.Cpu;
+
     private static IServiceProvider BuildServices()
     {
         var services = new ServiceCollection();
         services.AddSingleton<ISettingsStore, JsonSettingsStore>();
         services.AddSingleton<IThemeService, ThemeService>();
         services.AddSingleton<AudioRecorder>();
-        services.AddSingleton<ITranscriber, StubTranscriber>();
+        services.AddSingleton<Transcription.Onnx.OnnxSessionFactory>();
+        services.AddSingleton<ParakeetModel>();
+        services.AddSingleton<ParakeetModelInstaller>();
+        // The encoder execution provider comes from settings (default CPU — correct everywhere).
+        // Read once at construction; a device change applies on the next launch.
+        services.AddSingleton<ITranscriber>(sp => new ParakeetTranscriber(
+            sp.GetRequiredService<ParakeetModel>(),
+            sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
+            ParseBackend(sp.GetRequiredService<ISettingsStore>().Current.TranscriptionDevice)));
         services.AddSingleton<RecorderController>();
         services.AddSingleton<PillController>();
 
@@ -328,8 +443,9 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _hotkey?.Dispose();
-        _recorder?.Dispose();
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
+        // Disposes DI singletons — the recorder (mic) and the transcriber (native ONNX sessions).
+        (Services as IDisposable)?.Dispose();
         _instanceMutex?.Dispose();
         base.OnExit(e);
     }

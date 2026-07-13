@@ -62,11 +62,25 @@
                 <ComboBox MinWidth="150" ItemsSource="{Binding Languages}"
                           SelectedItem="{Binding Language, Mode=TwoWay}" />
             </ctl:SettingRow>
-            <ctl:SettingRow Title="Model" Description="On-device speech model.">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}" />
-                    <TextBlock Text="Installed" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <ctl:SettingRow Title="Model" Description="On-device speech model (Parakeet-TDT, runs locally — nothing leaves your PC).">
+                <StackPanel MinWidth="280">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}"
+                                       Visibility="{Binding IsModelInstalled, Converter={StaticResource BoolToVis}}" />
+                        <TextBlock Text="{Binding ModelStatusText}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        <ui:Button Content="Download" Margin="12,0,0,0" Appearance="Primary"
+                                   Command="{Binding DownloadModelCommand}"
+                                   Visibility="{Binding ShowDownloadButton, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                    <ProgressBar Margin="0,8,0,0" Minimum="0" Maximum="100"
+                                 Value="{Binding ModelDownloadProgress}"
+                                 Visibility="{Binding IsDownloadingModel, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
+            </ctl:SettingRow>
+            <ctl:SettingRow Title="Processing"
+                            Description="CPU works on every PC. GPU (DirectML) is faster where a compatible graphics card is present, and falls back to CPU automatically. Applies after restart.">
+                <ComboBox MinWidth="180" ItemsSource="{Binding TranscriptionDevices}"
+                          SelectedItem="{Binding TranscriptionDevice, Mode=TwoWay}" />
             </ctl:SettingRow>
             <ctl:SettingRow Title="Auto-paste transcription" Description="Insert the text at your cursor automatically.">
                 <ui:ToggleSwitch IsChecked="{Binding AutoPaste, Mode=TwoWay}" />

@@ -12,6 +12,9 @@
     <AssemblyName>Jot</AssemblyName>
     <RootNamespace>Jot</RootNamespace>
     <Version>0.1.0</Version>
+    <!-- ONNX Runtime ships native (win-x64) libraries; pin the platform so they are restored/copied. -->
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +23,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <!-- On-device speech-to-text: Parakeet-TDT ONNX. DirectML package = CPU + DirectML EPs.
+         Native runtime pinned to 1.20.1 (newer builds fail DLL init on this box). -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.20.1" />
   </ItemGroup>
 
 </Project>
