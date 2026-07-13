@@ -36,6 +36,14 @@ public partial class PillWindow : Window
 
     public void SetElapsed(string text) => Elapsed.Text = text;
 
+    /// <summary>Dev/testing hook: pin the pill at a fixed screen point and stop auto-anchoring.</summary>
+    public void PinAt(double left, double top)
+    {
+        _userMoved = true;
+        Left = left;
+        Top = top;
+    }
+
     public void SetState(PillState state, string? text = null)
     {
         if (state == PillState.Hidden) { HidePill(); return; }

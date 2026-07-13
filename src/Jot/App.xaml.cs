@@ -62,7 +62,7 @@ public partial class App : System.Windows.Application
     private void RunPillDemo()
     {
         var pill = new Controls.PillWindow();
-        pill.SetState(Controls.PillState.Recording);
+        pill.SetState(Controls.PillState.Recording); // anchors bottom-center on the active monitor
 
         var rnd = new Random(1);
         double t = 0;
