@@ -8,6 +8,12 @@ namespace Jot.Transcription;
 public interface ITranscriber
 {
     Task<string> TranscribeAsync(float[] samples, int sampleRate, CancellationToken ct = default);
+
+    /// <summary>Whether the model assets are present on disk.</summary>
+    bool IsModelInstalled => true;
+
+    /// <summary>Primes the model off the UI thread so the first dictation isn't a cold start.</summary>
+    void WarmUp() { }
 }
 
 /// <summary>

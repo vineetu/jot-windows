@@ -17,8 +17,9 @@ public static class TextInjector
 {
     private const int INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x0002;
-    private const ushort VK_CONTROL = 0x11;
-    private const ushort VK_V = 0x56;
+    private const uint KEYEVENTF_SCANCODE = 0x0008;
+    private const ushort SCAN_CONTROL = 0x1D;
+    private const ushort SCAN_V = 0x2F;
 
     /// <summary>The foreground window right now — capture this when recording starts so the
     /// transcript can be delivered back to the app the user was in, even if focus drifts.</summary>
@@ -32,7 +33,7 @@ public static class TextInjector
         //    (not on the Jot window they may have glanced at). Never re-target our own window.
         if (restoreTo != IntPtr.Zero && !IsOwnWindow(restoreTo))
         {
-            SetForegroundWindow(restoreTo);
+            ForceForeground(restoreTo);
             Thread.Sleep(40); // let the focus change settle before synthesising Ctrl+V
         }
 
@@ -72,30 +73,51 @@ public static class TextInjector
         try { Clipboard.Clear(); } catch { /* best effort */ }
     }
 
+    // Ctrl+V by SCAN CODE, not virtual-key: some apps (terminals, games, Electron surfaces) only
+    // honour scan-coded synthetic input. Ctrl held down around a V press-and-release.
     private static void SendCtrlV()
     {
         var inputs = new[]
         {
-            KeyInput(VK_CONTROL, false),
-            KeyInput(VK_V, false),
-            KeyInput(VK_V, true),
-            KeyInput(VK_CONTROL, true),
+            ScanInput(SCAN_CONTROL, false),
+            ScanInput(SCAN_V, false),
+            ScanInput(SCAN_V, true),
+            ScanInput(SCAN_CONTROL, true),
         };
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    private static INPUT KeyInput(ushort vk, bool keyUp) => new()
+    private static INPUT ScanInput(ushort scan, bool keyUp) => new()
     {
         type = INPUT_KEYBOARD,
         u = new InputUnion
         {
             ki = new KEYBDINPUT
             {
-                wVk = vk,
-                dwFlags = keyUp ? KEYEVENTF_KEYUP : 0,
+                wScan = scan,
+                dwFlags = KEYEVENTF_SCANCODE | (keyUp ? KEYEVENTF_KEYUP : 0),
             },
         },
     };
+
+    // A background process can't just call SetForegroundWindow (Windows foreground-lock blocks it,
+    // silently). Attaching our input queue to the target window's thread lifts the lock long enough
+    // to hand it focus — the standard workaround — so the synthetic Ctrl+V lands in the right app.
+    private static void ForceForeground(IntPtr hWnd)
+    {
+        uint targetThread = GetWindowThreadProcessId(hWnd, out _);
+        uint thisThread = GetCurrentThreadId();
+        bool attached = targetThread != thisThread && AttachThreadInput(thisThread, targetThread, true);
+        try
+        {
+            BringWindowToTop(hWnd);
+            SetForegroundWindow(hWnd);
+        }
+        finally
+        {
+            if (attached) AttachThreadInput(thisThread, targetThread, false);
+        }
+    }
 
     private static bool IsOwnWindow(IntPtr hWnd)
     {
@@ -108,6 +130,15 @@ public static class TextInjector
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);

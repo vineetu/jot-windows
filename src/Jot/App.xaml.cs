@@ -78,10 +78,9 @@ public partial class App : System.Windows.Application
         _recorder = Services.GetRequiredService<RecorderController>();
         Services.GetRequiredService<PillController>().Attach(); // status pill now owns pipeline feedback
 
-        // Ensure the on-device speech model is present (downloaded on first run), then warm it up
-        // off the UI thread so the first dictation isn't a cold start.
-        if (Services.GetRequiredService<ITranscriber>() is ParakeetTranscriber parakeet)
-            _ = EnsureSpeechModelReadyAsync(parakeet);
+        // Warm up the model off the UI thread so the first dictation isn't a cold start.
+        var transcriber = Services.GetRequiredService<ITranscriber>();
+        if (transcriber.IsModelInstalled) _ = Task.Run(transcriber.WarmUp);
 
         WireRecorderNotifications();
         SetupTray();
@@ -266,10 +265,11 @@ public partial class App : System.Windows.Application
         services.AddSingleton<Transcription.Onnx.OnnxSessionFactory>();
         services.AddSingleton<ParakeetModel>();
         services.AddSingleton<ParakeetModelInstaller>();
-        // The encoder execution provider comes from settings (default CPU — correct everywhere).
-        // Read once at construction; a device change applies on the next launch.
-        services.AddSingleton<ITranscriber>(sp => new ParakeetTranscriber(
-            sp.GetRequiredService<ParakeetModel>(),
+        services.AddSingleton<Transcription.Nemotron.NemotronModel>();
+        // Nemotron 3.5 (streaming RNNT) is the engine. The encoder execution provider comes from
+        // settings (default CPU — correct everywhere); read once at construction.
+        services.AddSingleton<ITranscriber>(sp => new Transcription.Nemotron.NemotronTranscriber(
+            sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
             sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
             ParseBackend(sp.GetRequiredService<ISettingsStore>().Current.TranscriptionDevice)));
         services.AddSingleton<RecorderController>();
