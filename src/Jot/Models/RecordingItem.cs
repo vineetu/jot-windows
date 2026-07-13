@@ -24,8 +24,9 @@ public sealed partial class RecordingItem : ObservableObject
     [ObservableProperty] private double _durationSeconds;
 
     /// <summary>Absolute path to the on-disk WAV, when this is a genuinely-recorded item. Null for
-    /// seeded/mock rows and rewrites — the detail view disables playback when there's no audio.</summary>
-    public string? WavPath { get; init; }
+    /// rewrites and for rows whose audio has been pruned by retention (the transcript is kept). The
+    /// detail view disables playback when there's no audio.</summary>
+    [ObservableProperty] private string? _wavPath;
 
     public string ModelLabel { get; init; } = "Parakeet";
 
@@ -52,6 +53,7 @@ public sealed partial class RecordingItem : ObservableObject
     public string TimeText => CreatedAt.ToString("t"); // short time, culture-aware
 
     partial void OnDurationSecondsChanged(double value) => OnPropertyChanged(nameof(DurationText));
+    partial void OnWavPathChanged(string? value) => OnPropertyChanged(nameof(HasAudio));
 
     public string DurationText
     {

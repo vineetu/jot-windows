@@ -29,11 +29,8 @@ public sealed class AiClient : IAiClient
         if (provider.Length == 0 || provider.Equals("None", StringComparison.OrdinalIgnoreCase))
             return new AiResult(false, "Choose an AI provider first.");
 
-        bool isOllama = provider.Equals("Ollama", StringComparison.OrdinalIgnoreCase);
-        if (!isOllama && string.IsNullOrWhiteSpace(config.ApiKey))
+        if (AiDefaults.NeedsKey(provider) && string.IsNullOrWhiteSpace(config.ApiKey))
             return new AiResult(false, $"Enter an API key for {provider}.");
-        if (isOllama && string.IsNullOrWhiteSpace(config.Model))
-            return new AiResult(false, "Enter a model name (e.g. llama3.2) for Ollama.");
 
         try
         {
@@ -92,13 +89,13 @@ public sealed class AiClient : IAiClient
         {
             // GET /models is a cheap credentialed probe.
             "openai" => GetAsync(
-                Norm(c.BaseUrl, "https://api.openai.com/v1") + "/models",
+                BaseUrlOf(c) + "/models",
                 req => req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + c.ApiKey), ct),
             // A 1-token messages call is the smallest valid request.
             "anthropic" => DiscardAsync(AnthropicChatAsync("Reply with OK.", "Hi", c, ct, maxTokens: 1)),
             "gemini" => DiscardAsync(GeminiChatAsync("Reply with OK.", "Hi", c, ct)),
             // Listing local models needs no key.
-            "ollama" => GetAsync(Norm(c.BaseUrl, "http://localhost:11434") + "/api/tags", _ => { }, ct),
+            "ollama" => GetAsync(BaseUrlOf(c) + "/api/tags", _ => { }, ct),
             _ => throw new NotSupportedException($"AI provider '{provider}' is not supported."),
         };
 
@@ -106,10 +103,10 @@ public sealed class AiClient : IAiClient
 
     private static async Task<string> OpenAiChatAsync(string system, string user, AiConfig c, CancellationToken ct)
     {
-        string url = Norm(c.BaseUrl, "https://api.openai.com/v1") + "/chat/completions";
+        string url = BaseUrlOf(c) + "/chat/completions";
         var body = new
         {
-            model = Model(c, "gpt-4o-mini"),
+            model = Model(c),
             messages = new[]
             {
                 new { role = "system", content = system },
@@ -133,10 +130,10 @@ public sealed class AiClient : IAiClient
     private static async Task<string> AnthropicChatAsync(
         string system, string user, AiConfig c, CancellationToken ct, int maxTokens = 1024)
     {
-        string url = Norm(c.BaseUrl, "https://api.anthropic.com/v1") + "/messages";
+        string url = BaseUrlOf(c) + "/messages";
         var body = new
         {
-            model = Model(c, "claude-3-5-haiku-latest"),
+            model = Model(c),
             max_tokens = maxTokens,
             system,
             messages = new[] { new { role = "user", content = user } },
@@ -166,8 +163,8 @@ public sealed class AiClient : IAiClient
 
     private static async Task<string> GeminiChatAsync(string system, string user, AiConfig c, CancellationToken ct)
     {
-        string baseUrl = Norm(c.BaseUrl, "https://generativelanguage.googleapis.com/v1beta");
-        string model = Model(c, "gemini-1.5-flash");
+        string baseUrl = BaseUrlOf(c);
+        string model = Model(c);
         string url = $"{baseUrl}/models/{model}:generateContent?key={Uri.EscapeDataString(c.ApiKey ?? "")}";
         var body = new
         {
@@ -194,10 +191,10 @@ public sealed class AiClient : IAiClient
 
     private static async Task<string> OllamaChatAsync(string system, string user, AiConfig c, CancellationToken ct)
     {
-        string url = Norm(c.BaseUrl, "http://localhost:11434") + "/api/chat";
+        string url = BaseUrlOf(c) + "/api/chat";
         var body = new
         {
-            model = Model(c, ""), // required; empty will surface as a provider error
+            model = Model(c), // defaults to llama3.2 via AiDefaults
             stream = false,
             messages = new[]
             {
@@ -250,11 +247,13 @@ public sealed class AiClient : IAiClient
 
     // ---- helpers ----
 
-    private static string Norm(string? url, string fallback)
-        => string.IsNullOrWhiteSpace(url) ? fallback : url.Trim().TrimEnd('/');
+    // Base URL / model: use the user's override when set, else the provider default (single source
+    // of truth in AiDefaults, shared with the Settings UI).
+    private static string BaseUrlOf(AiConfig c)
+        => (string.IsNullOrWhiteSpace(c.BaseUrl) ? AiDefaults.BaseUrl(c.Provider) : c.BaseUrl!.Trim()).TrimEnd('/');
 
-    private static string Model(AiConfig c, string fallback)
-        => string.IsNullOrWhiteSpace(c.Model) ? fallback : c.Model!.Trim();
+    private static string Model(AiConfig c)
+        => string.IsNullOrWhiteSpace(c.Model) ? AiDefaults.Model(c.Provider) : c.Model!.Trim();
 
     private static string DescribeHttp(string provider, AiHttpException ex)
     {

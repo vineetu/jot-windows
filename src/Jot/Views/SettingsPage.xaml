@@ -31,7 +31,7 @@
             <ctl:SettingRow Title="Launch at login" Description="Start Jot in the tray when you sign in.">
                 <ui:ToggleSwitch IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}" />
             </ctl:SettingRow>
-            <ctl:SettingRow Title="Keep recordings" Description="Older recordings are cleaned up automatically.">
+            <ctl:SettingRow Title="Keep audio" Description="Older audio is cleared automatically to save space. Transcripts are always kept.">
                 <ComboBox MinWidth="120" ItemsSource="{Binding RetentionOptions}"
                           SelectedItem="{Binding Retention, Mode=TwoWay}" />
             </ctl:SettingRow>
@@ -102,20 +102,32 @@
                         Title="Bring your own provider"
                         Message="Apple Intelligence isn't available on Windows. Choose a provider below for optional transcript cleanup and rewrite." />
 
-            <ctl:SettingRow Title="Provider" Description="Used for optional cleanup and rewrite. Ollama runs locally.">
+            <ctl:SettingRow Title="Provider" Description="Used for optional cleanup and rewrite. Sensible defaults are chosen for you; Ollama runs locally.">
                 <ComboBox MinWidth="150" ItemsSource="{Binding Providers}"
                           SelectedItem="{Binding AiProvider, Mode=TwoWay}" />
             </ctl:SettingRow>
             <StackPanel Visibility="{Binding AiConfigured, Converter={StaticResource BoolToVis}}">
-                <ctl:SettingRow Title="Base URL" Description="Override the provider's default endpoint.">
-                    <ui:TextBox MinWidth="260" Text="{Binding AiBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
-                </ctl:SettingRow>
-                <ctl:SettingRow Title="Model">
-                    <ui:TextBox MinWidth="260" Text="{Binding AiModel, UpdateSourceTrigger=PropertyChanged}" />
-                </ctl:SettingRow>
-                <ctl:SettingRow Title="API key" Description="Stored only for this session in the preview build.">
+                <ctl:SettingRow Title="API key" Description="Stored only for this session in the preview build."
+                                Visibility="{Binding NeedsApiKey, Converter={StaticResource BoolToVis}}">
                     <ui:PasswordBox MinWidth="260" PasswordChanged="OnApiKeyChanged" />
                 </ctl:SettingRow>
+                <!-- Default model, shown read-only unless the user turns on advanced overrides. -->
+                <ctl:SettingRow Title="Model" Description="The default model for this provider."
+                                Visibility="{Binding ShowAiModelReadonly, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="{Binding EffectiveAiModel}" VerticalAlignment="Center"
+                               FontFamily="{StaticResource JotMonoFont}" FontSize="12" />
+                </ctl:SettingRow>
+                <!-- Advanced overrides (base URL + model) mirror the Mac app's advanced pane. -->
+                <StackPanel Visibility="{Binding ShowAiOverrides, Converter={StaticResource BoolToVis}}">
+                    <ctl:SettingRow Title="Model" Description="Override the default model.">
+                        <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultModelHint}"
+                                    Text="{Binding AiModel, UpdateSourceTrigger=PropertyChanged}" />
+                    </ctl:SettingRow>
+                    <ctl:SettingRow Title="Base URL" Description="Override the provider's default endpoint.">
+                        <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultBaseUrlHint}"
+                                    Text="{Binding AiBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                    </ctl:SettingRow>
+                </StackPanel>
                 <ctl:SettingRow Title="Clean up transcript with AI"
                                 Description="Remove filler words and fix punctuation after each dictation.">
                     <ui:ToggleSwitch IsChecked="{Binding CleanupEnabled, Mode=TwoWay}" />

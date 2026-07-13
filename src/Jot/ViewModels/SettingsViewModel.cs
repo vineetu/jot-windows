@@ -97,6 +97,23 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _soundError;
 
     public bool AiConfigured => AiProvider != "None";
+    public bool NeedsApiKey => AiConfigured && AiDefaults.NeedsKey(AiProvider);
+    public bool ShowAiOverrides => AiConfigured && AdvancedFeatures;          // base URL + model overrides
+    public bool ShowAiModelReadonly => AiConfigured && !AdvancedFeatures;      // just show the default
+    public string EffectiveAiModel => string.IsNullOrWhiteSpace(AiModel) ? AiDefaults.Model(AiProvider) : AiModel;
+    public string DefaultModelHint => AiDefaults.Model(AiProvider);
+    public string DefaultBaseUrlHint => AiDefaults.BaseUrl(AiProvider);
+
+    private void RaiseAiComputed()
+    {
+        OnPropertyChanged(nameof(AiConfigured));
+        OnPropertyChanged(nameof(NeedsApiKey));
+        OnPropertyChanged(nameof(ShowAiOverrides));
+        OnPropertyChanged(nameof(ShowAiModelReadonly));
+        OnPropertyChanged(nameof(EffectiveAiModel));
+        OnPropertyChanged(nameof(DefaultModelHint));
+        OnPropertyChanged(nameof(DefaultBaseUrlHint));
+    }
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
         NemotronModel model, NemotronModelInstaller installer,
@@ -177,7 +194,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     // ---- persistence hooks ----
 
     partial void OnThemeModeChanged(AppThemeMode value) { _theme.SetMode(value); } // SetMode persists
-    partial void OnAdvancedFeaturesChanged(bool value) { S.AdvancedFeatures = value; Save(); }
+    partial void OnAdvancedFeaturesChanged(bool value) { S.AdvancedFeatures = value; Save(); RaiseAiComputed(); }
     partial void OnReturnToOriginChanged(bool value) { S.ReturnToOrigin = value; Save(); }
     partial void OnRetentionChanged(string value) { S.RetentionDays = LabelToDays(value); Save(); }
     partial void OnLanguageChanged(string value)
@@ -198,7 +215,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnSoundSuccessChanged(bool value) { S.SoundSuccess = value; Save(); }
     partial void OnSoundErrorChanged(bool value) { S.SoundError = value; Save(); }
     partial void OnAiBaseUrlChanged(string value) { S.AiBaseUrl = value; Save(); }
-    partial void OnAiModelChanged(string value) { S.AiModel = value; Save(); }
+    partial void OnAiModelChanged(string value) { S.AiModel = value; Save(); OnPropertyChanged(nameof(EffectiveAiModel)); }
     partial void OnAiApiKeyChanged(string value) { _credentials.ApiKey = value; } // session-only, never persisted
 
     // Shortcuts: persist, then Save() raises ISettingsStore.Changed, which App uses to re-register.
@@ -212,7 +229,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         S.AiProvider = value;
         Save();
-        OnPropertyChanged(nameof(AiConfigured));
+        RaiseAiComputed();
         TestConnectionResult = "";
     }
 

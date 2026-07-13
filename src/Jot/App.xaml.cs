@@ -372,7 +372,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<PillController>();
 
         // Library + navigation + view-models
-        services.AddSingleton<IRecordingStore, MockRecordingStore>();
+        services.AddSingleton<IRecordingStore, JsonRecordingStore>();
         services.AddSingleton<Navigator>();
         services.AddSingleton<INavigator>(sp => sp.GetRequiredService<Navigator>());
         services.AddSingleton<RecentsViewModel>();
