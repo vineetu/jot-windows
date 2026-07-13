@@ -74,6 +74,9 @@ public partial class App : System.Windows.Application
                 System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         // Dev affordance: `--pilldemo` drives the pill with a speech-like envelope (no mic needed).
         if (e.Args.Contains("--pilldemo")) RunPillDemo();
+        // First-run setup wizard: on a normal (no-arg) launch, or forced with `--wizard`.
+        bool firstRun = !Services.GetRequiredService<ISettingsStore>().Current.FirstRunComplete;
+        if (e.Args.Contains("--wizard") || (e.Args.Length == 0 && firstRun)) ShowWizard();
         // Dev affordance: `--detail` opens the first recording's detail view.
         if (e.Args.Contains("--detail"))
         {
@@ -171,6 +174,13 @@ public partial class App : System.Windows.Application
         {
             Notify("Hotkey unavailable", ex.Message, Forms.ToolTipIcon.Warning);
         }
+    }
+
+    private void ShowWizard()
+    {
+        var wizard = new Views.SetupWizardWindow();
+        wizard.Show();
+        wizard.Activate();
     }
 
     private void ShowMainWindow()

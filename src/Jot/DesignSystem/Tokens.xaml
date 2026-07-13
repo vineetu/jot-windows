@@ -13,6 +13,7 @@
     <ds:StringToVisibilityConverter x:Key="StringToVis" />
     <ds:InverseBooleanConverter x:Key="InverseBool" />
     <ds:SecondsToTimeConverter x:Key="SecondsToTime" />
+    <ds:IndexToVisibilityConverter x:Key="IndexToVis" />
 
     <!-- 4px spacing unit (matches the Mac scale; Fluent-legal). -->
     <sys:Double x:Key="Space1">4</sys:Double>

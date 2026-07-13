@@ -32,6 +32,20 @@ public sealed class StringToVisibilityConverter : IValueConverter
         => Binding.DoNothing;
 }
 
+/// <summary>int == ConverterParameter → Visible (used to switch wizard steps).</summary>
+public sealed class IndexToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        int v = value is int i ? i : -1;
+        return int.TryParse(parameter as string, out int p) && p == v
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => Binding.DoNothing;
+}
+
 /// <summary>Seconds (double) → "m:ss" for playback readouts.</summary>
 public sealed class SecondsToTimeConverter : IValueConverter
 {

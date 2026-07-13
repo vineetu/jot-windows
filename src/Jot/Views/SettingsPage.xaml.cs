@@ -15,9 +15,10 @@ public partial class SettingsPage : Page
     }
 
     private void OnRunWizard(object sender, RoutedEventArgs e)
-        => System.Windows.MessageBox.Show(
-            "The guided setup wizard opens here.", "Setup wizard",
-            MessageBoxButton.OK, MessageBoxImage.Information);
+    {
+        var wizard = new SetupWizardWindow { Owner = Window.GetWindow(this) };
+        wizard.ShowDialog();
+    }
 
     private void OnResetSettings(object sender, RoutedEventArgs e)
     {
