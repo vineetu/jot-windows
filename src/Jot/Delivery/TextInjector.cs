@@ -20,9 +20,21 @@ public static class TextInjector
     private const ushort VK_CONTROL = 0x11;
     private const ushort VK_V = 0x56;
 
-    public static void PasteAtCursor(string text)
+    /// <summary>The foreground window right now — capture this when recording starts so the
+    /// transcript can be delivered back to the app the user was in, even if focus drifts.</summary>
+    public static IntPtr CaptureForegroundWindow() => GetForegroundWindow();
+
+    public static void PasteAtCursor(string text, IntPtr restoreTo = default)
     {
         if (string.IsNullOrEmpty(text)) return;
+
+        // 0. Return focus to the window the user started dictating in, so the paste lands there
+        //    (not on the Jot window they may have glanced at). Never re-target our own window.
+        if (restoreTo != IntPtr.Zero && !IsOwnWindow(restoreTo))
+        {
+            SetForegroundWindow(restoreTo);
+            Thread.Sleep(40); // let the focus change settle before synthesising Ctrl+V
+        }
 
         // 1. Save whatever the user had on the clipboard (text only for now).
         string? saved = null;
@@ -84,6 +96,24 @@ public static class TextInjector
             },
         },
     };
+
+    private static bool IsOwnWindow(IntPtr hWnd)
+    {
+        GetWindowThreadProcessId(hWnd, out uint pid);
+        return pid == GetCurrentProcessId();
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentProcessId();
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);

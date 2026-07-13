@@ -24,6 +24,7 @@ public sealed class JotSettings
     // Transcription / output
     public string Language { get; set; } = "English";
     public string TranscriptionDevice { get; set; } = "CPU"; // CPU | GPU (DirectML) — encoder execution provider
+    public bool LiveCaptions { get; set; } = true;            // show a running transcript in the pill while recording
     public bool AutoPaste { get; set; } = true;
     public bool AutoEnter { get; set; }
     public bool KeepInClipboard { get; set; }

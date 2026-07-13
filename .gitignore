@@ -20,3 +20,5 @@ x86/
 assets/models/
 *.onnx
 !src/Jot/Models/
+
+publish/

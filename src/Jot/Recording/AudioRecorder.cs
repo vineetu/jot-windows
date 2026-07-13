@@ -21,6 +21,7 @@ public sealed class AudioRecorder : IDisposable
     private MemoryStream? _buffer;
     private WaveFormat? _sourceFormat;
     private int _lastLevelTick;
+    private readonly object _bufferLock = new(); // guards _buffer between the capture thread and snapshots
 
     public bool IsRecording => _capture is not null;
 
@@ -45,8 +46,34 @@ public sealed class AudioRecorder : IDisposable
 
     private void OnData(byte[] buffer, int bytes)
     {
-        _buffer!.Write(buffer, 0, bytes);
+        lock (_bufferLock) { _buffer!.Write(buffer, 0, bytes); }
         RaiseLevel(buffer, bytes);
+    }
+
+    /// <summary>
+    /// Returns everything captured so far as 16 kHz mono Float32, without stopping the recording.
+    /// Used by live captioning to re-decode a trailing window while the user is still speaking.
+    /// Returns null when not recording, or an empty array when nothing has been captured yet.
+    /// </summary>
+    public float[]? SnapshotSamples()
+    {
+        byte[] raw;
+        WaveFormat fmt;
+        lock (_bufferLock)
+        {
+            if (_buffer is null || _sourceFormat is null) return null;
+            raw = _buffer.ToArray(); // copy the bytes written so far
+            fmt = _sourceFormat;
+        }
+
+        if (raw.Length == 0) return [];
+
+        var stream = new RawSourceWaveStream(new MemoryStream(raw, writable: false), fmt);
+        ISampleProvider mono = ToMono(stream.ToSampleProvider());
+        ISampleProvider resampled = mono.WaveFormat.SampleRate == TargetSampleRate
+            ? mono
+            : new WdlResamplingSampleProvider(mono, TargetSampleRate);
+        return ReadAll(resampled);
     }
 
     /// <summary>Throttled (~30 Hz) RMS over the just-captured buffer, in the device's native format.</summary>

@@ -197,8 +197,14 @@ public partial class App : System.Windows.Application
 
     private void RunPillDemo()
     {
+        bool expanded = System.Environment.GetCommandLineArgs().Contains("--expanded");
         var pill = new Controls.PillWindow();
         pill.SetState(Controls.PillState.Recording); // anchors bottom-center on the active monitor
+
+        // A growing caption to exercise the live-text line (and the click-to-expand panel).
+        string[] words = ("this is a live caption streaming into the status pill while you keep " +
+                          "talking and the words scroll along the bottom edge of the screen").Split(' ');
+        int spoken = 0;
 
         var rnd = new Random(1);
         double t = 0;
@@ -213,7 +219,14 @@ public partial class App : System.Windows.Application
             double envelope = 0.5 + 0.5 * Math.Sin(t * 0.7);     // speech comes in bursts
             pill.PushLevel(envelope * (0.35 + 0.65 * rnd.NextDouble()));
             frames++;
-            pill.SetElapsed($"0:{frames / 30:00}");
+            pill.SetElapsed(TimeSpan.FromSeconds(frames / 30.0).ToString(@"m\:ss"));
+
+            if (frames % 12 == 0 && spoken < words.Length)       // ~1 word every 0.4s
+            {
+                spoken++;
+                pill.SetLiveText(string.Join(' ', words.Take(spoken)));
+                if (expanded) pill.ExpandForDemo();
+            }
         };
         timer.Start();
     }
@@ -260,6 +273,7 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
             ParseBackend(sp.GetRequiredService<ISettingsStore>().Current.TranscriptionDevice)));
         services.AddSingleton<RecorderController>();
+        services.AddSingleton<Import.MediaImporter>();
         services.AddSingleton<PillController>();
 
         // Library + navigation + view-models
@@ -281,11 +295,19 @@ public partial class App : System.Windows.Application
     private Forms.ToolStripMenuItem? _copyLastItem;
     private Forms.ToolStripMenuItem? _recentItem;
 
+    /// <summary>Loads the embedded app icon (WPF resource) at the requested size — used by the tray.</summary>
+    private static Drawing.Icon LoadAppIcon(Drawing.Size size)
+    {
+        var uri = new Uri("pack://application:,,,/Assets/jot.ico");
+        using System.IO.Stream stream = System.Windows.Application.GetResourceStream(uri)!.Stream;
+        return new Drawing.Icon(stream, size);
+    }
+
     private void SetupTray()
     {
         _tray = new Forms.NotifyIcon
         {
-            Icon = Drawing.SystemIcons.Application,
+            Icon = LoadAppIcon(Forms.SystemInformation.SmallIconSize),
             Visible = true,
             Text = "Jot — Alt+Space to dictate",
         };

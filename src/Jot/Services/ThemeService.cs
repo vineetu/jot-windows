@@ -24,6 +24,8 @@ public sealed class ThemeService : IThemeService
     private static WindowBackdropType Backdrop =>
         OsInfo.SupportsMica ? WindowBackdropType.Mica : WindowBackdropType.None;
 
+    public void ApplyTheme() => Apply(Mode);
+
     public void Initialize(Window mainWindow)
     {
         _window = mainWindow;

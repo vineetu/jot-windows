@@ -28,8 +28,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     private const string RunValue = "Jot";
 
     public Array ThemeModes { get; } = Enum.GetValues(typeof(AppThemeMode));
+    // Languages supported by the Nemotron 3.5 multilingual engine (transcription-ready + broad-coverage
+    // tiers). English is the default and the most accurate; smaller languages improve over time.
     public string[] Languages { get; } =
-        ["English", "Spanish", "French", "German", "Italian", "Portuguese", "Japanese"];
+    [
+        "English", "Arabic", "Bulgarian", "Chinese", "Croatian", "Czech", "Danish", "Dutch",
+        "Estonian", "Finnish", "French", "German", "Greek", "Hebrew", "Hindi", "Hungarian",
+        "Italian", "Japanese", "Korean", "Latvian", "Lithuanian", "Norwegian", "Polish",
+        "Portuguese", "Romanian", "Russian", "Slovak", "Slovenian", "Spanish", "Swedish",
+        "Turkish", "Ukrainian", "Vietnamese",
+    ];
     public string[] Providers { get; } = ["None", "OpenAI", "Anthropic", "Gemini", "Ollama"];
     public string[] RetentionOptions { get; } = ["Forever", "7 days", "30 days", "90 days"];
     public string[] TranscriptionDevices { get; } = ["CPU", "GPU (DirectML)"];
@@ -46,6 +54,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private string _language = "English";
     [ObservableProperty] private string _transcriptionDevice = "CPU";
+    [ObservableProperty] private bool _liveCaptions = true;
     [ObservableProperty] private bool _autoPaste;
     [ObservableProperty] private bool _autoEnter;
     [ObservableProperty] private bool _keepInClipboard;
@@ -92,6 +101,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _returnToOrigin = S.ReturnToOrigin;
         _language = S.Language;
         _transcriptionDevice = S.TranscriptionDevice;
+        _liveCaptions = S.LiveCaptions;
         _autoPaste = S.AutoPaste;
         _autoEnter = S.AutoEnter;
         _keepInClipboard = S.KeepInClipboard;
@@ -142,6 +152,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnRetentionChanged(string value) { S.RetentionDays = LabelToDays(value); Save(); }
     partial void OnLanguageChanged(string value) { S.Language = value; Save(); }
     partial void OnTranscriptionDeviceChanged(string value) { S.TranscriptionDevice = value; Save(); }
+    partial void OnLiveCaptionsChanged(bool value) { S.LiveCaptions = value; Save(); }
     partial void OnAutoPasteChanged(bool value) { S.AutoPaste = value; Save(); }
     partial void OnAutoEnterChanged(bool value) { S.AutoEnter = value; Save(); }
     partial void OnKeepInClipboardChanged(bool value) { S.KeepInClipboard = value; Save(); }

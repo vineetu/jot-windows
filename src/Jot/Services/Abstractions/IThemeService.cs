@@ -11,6 +11,11 @@ public interface IThemeService
 {
     AppThemeMode Mode { get; }
 
+    /// <summary>Apply light/dark globally, independent of any window. Called at startup so surfaces
+    /// shown before the main window (setup wizard, overlays) render in the right theme, not the
+    /// App.xaml default.</summary>
+    void ApplyTheme();
+
     /// <summary>Apply the backdrop + initial theme to the shell window and start watching the OS theme.</summary>
     void Initialize(Window mainWindow);
 

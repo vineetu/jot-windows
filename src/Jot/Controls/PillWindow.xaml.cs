@@ -19,6 +19,9 @@ public partial class PillWindow : Window
     private bool _userMoved;
     private bool _dragging;
     private Point _dragStart;
+    private bool _expanded;             // is the transcript panel open?
+    private bool _lineWhenCollapsed;    // does the current state have a one-line summary to show while collapsed?
+    private const double RecordingWidth = 460; // fixed pill width while dictating, so streaming text doesn't resize it
 
     public PillWindow()
     {
@@ -36,6 +39,62 @@ public partial class PillWindow : Window
 
     public void SetElapsed(string text) => Elapsed.Text = text;
 
+    /// <summary>
+    /// Live-caption update shown while recording: the running transcript's tail on the pill line,
+    /// with the full text available on click-to-expand. No-op for empty text so the elapsed timer
+    /// stays until the first words arrive.
+    /// </summary>
+    public void SetLiveText(string? text)
+    {
+        string full = (text ?? "").Trim();
+        if (full.Length == 0) return;
+
+        TranscriptText.Text = full;      // full running transcript, shown in the expand panel
+        LineText.Text = FitTail(full);   // newest words that fit the (fixed-width) pill line
+        _lineWhenCollapsed = true;
+        ApplyExpansion();                // respects whether the user has expanded the pill
+        Reposition();
+    }
+
+    // Longest word-aligned suffix of the caption that fits the pill line, prefixed with an ellipsis.
+    // Captions grow left-to-right, so we keep the tail (newest words) and clip from the front —
+    // WPF's TextAlignment can't do this itself (it clips the end once the text overflows).
+    private string FitTail(string text)
+    {
+        text = text.ReplaceLineEndings(" ");
+        double avail = (LineText.ActualWidth > 10 ? LineText.ActualWidth : 190) - 6;
+
+        var typeface = new Typeface(FontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        double Width(string s) => new FormattedText(s, System.Globalization.CultureInfo.CurrentCulture,
+            System.Windows.FlowDirection.LeftToRight, typeface, LineText.FontSize, Brushes.White, dpi)
+            .WidthIncludingTrailingWhitespace;
+
+        if (Width(text) <= avail) return text;
+
+        string[] words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string best = "";
+        for (int i = words.Length - 1; i >= 0; i--)
+        {
+            string candidate = "…" + string.Join(' ', words[i..]);
+            if (Width(candidate) > avail) break;
+            best = candidate;
+        }
+        if (best.Length == 0) // even the final word overflows — trim it character-by-character
+        {
+            string last = words.Length > 0 ? words[^1] : text;
+            while (last.Length > 1 && Width("…" + last) > avail) last = last[1..];
+            best = "…" + last;
+        }
+        return best;
+    }
+
+    /// <summary>Dev/testing hook: open the transcript panel (as a click would) for the pill demo.</summary>
+    public void ExpandForDemo()
+    {
+        if (!_expanded) ToggleExpand();
+    }
+
     /// <summary>Dev/testing hook: pin the pill at a fixed screen point and stop auto-anchoring.</summary>
     public void PinAt(double left, double top)
     {
@@ -48,11 +107,14 @@ public partial class PillWindow : Window
     {
         if (state == PillState.Hidden) { HidePill(); return; }
 
-        // Reset per-state visibility, then set the specifics.
+        // Reset per-state visibility, then set the specifics. Line/panel visibility is applied once
+        // at the end via ApplyExpansion so the collapsed line and the expand panel never both show.
         Wave.Visibility = Visibility.Collapsed;
         Wave.Active = false;
-        LineText.Visibility = Visibility.Collapsed;
         Elapsed.Visibility = Visibility.Collapsed;
+        Capsule.Width = double.NaN;   // auto-size by default; only Recording pins a fixed width
+        _expanded = false;
+        _lineWhenCollapsed = false;
 
         switch (state)
         {
@@ -62,7 +124,9 @@ public partial class PillWindow : Window
                 Wave.Visibility = Visibility.Visible;
                 Wave.Active = true;
                 Elapsed.Visibility = Visibility.Visible;
-                Collapse();
+                Capsule.Width = RecordingWidth;   // stationary pill; the live caption streams within it
+                TranscriptText.Text = ""; // clear any prior session's caption before new partials arrive
+                LineText.Text = "";       // no caption yet — just waveform + timer until words arrive
                 AutomationProperties.SetName(this, "Recording");
                 break;
 
@@ -70,43 +134,42 @@ public partial class PillWindow : Window
             case PillState.CleaningUp:
             case PillState.Rewriting:
                 Dot.Fill = Res("AccentFillColorDefaultBrush", Color.FromRgb(0x4C, 0x8B, 0xF5));
-                LineText.Visibility = Visibility.Visible;
                 LineText.Text = state switch
                 {
                     PillState.Transcribing => "Transcribing…",
                     PillState.CleaningUp => "Cleaning up…",
                     _ => "Rewriting…",
                 };
-                Collapse();
+                _lineWhenCollapsed = true;
                 AutomationProperties.SetName(this, LineText.Text);
                 break;
 
             case PillState.Success:
                 Dot.Fill = Res("JotSuccessBrush", Color.FromRgb(0x3F, 0xB9, 0x50));
-                LineText.Visibility = Visibility.Visible;
                 LineText.Text = OneLine(text) ?? "Done";
                 TranscriptText.Text = text ?? "";
+                _lineWhenCollapsed = true;
                 AutomationProperties.SetName(this, "Transcription ready");
                 break;
 
             case PillState.Notice:
                 Dot.Fill = Res("JotWarningBrush", Color.FromRgb(0xD2, 0x99, 0x22));
-                LineText.Visibility = Visibility.Visible;
                 LineText.Text = text ?? "";
                 TranscriptText.Text = text ?? "";
-                Collapse();
+                _lineWhenCollapsed = true;
                 AutomationProperties.SetName(this, text ?? "Notice");
                 break;
 
             case PillState.Error:
                 Dot.Fill = Res("JotRecordingBrush", Color.FromRgb(0xE8, 0x43, 0x3B));
-                LineText.Visibility = Visibility.Visible;
                 LineText.Text = OneLine(text) ?? "Something went wrong";
                 TranscriptText.Text = text ?? "";
+                _lineWhenCollapsed = true;
                 AutomationProperties.SetName(this, "Error");
                 break;
         }
 
+        ApplyExpansion();
         ShowPill();
     }
 
@@ -173,15 +236,39 @@ public partial class PillWindow : Window
         if (!_dragging) ToggleExpand(); // a click (not a drag) expands/collapses
     }
 
-    private void ToggleExpand()
+    /// <summary>
+    /// Applies the current expand/collapse state so the caption is only ever shown once — mirroring
+    /// the macOS pill: expanded → full transcript in the panel with the pill line hidden; collapsed →
+    /// the one-line tail on the pill with the panel hidden.
+    /// </summary>
+    private void ApplyExpansion()
     {
         bool canExpand = !string.IsNullOrEmpty(TranscriptText.Text);
-        ExpandPanel.Visibility = canExpand && ExpandPanel.Visibility != Visibility.Visible
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        if (_expanded && canExpand)
+        {
+            LineText.Visibility = Visibility.Collapsed;   // panel already shows the full text
+            ExpandPanel.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            _expanded = false;
+            LineText.Visibility = _lineWhenCollapsed ? Visibility.Visible : Visibility.Collapsed;
+            ExpandPanel.Visibility = Visibility.Collapsed;
+        }
     }
 
-    private void Collapse() => ExpandPanel.Visibility = Visibility.Collapsed;
+    private void ToggleExpand()
+    {
+        if (string.IsNullOrEmpty(TranscriptText.Text)) return; // nothing to expand into
+        _expanded = !_expanded;
+        ApplyExpansion();
+    }
+
+    private void Collapse()
+    {
+        _expanded = false;
+        ApplyExpansion();
+    }
 
     private void OnCopyClick(object sender, RoutedEventArgs e)
     {

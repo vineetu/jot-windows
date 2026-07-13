@@ -10,7 +10,9 @@
         </Style>
     </Page.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="{StaticResource PagePadding}">
+    <!-- MaxHeight is bound in code-behind to the hosting NavigationView: WPF-UI measures pages with
+         infinite height, so without a cap the ScrollViewer never scrolls and lower sections are lost. -->
+    <ScrollViewer x:Name="RootScroll" VerticalScrollBarVisibility="Auto" Padding="{StaticResource PagePadding}">
         <StackPanel MaxWidth="820">
             <TextBlock Text="Settings" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
@@ -81,6 +83,10 @@
                             Description="CPU works on every PC. GPU (DirectML) is faster where a compatible graphics card is present, and falls back to CPU automatically. Applies after restart.">
                 <ComboBox MinWidth="180" ItemsSource="{Binding TranscriptionDevices}"
                           SelectedItem="{Binding TranscriptionDevice, Mode=TwoWay}" />
+            </ctl:SettingRow>
+            <ctl:SettingRow Title="Live captions while recording"
+                            Description="Show a running transcript in the status pill as you speak.">
+                <ui:ToggleSwitch IsChecked="{Binding LiveCaptions, Mode=TwoWay}" />
             </ctl:SettingRow>
             <ctl:SettingRow Title="Auto-paste transcription" Description="Insert the text at your cursor automatically.">
                 <ui:ToggleSwitch IsChecked="{Binding AutoPaste, Mode=TwoWay}" />

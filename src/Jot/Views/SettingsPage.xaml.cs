@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Media;
 using Jot.Services.Abstractions;
 using Jot.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +14,16 @@ public partial class SettingsPage : Page
     {
         InitializeComponent();
         DataContext = App.Services.GetRequiredService<SettingsViewModel>();
+        // WPF-UI's NavigationView measures hosted pages with infinite height, so a page-level
+        // ScrollViewer never scrolls. Cap it to the NavigationView's (bounded) height so it does.
+        Loaded += (_, _) =>
+        {
+            DependencyObject? d = this;
+            while (d is not null and not Wpf.Ui.Controls.NavigationView)
+                d = VisualTreeHelper.GetParent(d);
+            if (d is FrameworkElement host)
+                RootScroll.SetBinding(HeightProperty, new Binding(nameof(ActualHeight)) { Source = host });
+        };
     }
 
     private void OnRunWizard(object sender, RoutedEventArgs e)

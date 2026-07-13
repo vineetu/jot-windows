@@ -35,6 +35,7 @@ public sealed class PillController
     {
         _recorder.StateChanged += OnStateChanged;
         _recorder.TranscriptReady += OnTranscriptReady;
+        _recorder.PartialTranscript += OnPartial;
         _recorder.Failed += OnFailed;
         _recorder.NothingTranscribed += OnNothing;
         _audio.LevelChanged += OnLevel;
@@ -45,6 +46,14 @@ public sealed class PillController
     // Capture-thread callback → hop onto the UI thread at render priority.
     private void OnLevel(float level)
         => _dispatcher.BeginInvoke(DispatcherPriority.Render, () => _pill?.PushLevel(level));
+
+    // Live-caption partial (background thread) → UI thread. Only while still recording, so a late
+    // partial can't overwrite the "Transcribing…"/Success line after the user has stopped.
+    private void OnPartial(string text)
+        => _dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (_recorder.State == RecorderState.Recording) _pill?.SetLiveText(text);
+        });
 
     private void OnStateChanged(RecorderState state)
     {

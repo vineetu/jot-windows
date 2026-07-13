@@ -3,8 +3,9 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       xmlns:models="clr-namespace:Jot.Models"
+      xmlns:ctl="clr-namespace:Jot.Controls"
       Title="Recents">
-    <Grid Margin="{StaticResource PagePadding}">
+    <Grid Margin="{StaticResource PagePadding}" ctl:NavContentHost.FillHeight="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -12,36 +13,43 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Header: title + record button + drop zone -->
+        <!-- Header: record button + title on the left (flexes; the hint wraps), upload drop zone
+             fixed-width on the right so it can never bleed off the edge. -->
         <Grid Grid.Row="0" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <ui:Button Width="60" Height="60" CornerRadius="30" Appearance="Primary"
+            <Grid Grid.Column="0" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ui:Button Grid.Column="0" Width="60" Height="60" CornerRadius="30" Appearance="Primary"
                            Command="{Binding StartDictationCommand}"
                            ToolTip="Start dictation"
                            AutomationProperties.Name="Start dictation">
                     <ui:SymbolIcon Symbol="Mic24" FontSize="24" />
                 </ui:Button>
-                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="Recents" Style="{DynamicResource TitleTextBlockStyle}" />
-                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                        <TextBlock Text="Press" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                        <Border Margin="6,0" Padding="6,1" CornerRadius="4"
-                                Background="{DynamicResource ControlFillColorSecondaryBrush}"
-                                BorderThickness="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}">
-                            <TextBlock Text="{Binding HotkeyLabel}" FontFamily="{StaticResource JotMonoFont}" FontSize="12" />
-                        </Border>
-                        <TextBlock Text="anywhere, speak, and it's pasted at your cursor."
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
+                    <TextBlock Margin="0,2,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                        <Run Text="Press" />
+                        <InlineUIContainer BaselineAlignment="Center">
+                            <Border Padding="6,1" CornerRadius="4"
+                                    Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}">
+                                <TextBlock Text="{Binding HotkeyLabel}" FontFamily="{StaticResource JotMonoFont}" FontSize="12" />
+                            </Border>
+                        </InlineUIContainer>
+                        <Run Text="anywhere, speak, and it's pasted at your cursor." />
+                    </TextBlock>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
 
-            <Border Grid.Column="1" x:Name="DropZone" Margin="24,0,0,0" MinHeight="60"
+            <Border Grid.Column="1" x:Name="DropZone" Width="300" Margin="24,0,0,0" MinHeight="60"
                     CornerRadius="8" Background="{DynamicResource ControlFillColorDefaultBrush}"
                     BorderThickness="1.4" AllowDrop="True"
                     DragEnter="OnDropZoneDragEnter" DragLeave="OnDropZoneDragLeave" Drop="OnDropZoneDrop">

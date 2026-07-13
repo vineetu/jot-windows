@@ -19,8 +19,9 @@ public sealed partial class RecordingItem : ObservableObject
     public RecordingKind Kind { get; init; } = RecordingKind.Dictation;
     public DateTime CreatedAt { get; init; } = DateTime.Now;
 
-    /// <summary>Length in seconds (dictations only; 0 for rewrites, which keep no audio).</summary>
-    public double DurationSeconds { get; init; }
+    /// <summary>Length in seconds (dictations only; 0 for rewrites, which keep no audio). Settable so
+    /// an imported row can fill it in once the file has been decoded.</summary>
+    [ObservableProperty] private double _durationSeconds;
 
     /// <summary>Absolute path to the on-disk WAV, when this is a genuinely-recorded item. Null for
     /// seeded/mock rows and rewrites — the detail view disables playback when there's no audio.</summary>
@@ -49,6 +50,8 @@ public sealed partial class RecordingItem : ObservableObject
     public bool IsDictationRow => Kind == RecordingKind.Dictation;
 
     public string TimeText => CreatedAt.ToString("t"); // short time, culture-aware
+
+    partial void OnDurationSecondsChanged(double value) => OnPropertyChanged(nameof(DurationText));
 
     public string DurationText
     {

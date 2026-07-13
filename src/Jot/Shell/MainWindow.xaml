@@ -4,6 +4,7 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:views="clr-namespace:Jot.Views"
                  Title="Jot"
+                 Icon="pack://application:,,,/Assets/jot.ico"
                  Width="1000" Height="700" MinWidth="680" MinHeight="480"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
@@ -15,13 +16,13 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- NavigationView carries the back button; the custom TitleBar (caption buttons +
-             Snap Layouts) sits above it and extends the Mica surface into the caption. -->
+        <!-- The custom TitleBar (caption buttons + Snap Layouts) sits above the NavigationView and
+             extends the Mica surface into the caption. Back button hidden per product decision. -->
         <ui:NavigationView x:Name="RootNavigation"
                            Grid.Row="1"
                            PaneDisplayMode="Left"
-                           IsBackButtonVisible="Auto"
-                           IsPaneToggleVisible="True"
+                           IsBackButtonVisible="Collapsed"
+                           IsPaneToggleVisible="False"
                            OpenPaneLength="220">
             <ui:NavigationView.MenuItems>
                 <ui:NavigationViewItem Content="Recents" TargetPageType="{x:Type views:RecentsPage}">
@@ -61,7 +62,7 @@
 
         <ui:TitleBar x:Name="TitleBar" Grid.Row="0" Title="Jot">
             <ui:TitleBar.Icon>
-                <ui:SymbolIcon Symbol="Mic24" />
+                <ui:ImageIcon Source="pack://application:,,,/Assets/jot.ico" Width="16" Height="16" />
             </ui:TitleBar.Icon>
         </ui:TitleBar>
     </Grid>
