@@ -67,7 +67,7 @@
                 </ListView.ItemContainerStyle>
                 <ListView.ItemTemplate>
                     <DataTemplate DataType="{x:Type models:PromptItem}">
-                        <Grid>
+                        <Grid AutomationProperties.Name="{Binding Title}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
