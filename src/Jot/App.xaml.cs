@@ -1,35 +1,88 @@
-using System.IO;
+using System.Threading;
 using System.Windows;
-using Jot.Delivery;
 using Jot.Recording;
+using Jot.Services;
+using Jot.Services.Abstractions;
+using Jot.Shell;
 using Jot.Transcription;
+using Microsoft.Extensions.DependencyInjection;
 using Forms = System.Windows.Forms;
 using Drawing = System.Drawing;
 
 namespace Jot;
 
 /// <summary>
-/// Application entry point and top-level orchestrator (the Mac app's "App" layer).
-/// Owns the tray icon, the global hotkey, and the record → transcribe → paste
-/// state machine. There is no main window: Jot lives in the tray.
+/// Composition root: builds the DI container, owns the tray icon, the global hotkey, and the
+/// single-instance guard. There is no <c>StartupUri</c> — Jot boots into the tray and the main
+/// window is created lazily on demand. Exit is explicit (tray → Quit); closing the window hides it.
 /// </summary>
 public partial class App : System.Windows.Application
 {
-    private enum State { Idle, Recording, Transcribing }
+    public static IServiceProvider Services { get; private set; } = null!;
 
+    private const string MutexName = "Jot.SingleInstance.Mutex";
+    private const string ShowEventName = "Jot.SingleInstance.Show";
+
+    private Mutex? _instanceMutex;
+    private EventWaitHandle? _showEvent;
     private Forms.NotifyIcon? _tray;
     private GlobalHotkey? _hotkey;
-    private readonly AudioRecorder _recorder = new();
-    private readonly ITranscriber _transcriber = new StubTranscriber();
-    private State _state = State.Idle;
-
-    private static readonly string RecordingsDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot", "recordings");
+    private RecorderController? _recorder;
+    private MainWindow? _mainWindow;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
+        if (!ClaimSingleInstance())
+        {
+            _showEvent?.Set(); // nudge the running instance to surface, then bow out
+            Shutdown();
+            return;
+        }
+
+        Services = BuildServices();
+        _recorder = Services.GetRequiredService<RecorderController>();
+
+        WireRecorderNotifications();
+        SetupTray();
+        SetupHotkey();
+
+        Notify("Jot is running",
+            "Press Alt+Space to start and stop dictation. Double-click the tray icon to open Jot.",
+            Forms.ToolTipIcon.Info);
+
+        // Dev affordance: `--show` surfaces the main window immediately (Jot normally boots to tray).
+        if (e.Args.Contains("--show")) ShowMainWindow();
+    }
+
+    private bool ClaimSingleInstance()
+    {
+        _instanceMutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
+        _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+        if (createdNew)
+        {
+            // We're the primary instance: listen for a later launch asking us to show the window.
+            ThreadPool.RegisterWaitForSingleObject(
+                _showEvent, (_, _) => Dispatcher.Invoke(ShowMainWindow), null, -1, executeOnlyOnce: false);
+        }
+        return createdNew;
+    }
+
+    private static IServiceProvider BuildServices()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ISettingsStore, JsonSettingsStore>();
+        services.AddSingleton<IThemeService, ThemeService>();
+        services.AddSingleton<AudioRecorder>();
+        services.AddSingleton<ITranscriber, StubTranscriber>();
+        services.AddSingleton<RecorderController>();
+        services.AddSingleton<MainWindow>();
+        return services.BuildServiceProvider();
+    }
+
+    private void SetupTray()
+    {
         _tray = new Forms.NotifyIcon
         {
             Icon = Drawing.SystemIcons.Application,
@@ -37,96 +90,66 @@ public partial class App : System.Windows.Application
             Text = "Jot — Alt+Space to dictate",
         };
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("Start / Stop dictation\tAlt+Space", null, (_, _) => OnHotkey());
+        menu.Items.Add("Start / Stop dictation\tAlt+Space", null, (_, _) => _recorder!.Toggle());
+        menu.Items.Add("Open Jot…", null, (_, _) => ShowMainWindow());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit Jot", null, (_, _) => Shutdown());
         _tray.ContextMenuStrip = menu;
-        _tray.DoubleClick += (_, _) => OnHotkey();
+        _tray.DoubleClick += (_, _) => ShowMainWindow();
+    }
 
+    private void SetupHotkey()
+    {
         try
         {
-            // Alt+Space (VK_SPACE = 0x20), matching the Mac default hotkey.
-            _hotkey = new GlobalHotkey(GlobalHotkey.Modifiers.Alt, 0x20);
-            _hotkey.Pressed += OnHotkey;
+            _hotkey = new GlobalHotkey(GlobalHotkey.Modifiers.Alt, 0x20); // Alt+Space, matching the Mac default
+            _hotkey.Pressed += () => _recorder!.Toggle();
         }
         catch (Exception ex)
         {
             Notify("Hotkey unavailable", ex.Message, Forms.ToolTipIcon.Warning);
         }
-
-        Notify("Jot is running", "Press Alt+Space to start and stop dictation.", Forms.ToolTipIcon.Info);
     }
 
-    private async void OnHotkey()
+    private void ShowMainWindow()
     {
-        switch (_state)
-        {
-            case State.Idle:
-                StartRecording();
-                break;
-            case State.Recording:
-                await StopAndDeliverAsync();
-                break;
-            case State.Transcribing:
-                break; // busy; ignore
-        }
+        _mainWindow ??= Services.GetRequiredService<MainWindow>();
+        _mainWindow.Show();
+        if (_mainWindow.WindowState == WindowState.Minimized)
+            _mainWindow.WindowState = WindowState.Normal;
+        _mainWindow.Activate();
+        _mainWindow.Topmost = true;   // reliably bring to front...
+        _mainWindow.Topmost = false;  // ...without pinning it there
+        _mainWindow.Focus();
     }
 
-    private void StartRecording()
+    private void WireRecorderNotifications()
     {
-        try
+        // Phase-1 feedback via tray tooltip + balloons; the Phase-2 status pill replaces this.
+        _recorder!.StateChanged += state =>
         {
-            _recorder.Start();
-            SetState(State.Recording, "Jot — recording… (Alt+Space to stop)");
-        }
-        catch (Exception ex)
-        {
-            Notify("Couldn't start recording", ex.Message, Forms.ToolTipIcon.Error);
-        }
-    }
-
-    private async Task StopAndDeliverAsync()
-    {
-        SetState(State.Transcribing, "Jot — transcribing…");
-        try
-        {
-            string wav = Path.Combine(RecordingsDir, $"{DateTime.Now:yyyyMMdd-HHmmss}.wav");
-
-            // Stop + resample + transcribe off the UI thread; resume here for the paste.
-            RecordingResult result = await Task.Run(() => _recorder.Stop(wav));
-            string text = await _transcriber.TranscribeAsync(result.Samples, result.SampleRate);
-
-            if (string.IsNullOrWhiteSpace(text))
-                Notify("Nothing transcribed", "No speech was detected.", Forms.ToolTipIcon.Warning);
-            else
-                TextInjector.PasteAtCursor(text); // back on the UI (STA) thread after the awaits
-        }
-        catch (Exception ex)
-        {
-            Notify("Transcription failed", ex.Message, Forms.ToolTipIcon.Error);
-        }
-        finally
-        {
-            SetState(State.Idle, "Jot — Alt+Space to dictate");
-        }
-    }
-
-    private void SetState(State state, string tooltip)
-    {
-        _state = state;
-        if (_tray is not null) _tray.Text = tooltip;
+            if (_tray is null) return;
+            _tray.Text = state switch
+            {
+                RecorderState.Recording => "Jot — recording… (Alt+Space to stop)",
+                RecorderState.Transcribing => "Jot — transcribing…",
+                _ => "Jot — Alt+Space to dictate",
+            };
+        };
+        _recorder.Failed += (title, message) => Notify(title, message, Forms.ToolTipIcon.Error);
+        _recorder.NothingTranscribed += () =>
+            Notify("Nothing transcribed", "No speech was detected.", Forms.ToolTipIcon.Warning);
     }
 
     private void Notify(string title, string message, Forms.ToolTipIcon icon)
-    {
-        _tray?.ShowBalloonTip(2500, title, message, icon);
-    }
+        => _tray?.ShowBalloonTip(2500, title, message, icon);
 
     protected override void OnExit(ExitEventArgs e)
     {
         _hotkey?.Dispose();
-        _recorder.Dispose();
+        _recorder?.Dispose();
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
+        _instanceMutex?.Dispose();
         base.OnExit(e);
     }
 }

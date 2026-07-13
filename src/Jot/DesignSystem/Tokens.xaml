@@ -1,0 +1,34 @@
+<!--
+  Jot design tokens. Fluent type ramp, neutral surfaces, and accent all come from WPF-UI's
+  theme dictionaries (they track the OS light/dark + accent color). This file adds only what
+  Fluent doesn't give us: the 4px spacing scale and Jot's three semantic status colors.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- 4px spacing unit (matches the Mac scale; Fluent-legal). -->
+    <sys:Double x:Key="Space1">4</sys:Double>
+    <sys:Double x:Key="Space2">8</sys:Double>
+    <sys:Double x:Key="Space3">12</sys:Double>
+    <sys:Double x:Key="Space4">16</sys:Double>
+    <sys:Double x:Key="Space5">20</sys:Double>
+    <sys:Double x:Key="Space6">24</sys:Double>
+    <sys:Double x:Key="Space8">32</sys:Double>
+
+    <Thickness x:Key="PagePadding">24,20,24,24</Thickness>
+    <Thickness x:Key="CardPadding">16</Thickness>
+
+    <!-- Semantic status colors (recording / success / warning). Tuned to read on both themes. -->
+    <Color x:Key="JotRecordingColor">#E8433B</Color>
+    <Color x:Key="JotSuccessColor">#3FB950</Color>
+    <Color x:Key="JotWarningColor">#D29922</Color>
+
+    <SolidColorBrush x:Key="JotRecordingBrush" Color="{StaticResource JotRecordingColor}" />
+    <SolidColorBrush x:Key="JotSuccessBrush" Color="{StaticResource JotSuccessColor}" />
+    <SolidColorBrush x:Key="JotWarningBrush" Color="{StaticResource JotWarningColor}" />
+
+    <!-- Transcript / monospace face (timestamps, keybind chips, code). -->
+    <FontFamily x:Key="JotMonoFont">Cascadia Mono, Consolas, monospace</FontFamily>
+
+</ResourceDictionary>

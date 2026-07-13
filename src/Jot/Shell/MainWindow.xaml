@@ -1,0 +1,63 @@
+<ui:FluentWindow x:Class="Jot.Shell.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:views="clr-namespace:Jot.Views"
+                 Title="Jot"
+                 Width="1000" Height="700" MinWidth="680" MinHeight="480"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- NavigationView carries the back button; the custom TitleBar (caption buttons +
+             Snap Layouts) sits above it and extends the Mica surface into the caption. -->
+        <ui:NavigationView x:Name="RootNavigation"
+                           Grid.Row="1"
+                           PaneDisplayMode="Left"
+                           IsBackButtonVisible="Auto"
+                           IsPaneToggleVisible="True"
+                           OpenPaneLength="220">
+            <ui:NavigationView.MenuItems>
+                <ui:NavigationViewItem Content="Recents" TargetPageType="{x:Type views:RecentsPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Home24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem x:Name="AskJotItem" Content="Ask Jot" TargetPageType="{x:Type views:AskJotPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Chat24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Help" TargetPageType="{x:Type views:HelpPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="QuestionCircle24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="About" TargetPageType="{x:Type views:AboutPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Info24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+            </ui:NavigationView.MenuItems>
+            <ui:NavigationView.FooterMenuItems>
+                <ui:NavigationViewItem Content="Settings" TargetPageType="{x:Type views:SettingsPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Settings24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
+            </ui:NavigationView.FooterMenuItems>
+        </ui:NavigationView>
+
+        <ui:TitleBar x:Name="TitleBar" Grid.Row="0" Title="Jot">
+            <ui:TitleBar.Icon>
+                <ui:SymbolIcon Symbol="Mic24" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
+    </Grid>
+</ui:FluentWindow>
