@@ -14,6 +14,9 @@ x86/
 # Local runtime data
 *.log
 
-# STT models (large, re-downloadable)
-models/
+# STT model weights (large, re-downloadable) — anchored so it never swallows the
+# source src/Jot/Models/ folder (Git is case-insensitive on Windows).
+/models/
+assets/models/
 *.onnx
+!src/Jot/Models/

@@ -23,12 +23,19 @@ public partial class MainWindow : FluentWindow
 
     protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)
     {
-        // Windows-native back through nav history (Alt+Left).
-        if (e.KeyboardDevice.Modifiers == System.Windows.Input.ModifierKeys.Alt
-            && e.SystemKey == System.Windows.Input.Key.Left)
+        // Windows-native back/forward through nav history (Alt+Left / Alt+Right).
+        if (e.KeyboardDevice.Modifiers == System.Windows.Input.ModifierKeys.Alt)
         {
-            RootNavigation.GoBack();
-            e.Handled = true;
+            if (e.SystemKey == System.Windows.Input.Key.Left)
+            {
+                RootNavigation.GoBack();
+                e.Handled = true;
+            }
+            else if (e.SystemKey == System.Windows.Input.Key.Right)
+            {
+                RootNavigation.GoForward();
+                e.Handled = true;
+            }
         }
         base.OnKeyDown(e);
     }
