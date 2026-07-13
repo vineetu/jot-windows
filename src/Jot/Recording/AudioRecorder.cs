@@ -20,8 +20,16 @@ public sealed class AudioRecorder : IDisposable
     private WasapiCapture? _capture;
     private MemoryStream? _buffer;
     private WaveFormat? _sourceFormat;
+    private int _lastLevelTick;
 
     public bool IsRecording => _capture is not null;
+
+    /// <summary>
+    /// Fired on the capture thread ~30×/s while recording with a display-scaled RMS level
+    /// (0 = silence, ~1 = loud). Drives the status pill's reactive waveform; the pill marshals
+    /// each value onto the Dispatcher. Silent when not recording.
+    /// </summary>
+    public event Action<float>? LevelChanged;
 
     public void Start()
     {
@@ -31,8 +39,54 @@ public sealed class AudioRecorder : IDisposable
         _sourceFormat = _capture.WaveFormat;
         _buffer = new MemoryStream();
 
-        _capture.DataAvailable += (_, e) => _buffer!.Write(e.Buffer, 0, e.BytesRecorded);
+        _capture.DataAvailable += (_, e) => OnData(e.Buffer, e.BytesRecorded);
         _capture.StartRecording();
+    }
+
+    private void OnData(byte[] buffer, int bytes)
+    {
+        _buffer!.Write(buffer, 0, bytes);
+        RaiseLevel(buffer, bytes);
+    }
+
+    /// <summary>Throttled (~30 Hz) RMS over the just-captured buffer, in the device's native format.</summary>
+    private void RaiseLevel(byte[] buffer, int bytes)
+    {
+        if (LevelChanged is null || _sourceFormat is null) return;
+
+        int now = Environment.TickCount;
+        if (now - _lastLevelTick < 33) return;
+        _lastLevelTick = now;
+
+        double sumSq = 0;
+        int count = 0;
+
+        if (_sourceFormat.Encoding == WaveFormatEncoding.IeeeFloat && _sourceFormat.BitsPerSample == 32)
+        {
+            for (int i = 0; i + 4 <= bytes; i += 4)
+            {
+                float s = BitConverter.ToSingle(buffer, i);
+                sumSq += s * s;
+                count++;
+            }
+        }
+        else if (_sourceFormat.Encoding == WaveFormatEncoding.Pcm && _sourceFormat.BitsPerSample == 16)
+        {
+            for (int i = 0; i + 2 <= bytes; i += 2)
+            {
+                float s = BitConverter.ToInt16(buffer, i) / 32768f;
+                sumSq += s * s;
+                count++;
+            }
+        }
+        else
+        {
+            return; // unknown format — skip the level rather than guess
+        }
+
+        if (count == 0) return;
+        double rms = Math.Sqrt(sumSq / count);
+        LevelChanged?.Invoke((float)Math.Min(1.0, rms * 12.0)); // display gain so speech fills the pill
     }
 
     /// <summary>Stops capture and returns the resampled mono audio. Never null once started.</summary>

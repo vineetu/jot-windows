@@ -43,6 +43,7 @@ public partial class App : System.Windows.Application
 
         Services = BuildServices();
         _recorder = Services.GetRequiredService<RecorderController>();
+        Services.GetRequiredService<PillController>().Attach(); // status pill now owns pipeline feedback
 
         WireRecorderNotifications();
         SetupTray();
@@ -54,6 +55,31 @@ public partial class App : System.Windows.Application
 
         // Dev affordance: `--show` surfaces the main window immediately (Jot normally boots to tray).
         if (e.Args.Contains("--show")) ShowMainWindow();
+        // Dev affordance: `--pilldemo` drives the pill with a speech-like envelope (no mic needed).
+        if (e.Args.Contains("--pilldemo")) RunPillDemo();
+    }
+
+    private void RunPillDemo()
+    {
+        var pill = new Controls.PillWindow();
+        pill.SetState(Controls.PillState.Recording);
+
+        var rnd = new Random(1);
+        double t = 0;
+        int frames = 0;
+        var timer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(33),
+        };
+        timer.Tick += (_, _) =>
+        {
+            t += 0.15;
+            double envelope = 0.5 + 0.5 * Math.Sin(t * 0.7);     // speech comes in bursts
+            pill.PushLevel(envelope * (0.35 + 0.65 * rnd.NextDouble()));
+            frames++;
+            pill.SetElapsed($"0:{frames / 30:00}");
+        };
+        timer.Start();
     }
 
     private bool ClaimSingleInstance()
@@ -77,6 +103,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<AudioRecorder>();
         services.AddSingleton<ITranscriber, StubTranscriber>();
         services.AddSingleton<RecorderController>();
+        services.AddSingleton<PillController>();
         services.AddSingleton<MainWindow>();
         return services.BuildServiceProvider();
     }
@@ -125,7 +152,8 @@ public partial class App : System.Windows.Application
 
     private void WireRecorderNotifications()
     {
-        // Phase-1 feedback via tray tooltip + balloons; the Phase-2 status pill replaces this.
+        // The status pill owns success/error/nothing feedback now; the tray just reflects state
+        // in its tooltip for a quick hover-glance.
         _recorder!.StateChanged += state =>
         {
             if (_tray is null) return;
@@ -136,9 +164,6 @@ public partial class App : System.Windows.Application
                 _ => "Jot — Alt+Space to dictate",
             };
         };
-        _recorder.Failed += (title, message) => Notify(title, message, Forms.ToolTipIcon.Error);
-        _recorder.NothingTranscribed += () =>
-            Notify("Nothing transcribed", "No speech was detected.", Forms.ToolTipIcon.Warning);
     }
 
     private void Notify(string title, string message, Forms.ToolTipIcon icon)
