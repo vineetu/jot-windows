@@ -3,7 +3,9 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Jot.Services.Abstractions;
+using Jot.Services.Ai;
 using Jot.Transcription;
+using Jot.Transcription.Nemotron;
 using Microsoft.Win32;
 using NAudio.CoreAudioApi;
 
@@ -13,15 +15,20 @@ public sealed record AudioInputDevice(string Id, string Name);
 
 /// <summary>
 /// Backs the single Settings page. Wraps <see cref="JotSettings"/> — each property persists on change
-/// and applies live side effects (theme switch, launch-at-login registry). Engine/network-bound rows
-/// (model download, Test Connection) are stubbed; the toggles and pickers are real and saved.
+/// and applies live side effects (theme switch, launch-at-login registry, language → engine, hotkey
+/// rebind via the settings-changed signal picked up in App). Model download is backed by the real
+/// Nemotron installer; AI test/cleanup go through <see cref="IAiClient"/>.
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsStore _store;
     private readonly IThemeService _theme;
-    private readonly ParakeetModel _model;
-    private readonly ParakeetModelInstaller _installer;
+    private readonly NemotronModel _model;
+    private readonly NemotronModelInstaller _installer;
+    private readonly ITranscriber _transcriber;
+    private readonly IAiClient _ai;
+    private readonly AiCredentials _credentials;
+    private readonly ISoundService _sound;
     private JotSettings S => _store.Current;
 
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -48,7 +55,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _advancedFeatures;
     [ObservableProperty] private bool _launchAtLogin;
     [ObservableProperty] private string _retention = "7 days";
-    [ObservableProperty] private bool _semanticSearch;
     [ObservableProperty] private bool _returnToOrigin;
     [ObservableProperty] private AudioInputDevice? _selectedDevice;
 
@@ -59,7 +65,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _autoEnter;
     [ObservableProperty] private bool _keepInClipboard;
 
-    // On-device model download state (backed by ParakeetModelInstaller)
+    // Shortcuts (editable chord strings). Persisted; App re-registers on the settings-changed signal.
+    [ObservableProperty] private string _toggleRecordingHotkey = "Alt+Space";
+    [ObservableProperty] private string _cancelRecordingHotkey = "Escape";
+    [ObservableProperty] private string _pasteLastHotkey = "Alt+OemComma";
+    [ObservableProperty] private string _rewriteHotkey = "Alt+OemQuestion";
+    [ObservableProperty] private string _rewriteWithVoiceHotkey = "Alt+OemPeriod";
+
+    // On-device model download state (backed by NemotronModelInstaller)
     [ObservableProperty] private bool _isModelInstalled;
     [ObservableProperty] private bool _isDownloadingModel;
     [ObservableProperty] private double _modelDownloadProgress; // 0..100
@@ -75,6 +88,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _aiApiKey = ""; // in-memory only; a real build uses the Windows Credential Locker / DPAPI
     [ObservableProperty] private bool _cleanupEnabled;
     [ObservableProperty] private string _testConnectionResult = "";
+    [ObservableProperty] private bool _isTestingConnection;
 
     [ObservableProperty] private bool _soundStart;
     [ObservableProperty] private bool _soundStop;
@@ -85,19 +99,23 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool AiConfigured => AiProvider != "None";
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
-        ParakeetModel model, ParakeetModelInstaller installer)
+        NemotronModel model, NemotronModelInstaller installer,
+        ITranscriber transcriber, IAiClient ai, AiCredentials credentials, ISoundService sound)
     {
         _store = store;
         _theme = theme;
         _model = model;
         _installer = installer;
+        _transcriber = transcriber;
+        _ai = ai;
+        _credentials = credentials;
+        _sound = sound;
 
         // Seed backing fields directly so wiring the UI doesn't trigger a save storm.
         _themeMode = S.Theme;
         _advancedFeatures = S.AdvancedFeatures;
         _launchAtLogin = S.LaunchAtLogin;
         _retention = DaysToLabel(S.RetentionDays);
-        _semanticSearch = S.SemanticSearch;
         _returnToOrigin = S.ReturnToOrigin;
         _language = S.Language;
         _transcriptionDevice = S.TranscriptionDevice;
@@ -105,9 +123,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         _autoPaste = S.AutoPaste;
         _autoEnter = S.AutoEnter;
         _keepInClipboard = S.KeepInClipboard;
+        _toggleRecordingHotkey = S.ToggleRecordingHotkey;
+        _cancelRecordingHotkey = S.CancelRecordingHotkey;
+        _pasteLastHotkey = S.PasteLastHotkey;
+        _rewriteHotkey = S.RewriteHotkey;
+        _rewriteWithVoiceHotkey = S.RewriteWithVoiceHotkey;
         _aiProvider = S.AiProvider;
         _aiBaseUrl = S.AiBaseUrl ?? "";
         _aiModel = S.AiModel ?? "";
+        _aiApiKey = credentials.ApiKey ?? "";
         _cleanupEnabled = S.CleanupEnabled;
         _soundStart = S.SoundStart;
         _soundStop = S.SoundStop;
@@ -119,13 +143,20 @@ public sealed partial class SettingsViewModel : ObservableObject
         RefreshModelStatus();
     }
 
+    /// <summary>Applies the stored language to the engine. Called at startup and on change.</summary>
+    public static void ApplyLanguage(ITranscriber transcriber, string language)
+    {
+        if (transcriber is NemotronTranscriber n)
+            n.SetLanguageId(NemotronLanguages.TryGetId(language, out long id) ? id : 0);
+    }
+
     private void RefreshModelStatus()
     {
         IsModelInstalled = _model.IsInstalled;
         if (IsModelInstalled)
-            ModelStatusText = "Installed";
+            ModelStatusText = "Nemotron 3.5 · Installed";
         else if (!IsDownloadingModel)
-            ModelStatusText = "Not installed (~630 MB)";
+            ModelStatusText = "Not installed (~0.67 GB)";
     }
 
     private void LoadDevices()
@@ -147,10 +178,14 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnThemeModeChanged(AppThemeMode value) { _theme.SetMode(value); } // SetMode persists
     partial void OnAdvancedFeaturesChanged(bool value) { S.AdvancedFeatures = value; Save(); }
-    partial void OnSemanticSearchChanged(bool value) { S.SemanticSearch = value; Save(); }
     partial void OnReturnToOriginChanged(bool value) { S.ReturnToOrigin = value; Save(); }
     partial void OnRetentionChanged(string value) { S.RetentionDays = LabelToDays(value); Save(); }
-    partial void OnLanguageChanged(string value) { S.Language = value; Save(); }
+    partial void OnLanguageChanged(string value)
+    {
+        S.Language = value;
+        Save();
+        ApplyLanguage(_transcriber, value);
+    }
     partial void OnTranscriptionDeviceChanged(string value) { S.TranscriptionDevice = value; Save(); }
     partial void OnLiveCaptionsChanged(bool value) { S.LiveCaptions = value; Save(); }
     partial void OnAutoPasteChanged(bool value) { S.AutoPaste = value; Save(); }
@@ -164,6 +199,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnSoundErrorChanged(bool value) { S.SoundError = value; Save(); }
     partial void OnAiBaseUrlChanged(string value) { S.AiBaseUrl = value; Save(); }
     partial void OnAiModelChanged(string value) { S.AiModel = value; Save(); }
+    partial void OnAiApiKeyChanged(string value) { _credentials.ApiKey = value; } // session-only, never persisted
+
+    // Shortcuts: persist, then Save() raises ISettingsStore.Changed, which App uses to re-register.
+    partial void OnToggleRecordingHotkeyChanged(string value) { S.ToggleRecordingHotkey = value; Save(); }
+    partial void OnCancelRecordingHotkeyChanged(string value) { S.CancelRecordingHotkey = value; Save(); }
+    partial void OnPasteLastHotkeyChanged(string value) { S.PasteLastHotkey = value; Save(); }
+    partial void OnRewriteHotkeyChanged(string value) { S.RewriteHotkey = value; Save(); }
+    partial void OnRewriteWithVoiceHotkeyChanged(string value) { S.RewriteWithVoiceHotkey = value; Save(); }
 
     partial void OnAiProviderChanged(string value)
     {
@@ -187,6 +230,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     private void Save() => _store.Save();
+
+    private AiConfig BuildAiConfig() => new(AiProvider,
+        string.IsNullOrWhiteSpace(AiBaseUrl) ? null : AiBaseUrl,
+        string.IsNullOrWhiteSpace(AiModel) ? null : AiModel,
+        string.IsNullOrWhiteSpace(AiApiKey) ? null : AiApiKey);
 
     private static void ApplyLaunchAtLogin(bool enabled)
     {
@@ -229,13 +277,28 @@ public sealed partial class SettingsViewModel : ObservableObject
     // ---- commands ----
 
     [RelayCommand]
-    private void PlaySound() => System.Media.SystemSounds.Asterisk.Play();
+    private void PlaySound() => _sound.Preview();
 
     [RelayCommand]
-    private void TestConnection()
-        => TestConnectionResult = AiProvider == "None"
-            ? "Choose a provider first."
-            : $"Test Connection runs against {AiProvider} once the AI client is wired.";
+    private async Task TestConnection()
+    {
+        if (AiProvider == "None") { TestConnectionResult = "Choose a provider first."; return; }
+        IsTestingConnection = true;
+        TestConnectionResult = "Testing…";
+        try
+        {
+            AiResult result = await _ai.TestConnectionAsync(BuildAiConfig());
+            TestConnectionResult = result.Message;
+        }
+        catch (Exception ex)
+        {
+            TestConnectionResult = "Failed — " + ex.Message;
+        }
+        finally
+        {
+            IsTestingConnection = false;
+        }
+    }
 
     [RelayCommand]
     private async Task DownloadModel()
@@ -267,7 +330,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     // ---- vocabulary (custom terms) ----
 
-    public ObservableCollection<string> VocabularyTerms { get; } = new(["Jot", "Parakeet", "WASAPI"]);
+    public ObservableCollection<string> VocabularyTerms { get; } = new(["Jot", "Nemotron", "WASAPI"]);
 
     [ObservableProperty] private string _newVocabTerm = "";
 

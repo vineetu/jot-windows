@@ -17,8 +17,7 @@ public sealed class JotSettings
     // General
     public bool AdvancedFeatures { get; set; }
     public bool LaunchAtLogin { get; set; }
-    public int RetentionDays { get; set; } = 7;       // 0 = forever
-    public bool SemanticSearch { get; set; } = true;
+    public int RetentionDays { get; set; } = 7;       // 0 = forever; older recordings are pruned on launch
     public string? InputDeviceId { get; set; }
 
     // Transcription / output
@@ -43,8 +42,9 @@ public sealed class JotSettings
     public bool SoundSuccess { get; set; } = true;
     public bool SoundError { get; set; } = true;
 
-    // Shortcuts (human-readable chord strings; parsed by the hotkey service)
+    // Shortcuts (human-readable chord strings; parsed by HotkeyChord and registered by HotkeyManager)
     public string ToggleRecordingHotkey { get; set; } = "Alt+Space";
+    public string CancelRecordingHotkey { get; set; } = "Escape"; // armed only while recording
     public string? PushToTalkHotkey { get; set; }
     public string PasteLastHotkey { get; set; } = "Alt+OemComma";
     public string RewriteHotkey { get; set; } = "Alt+OemQuestion";

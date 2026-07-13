@@ -151,6 +151,23 @@ public sealed class AudioRecorder : IDisposable
         return new RecordingResult(samples, TargetSampleRate, wavPath, duration);
     }
 
+    /// <summary>Stops capture and throws the audio away (cancelled recording). Safe if not recording.</summary>
+    public void Discard()
+    {
+        if (_capture is null) return;
+        var capture = _capture;
+        var stopped = new TaskCompletionSource();
+        capture.RecordingStopped += (_, _) => stopped.TrySetResult();
+        capture.StopRecording();
+        stopped.Task.Wait(TimeSpan.FromSeconds(2));
+
+        capture.Dispose();
+        _buffer?.Dispose();
+        _capture = null;
+        _buffer = null;
+        _sourceFormat = null;
+    }
+
     private static ISampleProvider ToMono(ISampleProvider src)
     {
         if (src.WaveFormat.Channels == 1) return src;

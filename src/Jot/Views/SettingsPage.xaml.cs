@@ -26,6 +26,13 @@ public partial class SettingsPage : Page
         };
     }
 
+    private void OnApiKeyChanged(object sender, RoutedEventArgs e)
+    {
+        // WPF password controls don't support data binding (by design), so push the value manually.
+        if (DataContext is SettingsViewModel vm && sender is Wpf.Ui.Controls.PasswordBox box)
+            vm.AiApiKey = box.Password;
+    }
+
     private void OnRunWizard(object sender, RoutedEventArgs e)
     {
         var wizard = new SetupWizardWindow { Owner = Window.GetWindow(this) };

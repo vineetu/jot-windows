@@ -35,9 +35,6 @@
                 <ComboBox MinWidth="120" ItemsSource="{Binding RetentionOptions}"
                           SelectedItem="{Binding Retention, Mode=TwoWay}" />
             </ctl:SettingRow>
-            <ctl:SettingRow Title="AI semantic search" Description="Find recordings by meaning, on-device. On by default.">
-                <ui:ToggleSwitch IsChecked="{Binding SemanticSearch, Mode=TwoWay}" />
-            </ctl:SettingRow>
             <ctl:SettingRow Title="Return to the app I started in"
                             Description="Deliver the transcript back to the app that was focused when you began."
                             Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">
@@ -60,11 +57,11 @@
             <!-- TRANSCRIPTION -->
             <TextBlock Text="Transcription" Style="{StaticResource SectionHeader}" />
 
-            <ctl:SettingRow Title="Language" Description="Jot downloads the right on-device model for your language.">
+            <ctl:SettingRow Title="Language" Description="The spoken language Jot transcribes. English is the most accurate; other languages vary.">
                 <ComboBox MinWidth="150" ItemsSource="{Binding Languages}"
                           SelectedItem="{Binding Language, Mode=TwoWay}" />
             </ctl:SettingRow>
-            <ctl:SettingRow Title="Model" Description="On-device speech model (Parakeet-TDT, runs locally — nothing leaves your PC).">
+            <ctl:SettingRow Title="Model" Description="On-device speech model (Nemotron 3.5, multilingual — runs locally, nothing leaves your PC).">
                 <StackPanel MinWidth="280">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}"
@@ -117,7 +114,7 @@
                     <ui:TextBox MinWidth="260" Text="{Binding AiModel, UpdateSourceTrigger=PropertyChanged}" />
                 </ctl:SettingRow>
                 <ctl:SettingRow Title="API key" Description="Stored only for this session in the preview build.">
-                    <ui:PasswordBox MinWidth="260" />
+                    <ui:PasswordBox MinWidth="260" PasswordChanged="OnApiKeyChanged" />
                 </ctl:SettingRow>
                 <ctl:SettingRow Title="Clean up transcript with AI"
                                 Description="Remove filler words and fix punctuation after each dictation.">
@@ -157,20 +154,25 @@
             <!-- SHORTCUTS -->
             <TextBlock Text="Shortcuts" Style="{StaticResource SectionHeader}" />
             <ui:InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,0,0,8"
-                        Title="Windows global hotkeys"
-                        Message="Global shortcuts work best with a modifier (Ctrl/Alt/Win). Single keys like F13–F24 work too. Push-to-talk needs a low-level keyboard hook because Windows hotkeys don't report key-up." />
+                        Title="Click a shortcut to change it"
+                        Message="Click a shortcut, then press the new combination (Esc to cancel, Backspace to clear). Global shortcuts work best with a modifier (Ctrl/Alt/Win); single keys like F13–F24 work too." />
             <ctl:SettingRow Title="Toggle recording" Description="Start and stop dictation.">
-                <Border Padding="8,3" CornerRadius="4" Background="{DynamicResource ControlFillColorSecondaryBrush}"
-                        BorderThickness="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}">
-                    <TextBlock Text="Alt + Space" FontFamily="{StaticResource JotMonoFont}" FontSize="12" />
-                </Border>
+                <ctl:HotkeyBox Chord="{Binding ToggleRecordingHotkey, Mode=TwoWay}" />
             </ctl:SettingRow>
             <ctl:SettingRow Title="Cancel recording" Description="Discards the current recording (active only while recording).">
-                <Border Padding="8,3" CornerRadius="4" Background="{DynamicResource ControlFillColorSecondaryBrush}"
-                        BorderThickness="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}">
-                    <TextBlock Text="Esc" FontFamily="{StaticResource JotMonoFont}" FontSize="12" />
-                </Border>
+                <ctl:HotkeyBox Chord="{Binding CancelRecordingHotkey, Mode=TwoWay}" />
             </ctl:SettingRow>
+            <StackPanel Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">
+                <ctl:SettingRow Title="Paste last transcription" Description="Paste the most recent transcript at your cursor.">
+                    <ctl:HotkeyBox Chord="{Binding PasteLastHotkey, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Rewrite" Description="Open the rewrite prompt picker for the last transcript.">
+                    <ctl:HotkeyBox Chord="{Binding RewriteHotkey, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Rewrite with voice" Description="Dictate an instruction to rewrite the last transcript.">
+                    <ctl:HotkeyBox Chord="{Binding RewriteWithVoiceHotkey, Mode=TwoWay}" />
+                </ctl:SettingRow>
+            </StackPanel>
 
             <!-- VOCABULARY (advanced) -->
             <StackPanel Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">

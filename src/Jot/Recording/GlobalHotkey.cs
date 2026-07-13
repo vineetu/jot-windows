@@ -33,15 +33,24 @@ public sealed class GlobalHotkey : IDisposable
 
     private readonly HwndSource _source;
     private readonly int _id;
+    private readonly Modifiers _modifiers;
+    private readonly uint _vk;
     private bool _registered;
 
     /// <summary>Raised on the UI thread each time the hotkey fires.</summary>
     public event Action? Pressed;
 
+    /// <summary>True once the combination is actively registered with the OS.</summary>
+    public bool IsRegistered => _registered;
+
     /// <param name="vk">Virtual-key code (e.g. <c>0x20</c> for Space).</param>
-    public GlobalHotkey(Modifiers modifiers, uint vk, int id = 1)
+    /// <param name="autoRegister">Register immediately (default). Pass false to arm later with
+    /// <see cref="Register"/> — e.g. a cancel key that only listens while recording.</param>
+    public GlobalHotkey(Modifiers modifiers, uint vk, int id = 1, bool autoRegister = true)
     {
         _id = id;
+        _modifiers = modifiers;
+        _vk = vk;
 
         // Message-only window: invisible, never shown, exists purely to receive WM_HOTKEY.
         var parameters = new HwndSourceParameters("Jot.HotkeyWindow")
@@ -52,13 +61,28 @@ public sealed class GlobalHotkey : IDisposable
         _source = new HwndSource(parameters);
         _source.AddHook(WndProc);
 
-        _registered = RegisterHotKey(_source.Handle, _id, (uint)(modifiers | Modifiers.NoRepeat), vk);
+        if (autoRegister) Register();
+    }
+
+    /// <summary>Registers the combination with the OS. Throws if the OS rejects it (e.g. already taken).</summary>
+    public void Register()
+    {
+        if (_registered) return;
+        _registered = RegisterHotKey(_source.Handle, _id, (uint)(_modifiers | Modifiers.NoRepeat), _vk);
         if (!_registered)
         {
             int err = Marshal.GetLastWin32Error();
             throw new InvalidOperationException(
                 $"RegisterHotKey failed (Win32 error {err}). The combination may already be taken by another app.");
         }
+    }
+
+    /// <summary>Releases the combination so other apps (and Jot) can use the key again.</summary>
+    public void Unregister()
+    {
+        if (!_registered) return;
+        UnregisterHotKey(_source.Handle, _id);
+        _registered = false;
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -73,11 +97,7 @@ public sealed class GlobalHotkey : IDisposable
 
     public void Dispose()
     {
-        if (_registered)
-        {
-            UnregisterHotKey(_source.Handle, _id);
-            _registered = false;
-        }
+        Unregister();
         _source.RemoveHook(WndProc);
         _source.Dispose();
     }

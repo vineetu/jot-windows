@@ -20,12 +20,19 @@ public static class TextInjector
     private const uint KEYEVENTF_SCANCODE = 0x0008;
     private const ushort SCAN_CONTROL = 0x1D;
     private const ushort SCAN_V = 0x2F;
+    private const ushort SCAN_RETURN = 0x1C;
 
     /// <summary>The foreground window right now — capture this when recording starts so the
     /// transcript can be delivered back to the app the user was in, even if focus drifts.</summary>
     public static IntPtr CaptureForegroundWindow() => GetForegroundWindow();
 
-    public static void PasteAtCursor(string text, IntPtr restoreTo = default)
+    /// <param name="restoreTo">Window to refocus before pasting (the app dictation began in), or
+    /// <see cref="IntPtr.Zero"/> to paste into whatever currently has focus.</param>
+    /// <param name="keepInClipboard">When true, leave the transcript on the clipboard instead of
+    /// restoring the user's previous clipboard contents.</param>
+    /// <param name="pressEnter">When true, send Enter after the paste (handy for chat/search boxes).</param>
+    public static void PasteAtCursor(string text, IntPtr restoreTo = default,
+        bool keepInClipboard = false, bool pressEnter = false)
     {
         if (string.IsNullOrEmpty(text)) return;
 
@@ -37,9 +44,13 @@ public static class TextInjector
             Thread.Sleep(40); // let the focus change settle before synthesising Ctrl+V
         }
 
-        // 1. Save whatever the user had on the clipboard (text only for now).
+        // 1. Save whatever the user had on the clipboard (text only for now) — unless the user
+        //    wants us to leave the transcript there, in which case there's nothing to restore.
         string? saved = null;
-        try { if (Clipboard.ContainsText()) saved = Clipboard.GetText(); } catch { /* clipboard busy */ }
+        if (!keepInClipboard)
+        {
+            try { if (Clipboard.ContainsText()) saved = Clipboard.GetText(); } catch { /* clipboard busy */ }
+        }
 
         // 2. Put our transcript on the clipboard.
         SetClipboardText(text);
@@ -47,16 +58,27 @@ public static class TextInjector
         // 3. Synthetic Ctrl+V into the focused app.
         SendCtrlV();
 
-        // 4. Restore the original clipboard after the paste has landed.
-        //    A short delay avoids racing the target app's paste handler.
-        Task.Delay(150).ContinueWith(_ =>
+        // 4. Optionally submit (Enter) — useful for chat boxes and search fields. Give the paste a
+        //    moment to land first so we don't submit an empty field.
+        if (pressEnter)
         {
-            Application.Current?.Dispatcher.Invoke(() =>
+            Thread.Sleep(60);
+            SendEnter();
+        }
+
+        // 5. Restore the original clipboard after the paste has landed (unless keeping our text).
+        //    A short delay avoids racing the target app's paste handler.
+        if (!keepInClipboard)
+        {
+            Task.Delay(150).ContinueWith(_ =>
             {
-                if (saved is not null) SetClipboardText(saved);
-                else TryClear();
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    if (saved is not null) SetClipboardText(saved);
+                    else TryClear();
+                });
             });
-        });
+        }
     }
 
     private static void SetClipboardText(string text)
@@ -75,14 +97,27 @@ public static class TextInjector
 
     // Ctrl+V by SCAN CODE, not virtual-key: some apps (terminals, games, Electron surfaces) only
     // honour scan-coded synthetic input. Ctrl held down around a V press-and-release.
-    private static void SendCtrlV()
+    private static void SendCtrlV() => SendKeyChord(SCAN_CONTROL, SCAN_V);
+
+    /// <summary>Presses the given scan codes together (in order), then releases them in reverse — e.g.
+    /// <c>SendKeyChord(SCAN_CONTROL, SCAN_A)</c> for Ctrl+A. Shared by the paste path and dev self-tests.</summary>
+    internal static void SendKeyChord(params ushort[] scanCodes)
+    {
+        var inputs = new INPUT[scanCodes.Length * 2];
+        for (int i = 0; i < scanCodes.Length; i++)
+            inputs[i] = ScanInput(scanCodes[i], keyUp: false);
+        for (int i = 0; i < scanCodes.Length; i++)
+            inputs[scanCodes.Length + i] = ScanInput(scanCodes[scanCodes.Length - 1 - i], keyUp: true);
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
+
+    // Enter by scan code, matching SendCtrlV's approach.
+    private static void SendEnter()
     {
         var inputs = new[]
         {
-            ScanInput(SCAN_CONTROL, false),
-            ScanInput(SCAN_V, false),
-            ScanInput(SCAN_V, true),
-            ScanInput(SCAN_CONTROL, true),
+            ScanInput(SCAN_RETURN, false),
+            ScanInput(SCAN_RETURN, true),
         };
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
@@ -99,6 +134,10 @@ public static class TextInjector
             },
         },
     };
+
+    /// <summary>Forces a window to the foreground (dev/self-test use). Same mechanism the paste path
+    /// uses to return focus to the origin app.</summary>
+    internal static void FocusWindow(IntPtr hWnd) => ForceForeground(hWnd);
 
     // A background process can't just call SetForegroundWindow (Windows foreground-lock blocks it,
     // silently). Attaching our input queue to the target window's thread lifts the lock long enough
@@ -159,7 +198,22 @@ public static class TextInjector
     [StructLayout(LayoutKind.Explicit)]
     private struct InputUnion
     {
+        // MOUSEINPUT is the largest union member; it MUST be present so that sizeof(INPUT) is the
+        // 40 bytes Windows expects on x64. Without it, cbSize is too small and SendInput silently
+        // no-ops (returns 0) — i.e. nothing ever gets typed.
+        [FieldOffset(0)] public MOUSEINPUT mi;
         [FieldOffset(0)] public KEYBDINPUT ki;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]

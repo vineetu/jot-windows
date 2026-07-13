@@ -3,6 +3,7 @@ using System.Windows;
 using Jot.Recording;
 using Jot.Services;
 using Jot.Services.Abstractions;
+using Jot.Services.Ai;
 using Jot.Services.Navigation;
 using Jot.Shell;
 using Jot.Transcription;
@@ -28,7 +29,8 @@ public partial class App : System.Windows.Application
     private Mutex? _instanceMutex;
     private EventWaitHandle? _showEvent;
     private Forms.NotifyIcon? _tray;
-    private GlobalHotkey? _hotkey;
+    private HotkeyManager? _hotkeys;
+    private string _hotkeySignature = "";
     private RecorderController? _recorder;
     private MainWindow? _mainWindow;
 
@@ -67,6 +69,16 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Dev affordance: `--pasteselftest` exercises the REAL paste path (paste into whatever's
+        // foreground, as in a live dictation) against a freshly-launched Notepad, then verifies via a
+        // clipboard round-trip (select-all + copy). Result → %TEMP%\jot-pasteselftest.txt.
+        if (e.Args.Contains("--pasteselftest"))
+        {
+            RunPasteSelfTest();
+            Shutdown();
+            return;
+        }
+
         if (!ClaimSingleInstance())
         {
             _showEvent?.Set(); // nudge the running instance to surface, then bow out
@@ -80,11 +92,16 @@ public partial class App : System.Windows.Application
 
         // Warm up the model off the UI thread so the first dictation isn't a cold start.
         var transcriber = Services.GetRequiredService<ITranscriber>();
+        var settings = Services.GetRequiredService<ISettingsStore>();
+        SettingsViewModel.ApplyLanguage(transcriber, settings.Current.Language);
         if (transcriber.IsModelInstalled) _ = Task.Run(transcriber.WarmUp);
+
+        // Enforce the retention window (delete old recordings) off the UI thread.
+        _ = Task.Run(() => Services.GetRequiredService<RetentionCleaner>().Prune());
 
         WireRecorderNotifications();
         SetupTray();
-        SetupHotkey();
+        SetupHotkeys();
 
         Notify("Jot is running",
             "Press Alt+Space to start and stop dictation. Double-click the tray icon to open Jot.",
@@ -117,13 +134,85 @@ public partial class App : System.Windows.Application
         }
     }
 
+    // Runs the dispatcher for a spell so queued input (e.g. a synthetic WM_PASTE) is actually
+    // processed — a plain Thread.Sleep would block the message pump and the paste would never land.
+    private static void Pump(int ms)
+    {
+        var frame = new System.Windows.Threading.DispatcherFrame();
+        var timer = new System.Windows.Threading.DispatcherTimer(
+            TimeSpan.FromMilliseconds(ms), System.Windows.Threading.DispatcherPriority.Background,
+            (_, _) => frame.Continue = false, System.Windows.Threading.Dispatcher.CurrentDispatcher);
+        timer.Start();
+        System.Windows.Threading.Dispatcher.PushFrame(frame);
+        timer.Stop();
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SystemParametersInfo(uint action, uint param, IntPtr vparam, uint winIni);
+
+    private void RunPasteSelfTest()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-pasteselftest.txt");
+        const string marker = "JOT_PASTE_OK_4213";
+        var log = new System.Text.StringBuilder();
+        try
+        {
+            var tb = new System.Windows.Controls.TextBox { AcceptsReturn = true, FontSize = 16 };
+            var w = new Window
+            {
+                Width = 440, Height = 240, Title = "Jot paste self-test", Content = tb, Topmost = true,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            };
+            // Defeat the foreground lock so an auto-launched process can pull its own window to the
+            // front (SPI_SETFOREGROUNDLOCKTIMEOUT=0). Only needed for this headless self-test.
+            SystemParametersInfo(0x2001, 0, IntPtr.Zero, 0);
+
+            w.Show();
+            w.Activate();
+            IntPtr hwnd = new System.Windows.Interop.WindowInteropHelper(w).EnsureHandle();
+            Delivery.TextInjector.FocusWindow(hwnd);
+            Pump(200);
+            Delivery.TextInjector.FocusWindow(hwnd); // second nudge now that the lock timeout is 0
+            tb.Focus();
+            System.Windows.Input.Keyboard.Focus(tb);
+            Pump(600);
+
+            log.AppendLine($"ourHwnd={hwnd}");
+            log.AppendLine($"foreground={GetForegroundWindow()} (match={GetForegroundWindow() == hwnd})");
+            log.AppendLine($"tbKeyboardFocused={tb.IsKeyboardFocused}");
+            log.AppendLine($"focusedElement={System.Windows.Input.Keyboard.FocusedElement?.GetType().Name ?? "null"}");
+
+            bool clipSet = false;
+            try { System.Windows.Clipboard.SetText(marker); clipSet = System.Windows.Clipboard.ContainsText() && System.Windows.Clipboard.GetText() == marker; } catch (Exception ex) { log.AppendLine("clipErr=" + ex.Message); }
+            log.AppendLine($"clipboardSet={clipSet}");
+
+            // Directly send scan-coded Ctrl+V (bypass the focus dance — we've already forced foreground).
+            Delivery.TextInjector.SendKeyChord(0x1D, 0x2F);
+            Pump(800);
+
+            string readback = tb.Text ?? "";
+            log.AppendLine($"foregroundAfter={GetForegroundWindow()}");
+            log.AppendLine($"tbText=[{readback.Replace("\r", "").Replace("\n", "\\n")}]");
+
+            bool pass = readback.Contains(marker);
+            System.IO.File.WriteAllText(outPath, $"{(pass ? "PASS" : "FAIL")}\n{log}");
+            w.Close();
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n{log}");
+        }
+    }
+
     private static void RunHeadlessInstall(string dir)
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-install-result.txt");
         try
         {
-            var model = new ParakeetModel(dir);
-            var installer = new ParakeetModelInstaller(model);
+            var model = new Transcription.Nemotron.NemotronModel(dir);
+            var installer = new Transcription.Nemotron.NemotronModelInstaller(model);
             Task.Run(() => installer.EnsureInstalledAsync()).GetAwaiter().GetResult();
             System.IO.File.WriteAllText(outPath, $"OK installed={model.IsInstalled}\n");
         }
@@ -261,11 +350,17 @@ public partial class App : System.Windows.Application
         var services = new ServiceCollection();
         services.AddSingleton<ISettingsStore, JsonSettingsStore>();
         services.AddSingleton<IThemeService, ThemeService>();
+        services.AddSingleton<ISoundService, SoundService>();
+        services.AddSingleton<IAiClient, AiClient>();
+        services.AddSingleton<AiCredentials>();
         services.AddSingleton<AudioRecorder>();
         services.AddSingleton<Transcription.Onnx.OnnxSessionFactory>();
         services.AddSingleton<ParakeetModel>();
         services.AddSingleton<ParakeetModelInstaller>();
         services.AddSingleton<Transcription.Nemotron.NemotronModel>();
+        services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>();
+        services.AddSingleton<RetentionCleaner>();
+        services.AddSingleton<HotkeyManager>();
         // Nemotron 3.5 (streaming RNNT) is the engine. The encoder execution provider comes from
         // settings (default CPU — correct everywhere); read once at construction.
         services.AddSingleton<ITranscriber>(sp => new Transcription.Nemotron.NemotronTranscriber(
@@ -373,17 +468,48 @@ public partial class App : System.Windows.Application
         try { System.Windows.Clipboard.SetText(text); } catch { /* clipboard busy */ }
     }
 
-    private void SetupHotkey()
+    private void SetupHotkeys()
     {
-        try
+        var settings = Services.GetRequiredService<ISettingsStore>();
+        _hotkeys = Services.GetRequiredService<HotkeyManager>();
+        _hotkeys.ToggleRecording += () => _recorder!.Toggle();
+        _hotkeys.PasteLast += PasteLastTranscript;
+        _hotkeys.Rewrite += OpenRewritePicker;
+        _hotkeys.RewriteWithVoice += OpenRewritePicker; // voice-driven variant reuses the picker for now
+        _hotkeys.RegistrationFailed += (label, reason) =>
+            Notify($"Shortcut unavailable: {label}", reason, Forms.ToolTipIcon.Warning);
+        _hotkeys.Rebuild();
+        _hotkeySignature = HotkeySignature(settings.Current);
+
+        // Rebinding in Settings persists then raises Changed; re-register when a shortcut actually moved.
+        settings.Changed += (_, _) => Dispatcher.Invoke(() =>
         {
-            _hotkey = new GlobalHotkey(GlobalHotkey.Modifiers.Alt, 0x20); // Alt+Space, matching the Mac default
-            _hotkey.Pressed += () => _recorder!.Toggle();
-        }
-        catch (Exception ex)
-        {
-            Notify("Hotkey unavailable", ex.Message, Forms.ToolTipIcon.Warning);
-        }
+            string sig = HotkeySignature(settings.Current);
+            if (sig == _hotkeySignature) return;
+            _hotkeySignature = sig;
+            _hotkeys.Rebuild();
+        });
+    }
+
+    private static string HotkeySignature(JotSettings s) => string.Join("|",
+        s.AdvancedFeatures, s.ToggleRecordingHotkey, s.PasteLastHotkey, s.RewriteHotkey, s.RewriteWithVoiceHotkey);
+
+    private void PasteLastTranscript()
+    {
+        var store = Services.GetRequiredService<IRecordingStore>();
+        var last = store.Items.FirstOrDefault(
+            i => i.Status == Models.RecordingStatus.Complete && !string.IsNullOrWhiteSpace(i.Transcript));
+        if (last is null) return;
+        var s = Services.GetRequiredService<ISettingsStore>().Current;
+        Delivery.TextInjector.PasteAtCursor(last.Transcript, IntPtr.Zero, s.KeepInClipboard, s.AutoEnter);
+    }
+
+    private void OpenRewritePicker()
+    {
+        var vm = Services.GetRequiredService<PromptPickerViewModel>();
+        var picker = new Controls.PromptPickerWindow(vm);
+        picker.Show();
+        picker.Activate();
     }
 
     private void RunSmokeTest()
@@ -464,7 +590,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _hotkey?.Dispose();
+        _hotkeys?.Dispose();
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
         // Disposes DI singletons — the recorder (mic) and the transcriber (native ONNX sessions).
         (Services as IDisposable)?.Dispose();
