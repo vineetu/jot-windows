@@ -3,16 +3,73 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       Title="Help">
-    <Grid Margin="{StaticResource PagePadding}">
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="420">
-            <ui:SymbolIcon Symbol="QuestionCircle24" FontSize="40" HorizontalAlignment="Center"
-                           Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
-            <TextBlock Text="Help" Style="{DynamicResource TitleTextBlockStyle}"
-                       HorizontalAlignment="Center" Margin="0,12,0,4" />
-            <TextBlock Text="Basics, Advanced, and Troubleshooting."
-                       Style="{DynamicResource BodyTextBlockStyle}"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       TextAlignment="Center" TextWrapping="Wrap" />
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="{StaticResource PagePadding}">
+        <StackPanel MaxWidth="800">
+            <TextBlock Text="Help" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+
+            <TextBlock Text="Basics" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,16,0,8" />
+            <ui:CardExpander Icon="{ui:SymbolIcon Mic24}" Margin="0,0,0,6">
+                <ui:CardExpander.Header>
+                    <TextBlock Text="Dictate anywhere" FontWeight="SemiBold" />
+                </ui:CardExpander.Header>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Press Alt + Space in any app, speak, and press it again to stop. Jot transcribes on-device and pastes the text at your cursor. It works everywhere you can type — Word, Slack, your browser, the terminal." />
+            </ui:CardExpander>
+            <ui:CardExpander Icon="{ui:SymbolIcon Sparkle24}" Margin="0,0,0,6">
+                <ui:CardExpander.Header>
+                    <TextBlock Text="Clean up transcripts (optional)" FontWeight="SemiBold" />
+                </ui:CardExpander.Header>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Turn on AI cleanup in Settings → AI to remove filler words and fix punctuation automatically after each dictation. It only runs if you configure a provider, and always falls back to the raw transcript." />
+            </ui:CardExpander>
+            <ui:CardExpander Icon="{ui:SymbolIcon Wand24}" Margin="0,0,0,6">
+                <ui:CardExpander.Header>
+                    <TextBlock Text="Rewrite selected text" FontWeight="SemiBold" />
+                </ui:CardExpander.Header>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Select text anywhere, press the Rewrite shortcut, and speak an instruction like &quot;make this more formal&quot; or &quot;turn this into bullet points.&quot; The rewritten text replaces your selection." />
+            </ui:CardExpander>
+
+            <TextBlock Text="Advanced" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,20,0,8" />
+            <ui:CardExpander Icon="{ui:SymbolIcon Brain24}" Margin="0,0,0,6">
+                <ui:CardExpander.Header>
+                    <TextBlock Text="AI providers" FontWeight="SemiBold" />
+                </ui:CardExpander.Header>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Cleanup and Rewrite can use OpenAI, Anthropic, Gemini, or a fully-local Ollama server. Set your provider, model, and API key in Settings → AI. (Apple Intelligence is macOS-only and isn't available on Windows.)" />
+            </ui:CardExpander>
+            <ui:CardExpander Icon="{ui:SymbolIcon TextBulletListSquare24}" Margin="0,0,0,6">
+                <ui:CardExpander.Header>
+                    <TextBlock Text="Prompt library" FontWeight="SemiBold" />
+                </ui:CardExpander.Header>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Jot ships dozens of ready-made rewrite prompts and lets you author your own. Pin the ones you use most so they float to the top of the rewrite picker." />
+            </ui:CardExpander>
+
+            <TextBlock Text="Troubleshooting" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,20,0,8" />
+            <ui:CardExpander Icon="{ui:SymbolIcon MicProhibited24}" Margin="0,0,0,6">
+                <ui:CardExpander.Header>
+                    <TextBlock Text="Jot can't hear me" FontWeight="SemiBold" />
+                </ui:CardExpander.Header>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Open Settings → Privacy → Microphone in Windows and make sure microphone access is on. Then pick the right input device in Settings → General. The Setup wizard's meter confirms Jot is receiving audio." />
+            </ui:CardExpander>
+            <ui:CardExpander Icon="{ui:SymbolIcon Keyboard24}" Margin="0,0,0,6">
+                <ui:CardExpander.Header>
+                    <TextBlock Text="My hotkey doesn't work" FontWeight="SemiBold" />
+                </ui:CardExpander.Header>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Another app may have claimed the same global shortcut. Global hotkeys work best with a modifier (Ctrl / Alt / Win). Push-to-talk needs a low-level keyboard hook because Windows hotkeys don't report key release." />
+            </ui:CardExpander>
+            <ui:CardExpander Icon="{ui:SymbolIcon ShieldQuestion24}" Margin="0,0,0,6">
+                <ui:CardExpander.Header>
+                    <TextBlock Text="Windows warned me on first launch" FontWeight="SemiBold" />
+                </ui:CardExpander.Header>
+                <TextBlock TextWrapping="Wrap"
+                           Text="Preview builds aren't code-signed yet, so SmartScreen may show a warning. Choose &quot;More info → Run anyway.&quot; Signed installers come later." />
+            </ui:CardExpander>
+
+            <Border Height="24" />
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </Page>

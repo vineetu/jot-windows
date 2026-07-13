@@ -77,6 +77,8 @@ public partial class App : System.Windows.Application
         // First-run setup wizard: on a normal (no-arg) launch, or forced with `--wizard`.
         bool firstRun = !Services.GetRequiredService<ISettingsStore>().Current.FirstRunComplete;
         if (e.Args.Contains("--wizard") || (e.Args.Length == 0 && firstRun)) ShowWizard();
+        // Dev affordance: `--smoketest` constructs every page in turn so XAML-load errors hit crash.log.
+        if (e.Args.Contains("--smoketest")) RunSmokeTest();
         // Dev affordance: `--detail` opens the first recording's detail view.
         if (e.Args.Contains("--detail"))
         {
@@ -141,6 +143,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<INavigator>(sp => sp.GetRequiredService<Navigator>());
         services.AddSingleton<RecentsViewModel>();
         services.AddSingleton<SettingsViewModel>();
+        services.AddSingleton<AskJotViewModel>();
 
         services.AddSingleton<MainWindow>();
         return services.BuildServiceProvider();
@@ -174,6 +177,30 @@ public partial class App : System.Windows.Application
         {
             Notify("Hotkey unavailable", ex.Message, Forms.ToolTipIcon.Warning);
         }
+    }
+
+    private void RunSmokeTest()
+    {
+        ShowMainWindow();
+        var nav = Services.GetRequiredService<INavigator>();
+        var store = Services.GetRequiredService<IRecordingStore>();
+        var steps = new List<Action>
+        {
+            () => nav.Navigate(typeof(Views.AskJotPage)),
+            () => nav.Navigate(typeof(Views.HelpPage)),
+            () => nav.Navigate(typeof(Views.AboutPage)),
+            () => nav.Navigate(typeof(Views.SettingsPage)),
+            () => { if (store.Items.Count > 0) nav.Navigate(typeof(Views.RecordingDetailPage), store.Items[0]); },
+            () => nav.Navigate(typeof(Views.RecentsPage)),
+        };
+        int i = 0;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        timer.Tick += (_, _) =>
+        {
+            if (i >= steps.Count) { timer.Stop(); return; }
+            steps[i++]();
+        };
+        timer.Start();
     }
 
     private void ShowWizard()

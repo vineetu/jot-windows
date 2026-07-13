@@ -3,16 +3,52 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       Title="About">
-    <Grid Margin="{StaticResource PagePadding}">
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="420">
-            <ui:SymbolIcon Symbol="Info24" FontSize="40" HorizontalAlignment="Center"
-                           Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
-            <TextBlock Text="About Jot" Style="{DynamicResource TitleTextBlockStyle}"
-                       HorizontalAlignment="Center" Margin="0,12,0,4" />
-            <TextBlock Text="Free, on-device dictation for Windows. Nothing you say leaves your PC."
-                       Style="{DynamicResource BodyTextBlockStyle}"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       TextAlignment="Center" TextWrapping="Wrap" />
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="{StaticResource PagePadding}">
+        <StackPanel MaxWidth="760">
+            <TextBlock Text="About" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,16" />
+
+            <!-- Identity -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                <Border Width="64" Height="64" CornerRadius="16"
+                        Background="{DynamicResource AccentFillColorDefaultBrush}">
+                    <ui:SymbolIcon Symbol="Mic24" FontSize="30" Foreground="White" />
+                </Border>
+                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Jot for Windows" Style="{DynamicResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="Free, on-device dictation. Press a key, speak, and it's pasted at your cursor."
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Version 0.1.0 (preview)" Margin="0,2,0,0" FontSize="12"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                </StackPanel>
+            </StackPanel>
+
+            <ui:Button Content="Check for updates" Icon="{ui:SymbolIcon ArrowSync24}" Click="OnCheckUpdates" />
+
+            <!-- Privacy pledge -->
+            <ui:Card Margin="0,20,0,0">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="ShieldCheckmark24" Foreground="{DynamicResource JotSuccessBrush}" />
+                        <TextBlock Text="Your privacy" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="Transcription runs entirely on your PC — audio and transcripts never leave the device. No accounts, no telemetry. Optional AI cleanup only calls a provider you configure yourself." />
+                </StackPanel>
+            </ui:Card>
+
+            <!-- Support -->
+            <TextBlock Text="Support Jot" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,24,0,8" />
+            <ui:Button Content="Donate to charity" Icon="{ui:SymbolIcon Heart24}" Appearance="Primary" Click="OnDonate" />
+
+            <!-- Troubleshooting -->
+            <TextBlock Text="Troubleshooting" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,24,0,8" />
+            <StackPanel Orientation="Horizontal">
+                <ui:Button Content="View log" Icon="{ui:SymbolIcon DocumentText24}" Margin="0,0,8,0" Click="OnViewLog" />
+                <ui:Button Content="Send feedback" Icon="{ui:SymbolIcon Mail24}" Click="OnSendFeedback" />
+            </StackPanel>
+
+            <Border Height="24" />
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </Page>
