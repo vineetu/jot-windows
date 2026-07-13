@@ -74,6 +74,8 @@ public partial class App : System.Windows.Application
                 System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         // Dev affordance: `--pilldemo` drives the pill with a speech-like envelope (no mic needed).
         if (e.Args.Contains("--pilldemo")) RunPillDemo();
+        // Dev affordance: `--pickerdemo` shows the rewrite prompt-picker overlay (stays open for review).
+        if (e.Args.Contains("--pickerdemo")) RunPickerDemo();
         // First-run setup wizard: on a normal (no-arg) launch, or forced with `--wizard`.
         bool firstRun = !Services.GetRequiredService<ISettingsStore>().Current.FirstRunComplete;
         if (e.Args.Contains("--wizard") || (e.Args.Length == 0 && firstRun)) ShowWizard();
@@ -114,6 +116,14 @@ public partial class App : System.Windows.Application
         timer.Start();
     }
 
+    private void RunPickerDemo()
+    {
+        var vm = Services.GetRequiredService<PromptPickerViewModel>();
+        var picker = new Controls.PromptPickerWindow(vm) { CloseOnDeactivate = false };
+        picker.Show();
+        picker.Activate();
+    }
+
     private bool ClaimSingleInstance()
     {
         _instanceMutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
@@ -144,10 +154,17 @@ public partial class App : System.Windows.Application
         services.AddSingleton<RecentsViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<AskJotViewModel>();
+        services.AddSingleton<PromptCatalog>();
+        services.AddSingleton<PromptsViewModel>();
+        services.AddTransient<PromptPickerViewModel>(); // fresh palette per open; shares the singleton catalog
 
         services.AddSingleton<MainWindow>();
         return services.BuildServiceProvider();
     }
+
+    private Forms.ToolStripMenuItem? _toggleItem;
+    private Forms.ToolStripMenuItem? _copyLastItem;
+    private Forms.ToolStripMenuItem? _recentItem;
 
     private void SetupTray()
     {
@@ -157,13 +174,66 @@ public partial class App : System.Windows.Application
             Visible = true,
             Text = "Jot — Alt+Space to dictate",
         };
+
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("Start / Stop dictation\tAlt+Space", null, (_, _) => _recorder!.Toggle());
+        _toggleItem = new Forms.ToolStripMenuItem("Start dictation\tAlt+Space", null, (_, _) => _recorder!.Toggle());
+        _copyLastItem = new Forms.ToolStripMenuItem("Copy last transcription", null, (_, _) => CopyLast());
+        _recentItem = new Forms.ToolStripMenuItem("Recent transcriptions");
+
+        menu.Items.Add(_toggleItem);
+        menu.Items.Add(_copyLastItem);
+        menu.Items.Add(_recentItem);
+        menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Open Jot…", null, (_, _) => ShowMainWindow());
+        menu.Items.Add("Check for updates…", null, (_, _) =>
+            Notify("Jot is up to date", "You're on the latest version.", Forms.ToolTipIcon.Info));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit Jot", null, (_, _) => Shutdown());
+
+        // Rebuild the state-dependent items each time the menu opens, off the live store.
+        menu.Opening += (_, _) => RefreshTrayMenu();
+
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => ShowMainWindow();
+    }
+
+    private void RefreshTrayMenu()
+    {
+        if (_toggleItem is not null)
+            _toggleItem.Text = _recorder!.State == RecorderState.Recording
+                ? "Stop dictation\tAlt+Space"
+                : "Start dictation\tAlt+Space";
+
+        var store = Services.GetRequiredService<IRecordingStore>();
+        var completed = store.Items
+            .Where(i => i.Status == Models.RecordingStatus.Complete && !string.IsNullOrWhiteSpace(i.Transcript))
+            .Take(10).ToList();
+
+        if (_copyLastItem is not null) _copyLastItem.Enabled = completed.Count > 0;
+
+        if (_recentItem is not null)
+        {
+            _recentItem.DropDownItems.Clear();
+            _recentItem.Enabled = completed.Count > 0;
+            foreach (Models.RecordingItem item in completed)
+            {
+                string label = item.Title.Length > 40 ? item.Title[..38] + "…" : item.Title;
+                _recentItem.DropDownItems.Add(label, null, (_, _) => CopyText(item.Transcript));
+            }
+        }
+    }
+
+    private void CopyLast()
+    {
+        var store = Services.GetRequiredService<IRecordingStore>();
+        var last = store.Items.FirstOrDefault(
+            i => i.Status == Models.RecordingStatus.Complete && !string.IsNullOrWhiteSpace(i.Transcript));
+        if (last is not null) CopyText(last.Transcript);
+    }
+
+    private static void CopyText(string text)
+    {
+        try { System.Windows.Clipboard.SetText(text); } catch { /* clipboard busy */ }
     }
 
     private void SetupHotkey()
@@ -187,6 +257,7 @@ public partial class App : System.Windows.Application
         var steps = new List<Action>
         {
             () => nav.Navigate(typeof(Views.AskJotPage)),
+            () => nav.Navigate(typeof(Views.PromptsPage)),
             () => nav.Navigate(typeof(Views.HelpPage)),
             () => nav.Navigate(typeof(Views.AboutPage)),
             () => nav.Navigate(typeof(Views.SettingsPage)),

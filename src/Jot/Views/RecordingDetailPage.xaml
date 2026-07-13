@@ -29,11 +29,8 @@
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                                Visibility="{Binding Item.IsEdited, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
-                <TextBlock Margin="0,2,0,0" FontSize="12" Foreground="{DynamicResource TextFillColorTertiaryBrush}">
-                    <Run Text="{Binding Item.ModelLabel, Mode=OneWay}" />
-                    <Run Text="·" />
-                    <Run Text="{Binding Item.DurationText, Mode=OneWay}" />
-                </TextBlock>
+                <TextBlock Margin="0,2,0,0" FontSize="12" Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                           Text="{Binding MetaText, Mode=OneWay}" />
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal">

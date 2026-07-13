@@ -34,6 +34,11 @@
                         <ui:SymbolIcon Symbol="Chat24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Prompts" TargetPageType="{x:Type views:PromptsPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Wand24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
                 <ui:NavigationViewItem Content="Help" TargetPageType="{x:Type views:HelpPage}">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="QuestionCircle24" />

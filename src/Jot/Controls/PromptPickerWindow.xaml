@@ -1,0 +1,109 @@
+<Window x:Class="Jot.Controls.PromptPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:models="clr-namespace:Jot.Models"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        Width="560" Height="452"
+        WindowStartupLocation="Manual"
+        FontFamily="Segoe UI Variable, Segoe UI"
+        AutomationProperties.Name="Rewrite prompt picker">
+    <!-- Dark translucent palette, sibling to the status pill, so the two overlays feel like one system. -->
+    <Border CornerRadius="12" Background="#F01B1B1F" BorderBrush="#22FFFFFF" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="#000000" />
+        </Border.Effect>
+        <Grid Margin="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="REWRITE WITH" FontSize="11" FontWeight="SemiBold"
+                       Foreground="#80FFFFFF" Margin="4,0,0,8" />
+
+            <ui:TextBox x:Name="Search" Grid.Row="1" PlaceholderText="Search prompts…"
+                        Icon="{ui:SymbolIcon Wand24}"
+                        Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+
+            <ListView x:Name="List" Grid.Row="2" Margin="0,10,0,0"
+                      ItemsSource="{Binding Prompts}"
+                      Background="Transparent" BorderThickness="0"
+                      IsSynchronizedWithCurrentItem="True"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      Focusable="False">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Margin" Value="0,0,0,4" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListViewItem">
+                                    <Border x:Name="Row" CornerRadius="7" Padding="12,9"
+                                            Background="Transparent" BorderThickness="1" BorderBrush="Transparent">
+                                        <ContentPresenter />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Row" Property="Background" Value="#14FFFFFF" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Row" Property="Background" Value="#332F7DF6" />
+                                            <Setter TargetName="Row" Property="BorderBrush" Value="#662F7DF6" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate DataType="{x:Type models:PromptItem}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ui:SymbolIcon Grid.Column="0" Symbol="Pin24" Filled="True" FontSize="14"
+                                           Foreground="#CC2F7DF6" VerticalAlignment="Center" Margin="0,0,10,0"
+                                           Visibility="{Binding IsPinned, Converter={StaticResource BoolToVis}}" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Title}" Foreground="#F2FFFFFF" FontWeight="SemiBold" FontSize="14" />
+                                    <Border Margin="8,1,0,0" Padding="5,0" CornerRadius="4" Background="#1FFFFFFF"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding IsDefault, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="default" FontSize="10" Foreground="#B0FFFFFF" />
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="{Binding Body}" Foreground="#8CFFFFFF" FontSize="12" Margin="0,2,0,0"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding Category}" Foreground="#66FFFFFF" FontSize="11"
+                                       VerticalAlignment="Center" Margin="10,0,0,0" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <Grid Grid.Row="3" Margin="4,10,4,0">
+                <TextBlock HorizontalAlignment="Left" FontSize="11" Foreground="#66FFFFFF">
+                    <Run Text="↑↓" /><Run Text=" navigate   " />
+                    <Run Text="Enter" /><Run Text=" rewrite   " />
+                    <Run Text="Ctrl+P" /><Run Text=" pin   " />
+                    <Run Text="Esc" /><Run Text=" cancel" />
+                </TextBlock>
+                <TextBlock x:Name="CountText" HorizontalAlignment="Right" FontSize="11" Foreground="#66FFFFFF" />
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

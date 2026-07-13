@@ -41,6 +41,12 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
 
     public bool IsDictation => Item.Kind == RecordingKind.Dictation;
     public bool IsRewrite => Item.Kind == RecordingKind.Rewrite;
+
+    /// <summary>Sub-title meta line. Rewrites keep no audio, so show the model + kind rather than a
+    /// misleading 0:00 duration; dictations show model + length.</summary>
+    public string MetaText => IsRewrite
+        ? $"{Item.ModelLabel} · Rewrite"
+        : $"{Item.ModelLabel} · {Item.DurationText}";
     public bool CanPlay => Item.HasAudio;
     public bool HasSpeakers => SpeakerTurns.Count > 0;
 
