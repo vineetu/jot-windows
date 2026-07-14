@@ -182,14 +182,14 @@
             <ctl:SettingRow Title="Cancel recording" Description="Discards the current recording (active only while recording).">
                 <ctl:HotkeyBox Chord="{Binding CancelRecordingHotkey, Mode=TwoWay}" />
             </ctl:SettingRow>
-            <StackPanel Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
                 <ctl:SettingRow Title="Paste last transcription" Description="Paste the most recent transcript at your cursor.">
                     <ctl:HotkeyBox Chord="{Binding PasteLastHotkey, Mode=TwoWay}" />
                 </ctl:SettingRow>
-                <ctl:SettingRow Title="Rewrite" Description="Open the rewrite prompt picker for the last transcript.">
+                <ctl:SettingRow Title="Rewrite" Description="Select text, then press this to rewrite it via AI (opens the prompt picker).">
                     <ctl:HotkeyBox Chord="{Binding RewriteHotkey, Mode=TwoWay}" />
                 </ctl:SettingRow>
-                <ctl:SettingRow Title="Rewrite with voice" Description="Dictate an instruction to rewrite the last transcript.">
+                <ctl:SettingRow Title="Rewrite with voice" Description="Dictate an instruction to rewrite the selected text.">
                     <ctl:HotkeyBox Chord="{Binding RewriteWithVoiceHotkey, Mode=TwoWay}" />
                 </ctl:SettingRow>
             </StackPanel>

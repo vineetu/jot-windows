@@ -99,10 +99,17 @@ public static class TextInjector
         ReleaseModifiers(); // drop the still-held hotkey modifier (e.g. Alt) before Ctrl+C
         Thread.Sleep(40);
         SendKeyChord(SCAN_CONTROL, SCAN_C);
-        Thread.Sleep(120); // let the target app service the copy
 
+        // Poll for the copy to land instead of a single fixed wait: slow apps (browsers, Electron,
+        // Office) can take well over 100ms to service Ctrl+C, and a too-short wait reads an empty
+        // clipboard and wrongly reports "nothing selected." Retry until text appears or we time out.
         string captured = "";
-        try { if (Clipboard.ContainsText()) captured = Clipboard.GetText(); } catch { /* clipboard busy */ }
+        for (int waited = 0; waited < 600; waited += 30)
+        {
+            Thread.Sleep(30);
+            try { if (Clipboard.ContainsText()) { captured = Clipboard.GetText(); if (captured.Length > 0) break; } }
+            catch { /* clipboard busy — retry */ }
+        }
 
         // Restore the user's clipboard.
         if (saved is not null) SetClipboardText(saved); else TryClear();

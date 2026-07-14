@@ -6,8 +6,8 @@ namespace Jot.Recording;
 /// Owns every global hotkey and keeps them in sync with <see cref="JotSettings"/>. Chords are stored
 /// as human strings in settings and (re)registered here, so rebinding in Settings takes effect
 /// immediately — <see cref="Rebuild"/> tears down the old registrations and re-reads the chords.
-/// The toggle-recording hotkey is always active; the advanced paste/rewrite hotkeys register only
-/// when advanced features are enabled.
+/// All hotkeys are registered from settings and kept in sync. Toggle-recording, paste-last, rewrite,
+/// and rewrite-with-voice are all active — rewrite is a core feature, not gated behind advanced mode.
 /// </summary>
 public sealed class HotkeyManager : IDisposable
 {
@@ -35,13 +35,11 @@ public sealed class HotkeyManager : IDisposable
         JotSettings s = _settings.Current;
 
         _toggle = Register(s.ToggleRecordingHotkey, "Toggle recording", 1, () => ToggleRecording?.Invoke());
-
-        if (s.AdvancedFeatures)
-        {
-            _pasteLast = Register(s.PasteLastHotkey, "Paste last transcription", 2, () => PasteLast?.Invoke());
-            _rewrite = Register(s.RewriteHotkey, "Rewrite", 3, () => Rewrite?.Invoke());
-            _rewriteVoice = Register(s.RewriteWithVoiceHotkey, "Rewrite with voice", 4, () => RewriteWithVoice?.Invoke());
-        }
+        // Rewrite / paste-last are core features — register them always (not only in advanced mode) so
+        // the transform shortcut actually fires out of the box.
+        _pasteLast = Register(s.PasteLastHotkey, "Paste last transcription", 2, () => PasteLast?.Invoke());
+        _rewrite = Register(s.RewriteHotkey, "Rewrite", 3, () => Rewrite?.Invoke());
+        _rewriteVoice = Register(s.RewriteWithVoiceHotkey, "Rewrite with voice", 4, () => RewriteWithVoice?.Invoke());
     }
 
     private GlobalHotkey? Register(string? chordText, string label, int id, Action onPressed)

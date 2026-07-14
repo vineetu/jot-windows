@@ -51,7 +51,14 @@ Processing CPU/GPU → Live captions → Auto-paste → Enter-after-paste → Ke
 - Note: shortcut **rebinding already exists** (`Controls\HotkeyBox`) — the user thought it didn't
   because it's buried; surfacing it near the top addresses "should be able to change it."
 
-### A4. [ ] AI rewrite: "Select some text first" fires even when text IS selected + not shown in Shortcuts — M
+### A4. [x] AI rewrite: "Select some text first" + not shown in Shortcuts — FIXED 2026-07-14
+- ✅ Rewrite / paste-last / rewrite-with-voice hotkeys now register **always** (removed the
+  `AdvancedFeatures` gate in `HotkeyManager.Rebuild`), so Alt+/ actually fires out of the box.
+- ✅ `TextInjector.CaptureSelection` now polls the clipboard up to ~600ms instead of a fixed 120ms
+  wait — slow apps (browsers/Electron/Office) no longer wrongly report nothing-selected.
+- ✅ The three shortcuts are shown in Settings regardless of Advanced mode.
+- Remaining to verify with the user: end-to-end transform (select text → Alt+/ → picker → AI rewrite)
+  against the live Gemini provider. Original notes below.
 - **False negative (bug):** `TextInjector.CaptureSelection` (`TextInjector.cs:92-110`) clears the
   clipboard, sends synthetic Ctrl+C, then reads after a **fixed 120 ms sleep**. Slow apps
   (browsers/Electron/Office) don't finish the copy in time → empty read → treated as "nothing selected."
