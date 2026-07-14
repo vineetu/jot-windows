@@ -68,6 +68,26 @@ internal sealed class MelFrontend
         return mel;
     }
 
+    /// <summary>
+    /// Same log-mel features as <see cref="Compute"/> (byte-identical math), but laid out FEATURE-MAJOR
+    /// for the FP16 encoder: returns a flat buffer indexed <c>[mel * frames + frame]</c> (i.e. a
+    /// <c>[128, frames]</c> matrix, row-major) together with the frame count. The FP16 encoder's
+    /// <c>audio_signal</c> input is <c>[1, 128, 32]</c> mel-major, so a caller slices 32-frame columns
+    /// out of this buffer directly: <c>fm[mel * frames + (chunk*32 + t)]</c>.
+    /// </summary>
+    public float[] ComputeFeatureMajor(float[] samples, out int frames)
+    {
+        float[][] timeMajor = Compute(samples);   // [frames][128], reuse the validated front-end
+        frames = timeMajor.Length;
+        var fm = new float[NMels * frames];
+        for (int f = 0; f < frames; f++)
+        {
+            float[] row = timeMajor[f];
+            for (int m = 0; m < NMels; m++) fm[m * frames + f] = row[m];
+        }
+        return fm;
+    }
+
     private static double[] ReflectPad(double[] y, int pad)
     {
         int n = y.Length;

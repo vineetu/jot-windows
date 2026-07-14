@@ -166,8 +166,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Applies the stored language to the engine. Called at startup and on change.</summary>
     public static void ApplyLanguage(ITranscriber transcriber, string language)
     {
+        long id = NemotronLanguages.TryGetId(language, out long lid) ? lid : 0;
         if (transcriber is NemotronTranscriber n)
-            n.SetLanguageId(NemotronLanguages.TryGetId(language, out long id) ? id : 0);
+            n.SetLanguageId(id);
+        else if (transcriber is NemotronFp16Transcriber f)
+            f.SetLanguageSlot(id);   // English = 0 in both maps
     }
 
     private void RefreshModelStatus()

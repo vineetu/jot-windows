@@ -99,6 +99,16 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Dev affordance: `--fp16test <wav> [--dml]` runs the REAL Nemotron FP16 (GPU) engine on
+        // DirectML (or CPU) and writes the transcript + timing to %TEMP%\jot-fp16test.txt.
+        int fp16Arg = Array.IndexOf(e.Args, "--fp16test");
+        if (fp16Arg >= 0 && fp16Arg + 1 < e.Args.Length)
+        {
+            RunFp16Test(e.Args[fp16Arg + 1], e.Args.Contains("--dml"));
+            Shutdown();
+            return;
+        }
+
         // Dev affordance: `--hotkeytest` reports whether a bare Escape (and Alt+Space) can be
         // registered as a global hotkey on this machine → %TEMP%\jot-hotkeytest.txt.
         if (e.Args.Contains("--hotkeytest"))
@@ -344,6 +354,46 @@ public partial class App : System.Windows.Application
         }
     }
 
+    private static void RunFp16Test(string wavPath, bool useDml)
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-fp16test.txt");
+        try
+        {
+            var backend = useDml ? Transcription.Onnx.ComputeBackend.DirectML : Transcription.Onnx.ComputeBackend.Cpu;
+            var model = new Transcription.Nemotron.NemotronFp16Model();
+            if (!model.IsInstalled)
+            {
+                System.IO.File.WriteAllText(outPath, $"MODEL NOT INSTALLED at {model.Directory}\n");
+                return;
+            }
+            var factory = new Transcription.Onnx.OnnxSessionFactory();
+            string fallback = "";
+            factory.BackendFallback += m => fallback += m + " | ";
+            using var transcriber = new Transcription.Nemotron.NemotronFp16Transcriber(model, factory, backend);
+            float[] samples = WavAudio.ReadMono16k(wavPath);
+
+            // First pass warms the model (session load + graph optimisation + kernel priming).
+            var loadTimer = System.Diagnostics.Stopwatch.StartNew();
+            string text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
+            loadTimer.Stop();
+
+            // Second pass is the true warm-inference cost.
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
+            sw.Stop();
+
+            double seconds = samples.Length / (double)WavAudio.SampleRate;
+            System.IO.File.WriteAllText(outPath,
+                $"OK\nbackend={backend}\nDML_FELL_BACK_TO_CPU={(fallback.Length > 0)}\nfallbackMsg={fallback}\n" +
+                $"audio_s={seconds:0.00}\ncold_ms={loadTimer.ElapsedMilliseconds}\nwarm_ms={sw.ElapsedMilliseconds}\n" +
+                $"TEXT={text}\n");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR backend={(useDml ? "DirectML" : "CPU")}\n{ex}\n");
+        }
+    }
+
     private static void RunDmlDiag()
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-dmldiag.txt");
@@ -567,15 +617,29 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ParakeetModel>();
         services.AddSingleton<ParakeetModelInstaller>();
         services.AddSingleton<Transcription.Nemotron.NemotronModel>();
+        services.AddSingleton<Transcription.Nemotron.NemotronFp16Model>();
         services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>();
         services.AddSingleton<RetentionCleaner>();
         services.AddSingleton<HotkeyManager>();
-        // Nemotron 3.5 (streaming RNNT) is the engine. The encoder execution provider comes from
-        // settings (default CPU — correct everywhere); read once at construction.
-        services.AddSingleton<ITranscriber>(sp => new Transcription.Nemotron.NemotronTranscriber(
-            sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
-            sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
-            ParseBackend(sp.GetRequiredService<ISettingsStore>().Current.TranscriptionDevice)));
+        // Nemotron 3.5 (streaming RNNT) is the engine. Two builds: the int4 export runs CPU-only
+        // (int4 has no DirectML kernels); the FP16 export runs on DirectML. When the user picks the GPU
+        // device AND the FP16 model is installed, use the FP16 engine on DirectML; otherwise keep the
+        // int4 engine on CPU (default, correct everywhere). Backend is read once at construction.
+        services.AddSingleton<ITranscriber>(sp =>
+        {
+            string? device = sp.GetRequiredService<ISettingsStore>().Current.TranscriptionDevice;
+            var fp16Model = sp.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>();
+            bool wantsGpu = device is not null && device.Contains("GPU", StringComparison.OrdinalIgnoreCase);
+            if (wantsGpu && fp16Model.IsInstalled)
+                return new Transcription.Nemotron.NemotronFp16Transcriber(
+                    fp16Model,
+                    sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
+                    Transcription.Onnx.ComputeBackend.DirectML);
+            return new Transcription.Nemotron.NemotronTranscriber(
+                sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
+                sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
+                ParseBackend(device));
+        });
         services.AddSingleton<RecorderController>();
         services.AddSingleton<Rewrite.RewriteController>();
         services.AddSingleton<Import.MediaImporter>();
