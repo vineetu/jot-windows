@@ -83,6 +83,7 @@ public sealed class RecorderController : IDisposable
             _liveActive = _settings.Current.LiveCaptions && _live is not null;
             if (_liveActive) _live!.Start();
             ArmCancelHotkey();
+            Log($"--- start (live={_liveActive}, device={_settings.Current.TranscriptionDevice}) ---");
         }
         catch (Exception ex)
         {
@@ -124,20 +125,38 @@ public sealed class RecorderController : IDisposable
             string wav = Path.Combine(RecordingsDir, $"{DateTime.Now:yyyyMMdd-HHmmss}.wav");
 
             // Native streaming: the transcript is already built as the user spoke, so finishing (while
-            // the recorder is still capturing, to catch the last words) is near-instant. Only fall back
-            // to a full decode when live captions were off.
-            string? liveText = _liveActive ? (await _live!.FinishAsync()).Trim() : null;
+            // the recorder is still capturing, to catch the last words) is near-instant.
+            string liveText = "";
+            if (_liveActive && _live is not null)
+            {
+                try { liveText = (await _live.FinishAsync()).Trim(); }
+                catch (Exception ex) { Log("live finish failed: " + ex.Message); }
+            }
+            Log($"stop: liveActive={_liveActive} liveLen={liveText.Length}");
+
             RecordingResult result = await Task.Run(() => _recorder.Stop(wav));
-            string text = liveText ?? (await _transcriber.TranscribeAsync(result.Samples, result.SampleRate)).Trim();
+            Log($"recorded {result.Samples.Length} samples ({result.Duration.TotalSeconds:0.0}s)");
+
+            // CRITICAL: fall back to a full batch decode whenever live captions produced nothing usable
+            // (empty string, not just null) — otherwise an empty live result would be delivered as "nothing".
+            string text = liveText;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                Log("live text empty → batch transcribe");
+                text = (await _transcriber.TranscribeAsync(result.Samples, result.SampleRate)).Trim();
+            }
+            Log($"final text len={text.Length}");
 
             if (string.IsNullOrWhiteSpace(text))
             {
+                Log("NOTHING transcribed (both live and batch empty)");
                 NothingTranscribed?.Invoke();
             }
             else
             {
                 text = await MaybeCleanupAsync(text);
                 _store.Add(BuildRecording(result, text));
+                Log($"SAVED: \"{TitleFrom(text)}\" ({text.Length} chars); library items={_store.Items.Count}");
                 if (_settings.Current.AutoPaste)
                 {
                     JotSettings s = _settings.Current;
@@ -243,6 +262,20 @@ public sealed class RecorderController : IDisposable
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
             Directory.CreateDirectory(dir);
             File.AppendAllText(Path.Combine(dir, "crash.log"), $"{DateTime.Now:O}  (suppressed) {ex}\n\n");
+        }
+        catch { /* best effort */ }
+    }
+
+    // A plain-text dictation trace so a failed "save" is never a black box: each stage of every
+    // recording is appended to %LOCALAPPDATA%\Jot\dictation.log.
+    private static void Log(string message)
+    {
+        try
+        {
+            string dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(Path.Combine(dir, "dictation.log"), $"{DateTime.Now:HH:mm:ss}  {message}\n");
         }
         catch { /* best effort */ }
     }

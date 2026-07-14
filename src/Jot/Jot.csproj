@@ -24,9 +24,14 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <!-- Auto-updating installer (Setup.exe) + delta updates from GitHub Releases -->
+    <PackageReference Include="Velopack" Version="1.2.0" />
     <!-- On-device speech-to-text: Parakeet-TDT ONNX. DirectML package = CPU + DirectML EPs.
          Native runtime pinned to 1.20.1 (newer builds fail DLL init on this box). -->
     <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.20.1" />
+    <!-- Newer DirectML runtime than the 1.15.2 that ORT.DirectML bundles: 1.15.2 rejects Nemotron's
+         int4 (4-bit) ops on this GPU ("parameter is incorrect"); 1.15.4 supports them. -->
+    <PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" />
   </ItemGroup>
 
   <ItemGroup>

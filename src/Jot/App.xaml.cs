@@ -9,6 +9,8 @@ using Jot.Shell;
 using Jot.Transcription;
 using Jot.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using Velopack;
+using Velopack.Sources;
 using Forms = System.Windows.Forms;
 using Drawing = System.Drawing;
 
@@ -76,6 +78,42 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--pasteselftest"))
         {
             RunPasteSelfTest();
+            Shutdown();
+            return;
+        }
+
+        // Dev affordance: `--librarytest` proves the recordings library persists across restarts.
+        if (e.Args.Contains("--librarytest"))
+        {
+            RunLibraryTest();
+            Shutdown();
+            return;
+        }
+
+        // Dev affordance: `--nemotest <wav> [--dml]` runs the REAL Nemotron engine on CPU or DirectML.
+        int nemoArg = Array.IndexOf(e.Args, "--nemotest");
+        if (nemoArg >= 0 && nemoArg + 1 < e.Args.Length)
+        {
+            RunNemoTest(e.Args[nemoArg + 1], e.Args.Contains("--dml"));
+            Shutdown();
+            return;
+        }
+
+        // Dev affordance: `--dmldiag` tries to build the Nemotron encoder on DirectML with VERBOSE
+        // logging (ORT prints node placement to stderr) to find the operator DirectML rejects.
+        if (e.Args.Contains("--dmldiag"))
+        {
+            RunDmlDiag();
+            Shutdown();
+            return;
+        }
+
+        // Dev affordance: `--streamtest <wav> [--dml]` feeds a wav through the LIVE streaming path
+        // (OpenStream + incremental Accept + Finish) — the exact path live dictation uses.
+        int streamArg = Array.IndexOf(e.Args, "--streamtest");
+        if (streamArg >= 0 && streamArg + 1 < e.Args.Length)
+        {
+            RunStreamTest(e.Args[streamArg + 1], e.Args.Contains("--dml"));
             Shutdown();
             return;
         }
@@ -205,6 +243,148 @@ public partial class App : System.Windows.Application
         catch (Exception ex)
         {
             System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n{log}");
+        }
+    }
+
+    private static void RunLibraryTest()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-librarytest.txt");
+        const string marker = "LIBRARYTEST_MARKER_7731";
+        try
+        {
+            var store1 = new JsonRecordingStore();
+            int before = store1.Items.Count;
+            store1.Add(new Models.RecordingItem
+            {
+                Kind = Models.RecordingKind.Dictation,
+                CreatedAt = DateTime.Now,
+                Title = marker,
+                Transcript = "persistence self-test",
+                Status = Models.RecordingStatus.Complete,
+            });
+
+            string libPath = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot", "library.json");
+            bool fileWritten = System.IO.File.Exists(libPath);
+
+            // Fresh store instance = simulates a restart; must load the marker back.
+            var store2 = new JsonRecordingStore();
+            var loaded = store2.Items.FirstOrDefault(i => i.Title == marker);
+            bool survived = loaded is not null;
+
+            // Clean up the marker so we don't pollute the real library.
+            if (loaded is not null) store2.Delete(loaded);
+
+            bool pass = fileWritten && survived;
+            System.IO.File.WriteAllText(outPath,
+                $"{(pass ? "PASS" : "FAIL")}\nfileWritten={fileWritten}\nsurvivedRestart={survived}\n" +
+                $"itemsBefore={before}\nlibraryPath={libPath}\n");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
+        }
+    }
+
+    private static void RunNemoTest(string wavPath, bool useDml)
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-nemotest.txt");
+        try
+        {
+            var backend = useDml ? Transcription.Onnx.ComputeBackend.DirectML : Transcription.Onnx.ComputeBackend.Cpu;
+            var model = new Transcription.Nemotron.NemotronModel();
+            if (!model.IsInstalled)
+            {
+                System.IO.File.WriteAllText(outPath, $"MODEL NOT INSTALLED at {model.Directory}\n");
+                return;
+            }
+            var factory = new Transcription.Onnx.OnnxSessionFactory();
+            string fallback = "";
+            factory.BackendFallback += m => fallback += m + " | ";
+            using var transcriber = new Transcription.Nemotron.NemotronTranscriber(model, factory, backend);
+            float[] samples = WavAudio.ReadMono16k(wavPath);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            string text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
+            sw.Stop();
+            double seconds = samples.Length / (double)WavAudio.SampleRate;
+            System.IO.File.WriteAllText(outPath,
+                $"OK\nbackend={backend}\nDML_FELL_BACK_TO_CPU={(fallback.Length > 0)}\nfallbackMsg={fallback}\n" +
+                $"audio_s={seconds:0.0}\nms={sw.ElapsedMilliseconds}\nTEXT={text}\n");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR backend={(useDml ? "DirectML" : "CPU")}\n{ex}\n");
+        }
+    }
+
+    private static void RunDmlDiag()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-dmldiag.txt");
+        var log = new System.Text.StringBuilder();
+        try
+        {
+            var model = new Transcription.Nemotron.NemotronModel();
+            log.AppendLine("encoder=" + model.Encoder + " exists=" + System.IO.File.Exists(model.Encoder));
+
+            // Verbose ORT logging → the DML EP prints each node it assigns; the last one before the
+            // failure is the culprit. Logs go to stderr; run with stderr redirected to capture them.
+            var opts = new Microsoft.ML.OnnxRuntime.SessionOptions
+            {
+                GraphOptimizationLevel = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_ALL,
+                ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL,
+                EnableMemoryPattern = false,
+                LogSeverityLevel = Microsoft.ML.OnnxRuntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE,
+                LogVerbosityLevel = 1,
+            };
+            opts.AppendExecutionProvider_DML(0);
+            try
+            {
+                using var s = new Microsoft.ML.OnnxRuntime.InferenceSession(model.Encoder, opts);
+                log.AppendLine("ENCODER DML SESSION CREATED OK (no failure!)");
+            }
+            catch (Exception ex)
+            {
+                log.AppendLine("ENCODER DML FAILED:");
+                log.AppendLine(ex.ToString());
+            }
+        }
+        catch (Exception ex) { log.AppendLine("OUTER ERROR: " + ex); }
+        System.IO.File.WriteAllText(outPath, log.ToString());
+    }
+
+    private static void RunStreamTest(string wavPath, bool useDml)
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-streamtest.txt");
+        try
+        {
+            var backend = useDml ? Transcription.Onnx.ComputeBackend.DirectML : Transcription.Onnx.ComputeBackend.Cpu;
+            var model = new Transcription.Nemotron.NemotronModel();
+            if (!model.IsInstalled) { System.IO.File.WriteAllText(outPath, "MODEL NOT INSTALLED\n"); return; }
+            using var transcriber = new Transcription.Nemotron.NemotronTranscriber(
+                model, new Transcription.Onnx.OnnxSessionFactory(), backend);
+            float[] samples = WavAudio.ReadMono16k(wavPath);
+
+            // Simulate live dictation: open a session and feed ~300ms chunks incrementally.
+            var session = transcriber.OpenStream();
+            int chunk = WavAudio.SampleRate * 300 / 1000;
+            string lastPartial = "";
+            int partials = 0;
+            for (int i = 0; i < samples.Length; i += chunk)
+            {
+                int n = Math.Min(chunk, samples.Length - i);
+                var slice = new float[n];
+                Array.Copy(samples, i, slice, 0, n);
+                string p = session.Accept(slice);
+                if (p.Length > 0 && p != lastPartial) { lastPartial = p; partials++; }
+            }
+            string final = session.Finish().Trim();
+            System.IO.File.WriteAllText(outPath,
+                $"OK\nbackend={backend}\npartialsSeen={partials}\nlastPartialLen={lastPartial.Length}\n" +
+                $"finalLen={final.Length}\nFINAL={final}\n");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
         }
     }
 
