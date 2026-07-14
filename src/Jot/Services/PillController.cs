@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using Jot.Controls;
 using Jot.Recording;
 using Jot.Rewrite;
+using Jot.Services.Abstractions;
 
 namespace Jot.Services;
 
@@ -17,6 +18,7 @@ public sealed class PillController
     private readonly RecorderController _recorder;
     private readonly RewriteController _rewrite;
     private readonly AudioRecorder _audio;
+    private readonly ISettingsStore _settings;
     private readonly Dispatcher _dispatcher;
 
     private PillWindow? _pill;
@@ -25,12 +27,24 @@ public sealed class PillController
     private DateTime _startedAt;
     private bool _transient; // a success/error/notice is showing and manages its own dismissal
 
-    public PillController(RecorderController recorder, RewriteController rewrite)
+    public PillController(RecorderController recorder, RewriteController rewrite, ISettingsStore settings)
     {
         _recorder = recorder;
         _rewrite = rewrite;
+        _settings = settings;
         _audio = recorder.Recorder;
         _dispatcher = System.Windows.Application.Current.Dispatcher;
+    }
+
+    // The current stop (toggle) and cancel chords, display-formatted for the pill hint. Read live so a
+    // rebind is reflected next time recording starts. Either may be null if the chord doesn't parse.
+    private (string? stop, string? cancel) RecordingHints()
+    {
+        string? stop = HotkeyChord.TryParse(_settings.Current.ToggleRecordingHotkey, out HotkeyChord t)
+            ? t.ToDisplayString() : null;
+        string? cancel = HotkeyChord.TryParse(_settings.Current.CancelRecordingHotkey, out HotkeyChord c)
+            ? c.ToDisplayString() : null;
+        return (stop, cancel);
     }
 
     /// <summary>Subscribe to the pipeline. Call once at startup.</summary>
@@ -64,6 +78,7 @@ public sealed class PillController
                 _transient = false;
                 _startedAt = DateTime.Now;
                 StartElapsed();
+                Pill.SetKeyHints(null, null); // no global cancel key is armed for voice rewrite; use the Stop button
                 Pill.SetState(PillState.Recording);
                 Pill.SetStopAction(_rewrite.ToggleVoiceRewrite);
                 break;
@@ -104,6 +119,8 @@ public sealed class PillController
                 _transient = false;
                 _startedAt = DateTime.Now;
                 StartElapsed();
+                var (stop, cancel) = RecordingHints();   // Esc (cancel) is armed by RecorderController while recording
+                Pill.SetKeyHints(stop, cancel);
                 Pill.SetState(PillState.Recording);
                 Pill.SetStopAction(_recorder.Toggle);
                 break;

@@ -176,7 +176,9 @@ local; the rest need an API key.
 - ⚠️ **Hotkeys** — only **Toggle recording** and **Cancel** (Esc) are active. Paste-last / Rewrite /
   Rewrite-with-voice are **not registered** (they don't work — worklist A4). ❌ **Rebinding does NOT
   work** — the in-app `HotkeyBox` capture doesn't stick, so shortcuts are shown **read-only** (Toggle +
-  Cancel only). (`HotkeyManager`, worklist A5)
+  Cancel only) on a dedicated **Shortcuts** left-nav page. (`HotkeyManager`, `ShortcutsPage`, worklist A5)
+- ✅ **Pill key hint** — while recording, the status pill shows the stop/cancel chords under the waveform
+  (e.g. `Alt + Space to stop  ·  Esc to cancel`), read live from settings. (`PillWindow.SetKeyHints`)
   - Windows note: `RegisterHotKey` **does** accept some bare keys (F13–F24, media keys); the real
     constraints are no key-up event and OS-reserved combos.
 - ✅ **System tray menu** — Start/Stop dictation (dynamic label), Copy last transcription, Recent
@@ -187,18 +189,19 @@ local; the rest need an API key.
 
 ## Main window, navigation & settings
 
-- ✅ **Fluent NavigationView shell** — left nav: Recents, Ask Jot (Advanced-gated), Settings, Help,
-  About. Custom Mica-capable titlebar. (`MainWindow`)
+- ✅ **Fluent NavigationView shell** — left nav: Recents, **Shortcuts**, Help, About, and Settings
+  (footer). Ask Jot + Prompts are currently **hidden** (AI off). Custom Mica-capable titlebar. (`MainWindow`)
 - ✅ **Single instance** — a second launch focuses the running tray-resident instance (named mutex +
   activation event). (`App.ClaimSingleInstance`)
 - ✅ **Show advanced features toggle** — master switch that reveals Ask Jot, extra shortcuts, and the
   (currently hidden) Vocabulary surface.
 - ⚠️ **Sidebar back/forward history** — a `Navigator` with GoBack exists; Alt+←/→ shell affordances
   are not fully wired. (worklist / windows-ui-plan)
-- ✅ **Settings — real toggles** — appearance/theme, microphone, launch at login (per-user `Run`
-  registry key), save location, keep-audio retention, model download, CPU/GPU processing, live
-  captions, auto-paste, press-Enter, keep-clipboard, AI provider/key/model/cleanup/test connection,
-  and per-event sound toggles with preview. (`SettingsPage`, `SettingsViewModel`, `SoundService`)
+- ✅ **Settings — basic vs advanced** — by default only **Appearance, Microphone, Language**, and the
+  **Show advanced features** toggle are shown. Turning it on reveals the rest (launch-at-login, save
+  location, keep-audio retention, model download, CPU/GPU processing, live captions, auto-paste,
+  press-Enter, keep-clipboard, per-event sound toggles + preview, reset). AI provider/key/cleanup and
+  Vocabulary stay hidden until they work. (`SettingsPage`, `SettingsViewModel`, `SoundService`)
 - ✅ **Reset group** — Reset settings and Erase all data (with confirmations).
 - 🚫 **Reset permissions** — macOS `tccutil` has no Windows analog; Windows mic access is managed in
   OS Settings, so there's no in-app reset.

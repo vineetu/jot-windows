@@ -22,6 +22,8 @@ public partial class PillWindow : Window
     private bool _expanded;             // is the transcript panel open?
     private bool _lineWhenCollapsed;    // does the current state have a one-line summary to show while collapsed?
     private Action? _onStop;            // set while a recording is in flight; null hides the Stop button
+    private string? _stopChord;         // display chord that stops recording (e.g. "Alt + Space")
+    private string? _cancelChord;       // display chord that cancels recording (e.g. "Esc")
     private const double RecordingWidth = 460; // fixed pill width while dictating, so streaming text doesn't resize it
 
     public PillWindow()
@@ -67,6 +69,17 @@ public partial class PillWindow : Window
     {
         _onStop = onStop;
         StopButton.Visibility = onStop is not null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Sets the key hints shown under the waveform while recording — the chord that stops recording
+    /// and the one that cancels it (already display-formatted, e.g. "Alt + Space" / "Esc"). Pass null
+    /// for a hint that shouldn't be shown. Call before <see cref="SetState"/> enters Recording.
+    /// </summary>
+    public void SetKeyHints(string? stopChord, string? cancelChord)
+    {
+        _stopChord = stopChord;
+        _cancelChord = cancelChord;
     }
 
     // Longest word-aligned suffix of the caption that fits the pill line, prefixed with an ellipsis.
@@ -126,6 +139,7 @@ public partial class PillWindow : Window
         Wave.Active = false;
         Elapsed.Visibility = Visibility.Collapsed;
         Capsule.Width = double.NaN;   // auto-size by default; only Recording pins a fixed width
+        Hint.Visibility = Visibility.Collapsed;  // only Recording shows the stop/cancel key hint
         _expanded = false;
         _lineWhenCollapsed = false;
 
@@ -140,6 +154,7 @@ public partial class PillWindow : Window
                 Capsule.Width = RecordingWidth;   // stationary pill; the live caption streams within it
                 TranscriptText.Text = ""; // clear any prior session's caption before new partials arrive
                 LineText.Text = "";       // no caption yet — just waveform + timer until words arrive
+                ApplyKeyHint();
                 AutomationProperties.SetName(this, "Recording");
                 break;
 
@@ -292,6 +307,18 @@ public partial class PillWindow : Window
     private void OnStopClick(object sender, RoutedEventArgs e) => _onStop?.Invoke();
 
     // ---------------- helpers ----------------
+
+    // Composes the recording hint from whatever chords were provided ("<stop> to stop · <cancel> to
+    // cancel"), omitting either half if its chord is null, and hides the line entirely if neither is set.
+    private void ApplyKeyHint()
+    {
+        var parts = new List<string>(2);
+        if (!string.IsNullOrWhiteSpace(_stopChord)) parts.Add($"{_stopChord} to stop");
+        if (!string.IsNullOrWhiteSpace(_cancelChord)) parts.Add($"{_cancelChord} to cancel");
+        if (parts.Count == 0) { Hint.Visibility = Visibility.Collapsed; return; }
+        Hint.Text = string.Join("      ·      ", parts);
+        Hint.Visibility = Visibility.Visible;
+    }
 
     private Brush Res(string key, Color fallback)
         => TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);

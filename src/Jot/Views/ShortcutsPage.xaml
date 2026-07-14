@@ -1,0 +1,45 @@
+<Page x:Class="Jot.Views.ShortcutsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:ctl="clr-namespace:Jot.Controls"
+      Title="Shortcuts">
+    <Page.Resources>
+        <Style x:Key="SectionHeader" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
+            <Setter Property="Margin" Value="2,22,0,8" />
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="{StaticResource PagePadding}">
+        <StackPanel MaxWidth="820">
+            <TextBlock Text="Shortcuts" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,4" />
+
+            <!-- Only Toggle + Cancel are shown, and read-only. Rebinding (click-to-capture) does NOT
+                 work on Windows 11 yet, so no rebinding UI is offered. Tracked in
+                 docs/plans/fixit-worklist.md (A5). -->
+            <ui:InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,12,0,4"
+                        Title="Custom shortcuts are coming soon"
+                        Message="For now Jot uses the built-in shortcuts below." />
+
+            <ctl:SettingRow Title="Toggle recording" Description="Start and stop dictation.">
+                <Border Padding="10,4" CornerRadius="6"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                    <TextBlock Text="{Binding ToggleRecordingHotkey}" VerticalAlignment="Center"
+                               FontFamily="{StaticResource JotMonoFont}"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                </Border>
+            </ctl:SettingRow>
+            <ctl:SettingRow Title="Cancel recording"
+                            Description="Discards the current recording (active only while recording).">
+                <Border Padding="10,4" CornerRadius="6"
+                        Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                    <TextBlock Text="{Binding CancelRecordingHotkey}" VerticalAlignment="Center"
+                               FontFamily="{StaticResource JotMonoFont}"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                </Border>
+            </ctl:SettingRow>
+
+            <Border Height="24" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

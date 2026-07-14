@@ -16,7 +16,9 @@
         <StackPanel MaxWidth="820">
             <TextBlock Text="Settings" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
-            <!-- GENERAL -->
+            <!-- BASIC: by default Settings shows only the everyday, actionable choices — Appearance,
+                 Microphone, Language — plus the Advanced Features toggle. Everything else is gated on
+                 that toggle below, so the page isn't a wall of options for a first-time user. -->
             <TextBlock Text="General" Style="{StaticResource SectionHeader}" Margin="2,8,0,8" />
 
             <ctl:SettingRow Title="Appearance" Description="Match Windows, or force light or dark.">
@@ -28,222 +30,213 @@
                           ItemsSource="{Binding InputDevices}"
                           SelectedItem="{Binding SelectedDevice, Mode=TwoWay}" />
             </ctl:SettingRow>
-            <ctl:SettingRow Title="Launch at login" Description="Start Jot in the tray when you sign in.">
-                <ui:ToggleSwitch IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Save location" Description="Where Jot keeps your recordings and transcripts.">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding DataDirectory}" VerticalAlignment="Center" MaxWidth="300"
-                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    <ui:Button Content="Change…" Margin="10,0,0,0" Command="{Binding BrowseDataDirectoryCommand}" />
-                    <ui:Button Content="Default" Margin="6,0,0,0" Command="{Binding UseDefaultDataDirectoryCommand}" />
-                </StackPanel>
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Keep audio" Description="Older audio is cleared automatically to save space. Transcripts are always kept.">
-                <ComboBox MinWidth="120" ItemsSource="{Binding RetentionOptions}"
-                          SelectedItem="{Binding Retention, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Return to the app I started in"
-                            Description="Deliver the transcript back to the app that was focused when you began."
-                            Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">
-                <ui:ToggleSwitch IsChecked="{Binding ReturnToOrigin, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Show advanced features"
-                            Description="Reveal power-user surfaces (Ask Jot, Vocabulary, extra shortcuts).">
-                <ui:ToggleSwitch IsChecked="{Binding AdvancedFeatures, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Setup wizard" Description="Re-run the guided first-time setup.">
-                <ui:Button Content="Run again" Click="OnRunWizard" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Reset" Description="Reset settings, or erase all recordings and data.">
-                <StackPanel Orientation="Horizontal">
-                    <ui:Button Content="Reset settings" Margin="0,0,8,0" Click="OnResetSettings" />
-                    <ui:Button Content="Erase all data" Appearance="Danger" Click="OnEraseData" />
-                </StackPanel>
-            </ctl:SettingRow>
-
-            <!-- TRANSCRIPTION -->
-            <TextBlock Text="Transcription" Style="{StaticResource SectionHeader}" />
-
             <ctl:SettingRow Title="Language" Description="The spoken language Jot transcribes. English is the most accurate; other languages vary.">
                 <ComboBox MinWidth="150" ItemsSource="{Binding Languages}"
                           SelectedItem="{Binding Language, Mode=TwoWay}" />
             </ctl:SettingRow>
-            <ctl:SettingRow Title="Model" Description="On-device speech model (Nemotron 3.5, multilingual — runs locally, nothing leaves your PC).">
-                <StackPanel MinWidth="280">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}"
-                                       Visibility="{Binding IsModelInstalled, Converter={StaticResource BoolToVis}}" />
-                        <TextBlock Text="{Binding ModelStatusText}" Margin="8,0,0,0" VerticalAlignment="Center" />
-                        <ui:Button Content="Download" Margin="12,0,0,0" Appearance="Primary"
-                                   Command="{Binding DownloadModelCommand}"
-                                   Visibility="{Binding ShowDownloadButton, Converter={StaticResource BoolToVis}}" />
-                    </StackPanel>
-                    <ProgressBar Margin="0,8,0,0" Minimum="0" Maximum="100"
-                                 Value="{Binding ModelDownloadProgress}"
-                                 Visibility="{Binding IsDownloadingModel, Converter={StaticResource BoolToVis}}" />
-                </StackPanel>
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Processing"
-                            Description="CPU works on every PC. GPU (DirectML) is faster where a compatible graphics card is present, and falls back to CPU automatically. Applies after restart.">
-                <ComboBox MinWidth="180" ItemsSource="{Binding TranscriptionDevices}"
-                          SelectedItem="{Binding TranscriptionDevice, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Live captions while recording"
-                            Description="Show a running transcript in the status pill as you speak.">
-                <ui:ToggleSwitch IsChecked="{Binding LiveCaptions, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Auto-paste transcription" Description="Insert the text at your cursor automatically.">
-                <ui:ToggleSwitch IsChecked="{Binding AutoPaste, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Press Enter after paste" Description="Useful for chat boxes and search fields.">
-                <ui:ToggleSwitch IsChecked="{Binding AutoEnter, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Keep transcript on clipboard"
-                            Description="Otherwise your previous clipboard contents are restored after paste.">
-                <ui:ToggleSwitch IsChecked="{Binding KeepInClipboard, Mode=TwoWay}" />
+            <ctl:SettingRow Title="Show advanced features"
+                            Description="Reveal power-user settings: save location, speech model, processing, paste behavior, sound, and reset.">
+                <ui:ToggleSwitch IsChecked="{Binding AdvancedFeatures, Mode=TwoWay}" />
             </ctl:SettingRow>
 
-            <!-- AI — HIDDEN: cleanup/rewrite/Ask Jot aren't usable yet, so the whole AI section is
-                 turned off until the features actually work. Un-collapse this StackPanel to restore.
-                 See docs/plans/fixit-worklist.md (A4/A5 + AI cleanup unverified). -->
-            <StackPanel Visibility="Collapsed">
-            <TextBlock Text="AI" Style="{StaticResource SectionHeader}" />
-            <ui:InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,0,0,8"
-                        Title="Bring your own provider"
-                        Message="Choose a provider below for optional transcript cleanup and rewrite. Ollama runs fully on-device; the rest need an API key." />
+            <!-- ADVANCED: everything below is revealed only when "Show advanced features" is on. -->
+            <StackPanel Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">
 
-            <ctl:SettingRow Title="Provider" Description="Used for optional cleanup and rewrite. Sensible defaults are chosen for you; Ollama runs locally.">
-                <ComboBox MinWidth="150" ItemsSource="{Binding Providers}"
-                          SelectedItem="{Binding AiProvider, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <StackPanel Visibility="{Binding AiConfigured, Converter={StaticResource BoolToVis}}">
-                <ctl:SettingRow Title="API key" Description="Stored only for this session in the preview build."
-                                Visibility="{Binding NeedsApiKey, Converter={StaticResource BoolToVis}}">
-                    <ui:PasswordBox MinWidth="260" PasswordChanged="OnApiKeyChanged" />
+                <ctl:SettingRow Title="Launch at login" Description="Start Jot in the tray when you sign in.">
+                    <ui:ToggleSwitch IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}" />
                 </ctl:SettingRow>
-                <!-- Default model, shown read-only unless the user turns on advanced overrides. -->
-                <ctl:SettingRow Title="Model" Description="The default model for this provider."
-                                Visibility="{Binding ShowAiModelReadonly, Converter={StaticResource BoolToVis}}">
-                    <TextBlock Text="{Binding EffectiveAiModel}" VerticalAlignment="Center"
-                               FontFamily="{StaticResource JotMonoFont}" FontSize="12" />
-                </ctl:SettingRow>
-                <!-- Advanced overrides (base URL + model) mirror the Mac app's advanced pane. -->
-                <StackPanel Visibility="{Binding ShowAiOverrides, Converter={StaticResource BoolToVis}}">
-                    <ctl:SettingRow Title="Model" Description="Override the default model.">
-                        <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultModelHint}"
-                                    Text="{Binding AiModel, UpdateSourceTrigger=PropertyChanged}" />
-                    </ctl:SettingRow>
-                    <ctl:SettingRow Title="Base URL" Description="Override the provider's default endpoint.">
-                        <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultBaseUrlHint}"
-                                    Text="{Binding AiBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
-                    </ctl:SettingRow>
-                </StackPanel>
-                <ctl:SettingRow Title="Clean up transcript with AI"
-                                Description="Remove filler words and fix punctuation after each dictation.">
-                    <ui:ToggleSwitch IsChecked="{Binding CleanupEnabled, Mode=TwoWay}" />
-                </ctl:SettingRow>
-                <ctl:SettingRow Title="Test connection">
+                <ctl:SettingRow Title="Save location" Description="Where Jot keeps your recordings and transcripts.">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding TestConnectionResult}" VerticalAlignment="Center" Margin="0,0,10,0"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" MaxWidth="280"
-                                   TextWrapping="Wrap" />
-                        <ui:Button Content="Test" Command="{Binding TestConnectionCommand}" />
+                        <TextBlock Text="{Binding DataDirectory}" VerticalAlignment="Center" MaxWidth="300"
+                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <ui:Button Content="Change…" Margin="10,0,0,0" Command="{Binding BrowseDataDirectoryCommand}" />
+                        <ui:Button Content="Default" Margin="6,0,0,0" Command="{Binding UseDefaultDataDirectoryCommand}" />
                     </StackPanel>
                 </ctl:SettingRow>
-            </StackPanel>
-            </StackPanel>
-            <!-- /AI hidden -->
+                <ctl:SettingRow Title="Keep audio" Description="Older audio is cleared automatically to save space. Transcripts are always kept.">
+                    <ComboBox MinWidth="120" ItemsSource="{Binding RetentionOptions}"
+                              SelectedItem="{Binding Retention, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Return to the app I started in"
+                                Description="Deliver the transcript back to the app that was focused when you began.">
+                    <ui:ToggleSwitch IsChecked="{Binding ReturnToOrigin, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Setup wizard" Description="Re-run the guided first-time setup.">
+                    <ui:Button Content="Run again" Click="OnRunWizard" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Reset" Description="Reset settings, or erase all recordings and data.">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button Content="Reset settings" Margin="0,0,8,0" Click="OnResetSettings" />
+                        <ui:Button Content="Erase all data" Appearance="Danger" Click="OnEraseData" />
+                    </StackPanel>
+                </ctl:SettingRow>
 
-            <!-- SOUND -->
-            <TextBlock Text="Sound" Style="{StaticResource SectionHeader}" />
-            <ctl:SettingRow Title="Recording start">
-                <ui:ToggleSwitch IsChecked="{Binding SoundStart, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Recording stop">
-                <ui:ToggleSwitch IsChecked="{Binding SoundStop, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Cancel">
-                <ui:ToggleSwitch IsChecked="{Binding SoundCancel, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Transcription complete">
-                <ui:ToggleSwitch IsChecked="{Binding SoundSuccess, Mode=TwoWay}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Error" Description="Play a sound when something goes wrong.">
-                <StackPanel Orientation="Horizontal">
-                    <ui:Button Content="Preview" Margin="0,0,8,0" Command="{Binding PlaySoundCommand}" />
-                    <ui:ToggleSwitch IsChecked="{Binding SoundError, Mode=TwoWay}" />
+                <!-- TRANSCRIPTION -->
+                <TextBlock Text="Transcription" Style="{StaticResource SectionHeader}" />
+
+                <ctl:SettingRow Title="Model" Description="On-device speech model (Nemotron 3.5, multilingual — runs locally, nothing leaves your PC).">
+                    <StackPanel MinWidth="280">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}"
+                                           Visibility="{Binding IsModelInstalled, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Text="{Binding ModelStatusText}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            <ui:Button Content="Download" Margin="12,0,0,0" Appearance="Primary"
+                                       Command="{Binding DownloadModelCommand}"
+                                       Visibility="{Binding ShowDownloadButton, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+                        <ProgressBar Margin="0,8,0,0" Minimum="0" Maximum="100"
+                                     Value="{Binding ModelDownloadProgress}"
+                                     Visibility="{Binding IsDownloadingModel, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Processing"
+                                Description="CPU works on every PC. GPU (DirectML) is faster where a compatible graphics card is present, and falls back to CPU automatically. Applies after restart.">
+                    <ComboBox MinWidth="180" ItemsSource="{Binding TranscriptionDevices}"
+                              SelectedItem="{Binding TranscriptionDevice, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Live captions while recording"
+                                Description="Show a running transcript in the status pill as you speak.">
+                    <ui:ToggleSwitch IsChecked="{Binding LiveCaptions, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Auto-paste transcription" Description="Insert the text at your cursor automatically.">
+                    <ui:ToggleSwitch IsChecked="{Binding AutoPaste, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Press Enter after paste" Description="Useful for chat boxes and search fields.">
+                    <ui:ToggleSwitch IsChecked="{Binding AutoEnter, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Keep transcript on clipboard"
+                                Description="Otherwise your previous clipboard contents are restored after paste.">
+                    <ui:ToggleSwitch IsChecked="{Binding KeepInClipboard, Mode=TwoWay}" />
+                </ctl:SettingRow>
+
+                <!-- AI — HIDDEN: cleanup/rewrite/Ask Jot aren't usable yet, so the whole AI section is
+                     turned off until the features actually work. Un-collapse this StackPanel to restore.
+                     See docs/plans/fixit-worklist.md (A4/A5 + AI cleanup unverified). -->
+                <StackPanel Visibility="Collapsed">
+                <TextBlock Text="AI" Style="{StaticResource SectionHeader}" />
+                <ui:InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,0,0,8"
+                            Title="Bring your own provider"
+                            Message="Choose a provider below for optional transcript cleanup and rewrite. Ollama runs fully on-device; the rest need an API key." />
+
+                <ctl:SettingRow Title="Provider" Description="Used for optional cleanup and rewrite. Sensible defaults are chosen for you; Ollama runs locally.">
+                    <ComboBox MinWidth="150" ItemsSource="{Binding Providers}"
+                              SelectedItem="{Binding AiProvider, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <StackPanel Visibility="{Binding AiConfigured, Converter={StaticResource BoolToVis}}">
+                    <ctl:SettingRow Title="API key" Description="Stored only for this session in the preview build."
+                                    Visibility="{Binding NeedsApiKey, Converter={StaticResource BoolToVis}}">
+                        <ui:PasswordBox MinWidth="260" PasswordChanged="OnApiKeyChanged" />
+                    </ctl:SettingRow>
+                    <!-- Default model, shown read-only unless the user turns on advanced overrides. -->
+                    <ctl:SettingRow Title="Model" Description="The default model for this provider."
+                                    Visibility="{Binding ShowAiModelReadonly, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding EffectiveAiModel}" VerticalAlignment="Center"
+                                   FontFamily="{StaticResource JotMonoFont}" FontSize="12" />
+                    </ctl:SettingRow>
+                    <!-- Advanced overrides (base URL + model) mirror the Mac app's advanced pane. -->
+                    <StackPanel Visibility="{Binding ShowAiOverrides, Converter={StaticResource BoolToVis}}">
+                        <ctl:SettingRow Title="Model" Description="Override the default model.">
+                            <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultModelHint}"
+                                        Text="{Binding AiModel, UpdateSourceTrigger=PropertyChanged}" />
+                        </ctl:SettingRow>
+                        <ctl:SettingRow Title="Base URL" Description="Override the provider's default endpoint.">
+                            <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultBaseUrlHint}"
+                                        Text="{Binding AiBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                        </ctl:SettingRow>
+                    </StackPanel>
+                    <ctl:SettingRow Title="Clean up transcript with AI"
+                                    Description="Remove filler words and fix punctuation after each dictation.">
+                        <ui:ToggleSwitch IsChecked="{Binding CleanupEnabled, Mode=TwoWay}" />
+                    </ctl:SettingRow>
+                    <ctl:SettingRow Title="Test connection">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding TestConnectionResult}" VerticalAlignment="Center" Margin="0,0,10,0"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" MaxWidth="280"
+                                       TextWrapping="Wrap" />
+                            <ui:Button Content="Test" Command="{Binding TestConnectionCommand}" />
+                        </StackPanel>
+                    </ctl:SettingRow>
                 </StackPanel>
-            </ctl:SettingRow>
+                </StackPanel>
+                <!-- /AI hidden -->
 
-            <!-- SHORTCUTS -->
-            <TextBlock Text="Shortcuts" Style="{StaticResource SectionHeader}" />
-            <!-- Only Toggle + Cancel are shown, and read-only. Rebinding (HotkeyBox click-to-capture)
-                 does NOT work on Windows 11, and the rewrite / rewrite-with-voice / paste-last
-                 shortcuts don't work either (synthetic-copy selection capture + SendInput paste is
-                 unreliable on Win11). All hidden + tracked in docs/plans/fixit-worklist.md (A4, A5). -->
-            <ctl:SettingRow Title="Toggle recording" Description="Start and stop dictation.">
-                <TextBlock Text="{Binding ToggleRecordingHotkey}" VerticalAlignment="Center"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-            </ctl:SettingRow>
-            <ctl:SettingRow Title="Cancel recording" Description="Discards the current recording (active only while recording).">
-                <TextBlock Text="{Binding CancelRecordingHotkey}" VerticalAlignment="Center"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-            </ctl:SettingRow>
+                <!-- SOUND -->
+                <TextBlock Text="Sound" Style="{StaticResource SectionHeader}" />
+                <ctl:SettingRow Title="Recording start">
+                    <ui:ToggleSwitch IsChecked="{Binding SoundStart, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Recording stop">
+                    <ui:ToggleSwitch IsChecked="{Binding SoundStop, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Cancel">
+                    <ui:ToggleSwitch IsChecked="{Binding SoundCancel, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Transcription complete">
+                    <ui:ToggleSwitch IsChecked="{Binding SoundSuccess, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Error" Description="Play a sound when something goes wrong.">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button Content="Preview" Margin="0,0,8,0" Command="{Binding PlaySoundCommand}" />
+                        <ui:ToggleSwitch IsChecked="{Binding SoundError, Mode=TwoWay}" />
+                    </StackPanel>
+                </ctl:SettingRow>
 
-            <!-- VOCABULARY (advanced) — HIDDEN until real: custom terms are in-memory only, never
-                 persisted or fed to the decoder. Restore by binding Visibility to AdvancedFeatures
-                 again once implemented. See docs/plans/fixit-worklist.md (B1). -->
-            <StackPanel Visibility="Collapsed">
-                <StackPanel Orientation="Horizontal" Margin="2,22,0,8">
-                    <TextBlock Text="Vocabulary" Style="{DynamicResource SubtitleTextBlockStyle}" />
-                    <Border Margin="10,2,0,0" Padding="6,1" CornerRadius="4" VerticalAlignment="Center"
-                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
-                        <TextBlock Text="Experimental" FontSize="11"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <!-- VOCABULARY (advanced) — HIDDEN until real: custom terms are in-memory only, never
+                     persisted or fed to the decoder. Restore by binding Visibility to AdvancedFeatures
+                     again once implemented. See docs/plans/fixit-worklist.md (B1). -->
+                <StackPanel Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" Margin="2,22,0,8">
+                        <TextBlock Text="Vocabulary" Style="{DynamicResource SubtitleTextBlockStyle}" />
+                        <Border Margin="10,2,0,0" Padding="6,1" CornerRadius="4" VerticalAlignment="Center"
+                                Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                            <TextBlock Text="Experimental" FontSize="11"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </Border>
+                    </StackPanel>
+                    <ctl:SettingRow Title="Custom terms"
+                                    Description="Names and jargon Jot should prefer when transcribing.">
+                        <StackPanel />
+                    </ctl:SettingRow>
+                    <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                            CornerRadius="6" Padding="16,12">
+                        <StackPanel>
+                            <WrapPanel>
+                                <ItemsControl ItemsSource="{Binding VocabularyTerms}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,6,6" Padding="8,3" CornerRadius="12"
+                                                    Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding}" FontSize="12" VerticalAlignment="Center" />
+                                                    <ui:Button Padding="4,0" Margin="4,0,0,0" Appearance="Transparent"
+                                                               Icon="{ui:SymbolIcon Dismiss12}"
+                                                               Command="{Binding DataContext.RemoveVocabTermCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                               CommandParameter="{Binding}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </WrapPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <ui:TextBox Width="200" PlaceholderText="Add a term"
+                                            Text="{Binding NewVocabTerm, UpdateSourceTrigger=PropertyChanged}">
+                                    <ui:TextBox.InputBindings>
+                                        <KeyBinding Key="Return" Command="{Binding AddVocabTermCommand}" />
+                                    </ui:TextBox.InputBindings>
+                                </ui:TextBox>
+                                <ui:Button Content="Add" Margin="8,0,0,0" Command="{Binding AddVocabTermCommand}" />
+                            </StackPanel>
+                        </StackPanel>
                     </Border>
                 </StackPanel>
-                <ctl:SettingRow Title="Custom terms"
-                                Description="Names and jargon Jot should prefer when transcribing.">
-                    <StackPanel />
-                </ctl:SettingRow>
-                <Border Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
-                        CornerRadius="6" Padding="16,12">
-                    <StackPanel>
-                        <WrapPanel>
-                            <ItemsControl ItemsSource="{Binding VocabularyTerms}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Margin="0,0,6,6" Padding="8,3" CornerRadius="12"
-                                                Background="{DynamicResource ControlFillColorSecondaryBrush}">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding}" FontSize="12" VerticalAlignment="Center" />
-                                                <ui:Button Padding="4,0" Margin="4,0,0,0" Appearance="Transparent"
-                                                           Icon="{ui:SymbolIcon Dismiss12}"
-                                                           Command="{Binding DataContext.RemoveVocabTermCommand, RelativeSource={RelativeSource AncestorType=Page}}"
-                                                           CommandParameter="{Binding}" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </WrapPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                            <ui:TextBox Width="200" PlaceholderText="Add a term"
-                                        Text="{Binding NewVocabTerm, UpdateSourceTrigger=PropertyChanged}">
-                                <ui:TextBox.InputBindings>
-                                    <KeyBinding Key="Return" Command="{Binding AddVocabTermCommand}" />
-                                </ui:TextBox.InputBindings>
-                            </ui:TextBox>
-                            <ui:Button Content="Add" Margin="8,0,0,0" Command="{Binding AddVocabTermCommand}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
+
             </StackPanel>
+            <!-- /ADVANCED -->
 
             <Border Height="24" />
         </StackPanel>

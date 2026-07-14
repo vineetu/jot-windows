@@ -182,10 +182,15 @@ public partial class App : System.Windows.Application
             Forms.ToolTipIcon.Info);
 
         // Dev affordance: `--show` surfaces the main window immediately (Jot normally boots to tray).
-        if (e.Args.Contains("--show") || e.Args.Contains("--detail") || e.Args.Contains("--settings"))
+        if (e.Args.Contains("--show") || e.Args.Contains("--detail") || e.Args.Contains("--settings")
+            || e.Args.Contains("--shortcuts"))
             ShowMainWindow();
         if (e.Args.Contains("--settings"))
             Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.SettingsPage)),
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        // Dev affordance: `--shortcuts` opens the window on the new Shortcuts page for a visual check.
+        if (e.Args.Contains("--shortcuts"))
+            Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.ShortcutsPage)),
                 System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         // Dev affordance: `--pilldemo` drives the pill with a speech-like envelope (no mic needed).
         if (e.Args.Contains("--pilldemo")) RunPillDemo();
@@ -546,6 +551,7 @@ public partial class App : System.Windows.Application
     {
         bool expanded = System.Environment.GetCommandLineArgs().Contains("--expanded");
         var pill = new Controls.PillWindow();
+        pill.SetKeyHints("Alt + Space", "Esc");       // same API the live PillController path uses
         pill.SetState(Controls.PillState.Recording); // anchors bottom-center on the active monitor
 
         // A growing caption to exercise the live-text line (and the click-to-expand panel).
@@ -799,6 +805,7 @@ public partial class App : System.Windows.Application
         {
             () => nav.Navigate(typeof(Views.AskJotPage)),
             () => nav.Navigate(typeof(Views.PromptsPage)),
+            () => nav.Navigate(typeof(Views.ShortcutsPage)),
             () => nav.Navigate(typeof(Views.HelpPage)),
             () => nav.Navigate(typeof(Views.AboutPage)),
             () => nav.Navigate(typeof(Views.SettingsPage)),

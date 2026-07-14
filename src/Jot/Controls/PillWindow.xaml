@@ -39,6 +39,11 @@
                            FontFamily="{DynamicResource JotMonoFont}" />
             </Grid>
 
+            <!-- Key hint shown while recording (e.g. "Alt + Space to stop   ·   Esc to cancel"), so the
+                 user always knows how to stop or discard without hunting for the shortcut. -->
+            <TextBlock x:Name="Hint" Visibility="Collapsed" Margin="21,5,0,0"
+                       Foreground="#8CFFFFFF" FontSize="11" />
+
             <!-- Expanded content (multi-line transcript + actions), revealed on click. -->
             <StackPanel x:Name="ExpandPanel" Visibility="Collapsed" Margin="0,10,0,2" MaxWidth="420">
                 <ScrollViewer x:Name="TranscriptScroll" MaxHeight="140"

@@ -40,6 +40,11 @@
                         <ui:SymbolIcon Symbol="Wand24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Shortcuts" TargetPageType="{x:Type views:ShortcutsPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Keyboard24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
                 <ui:NavigationViewItem Content="Help" TargetPageType="{x:Type views:HelpPage}">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="QuestionCircle24" />

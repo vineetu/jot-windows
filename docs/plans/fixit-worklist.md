@@ -14,10 +14,27 @@ Legend — effort: S (≤1h) · M (half-day) · L (multi-session).
 ---
 
 ## ✅ Just shipped (2026-07-14)
+
+> **Status convention (user, 2026-07-14):** items land as **DONE — awaiting review** first. They flip
+> to user-confirmed only after the user tests and thumbs-up. Nothing is deleted even if it later turns
+> out still-broken — reopen it instead.
+
 - **Transcript scroll** — expanded pill transcript was clipped at `MaxHeight=140` with no scroll; wrapped
-  in a themed `ScrollViewer` (auto-scrolls to newest). User-confirmed working.
+  in a themed `ScrollViewer` (auto-scrolls to newest). ✅ **User-confirmed working.**
 - **Stop button** — added next to Copy in the expanded pill (neutral Fluent styling, right of Copy,
-  visible only while recording; wired to stop+deliver). Awaiting user's visual confirmation.
+  visible only while recording; wired to stop+deliver). ✅ **User-confirmed working.**
+- **Settings reorg (A3)** — **DONE — awaiting review.** Basic Settings now shows only Appearance,
+  Microphone, Language + the **Show advanced features** toggle; everything else (launch-at-login, save
+  location, keep-audio, return-to-origin, wizard, reset, Model, Processing, paste toggles, Sound, and the
+  still-hidden AI/Vocabulary) is gated under that toggle. Verified by screenshot in both states.
+- **Shortcuts → own left-nav page** — **DONE — awaiting review.** New `ShortcutsPage` (keyboard icon,
+  between Recents and Help) shows Toggle + Cancel **read-only** with a "custom shortcuts coming soon"
+  note; removed the Shortcuts section from Settings. No rebinding UI (A5 still broken). Verified by
+  screenshot.
+- **Pill stop/cancel key hint** — **DONE — awaiting review.** While recording, the pill shows a hint
+  line under the waveform — e.g. `Alt + Space to stop   ·   Esc to cancel` — pulled live from the
+  configured chords (`PillController.RecordingHints` → `PillWindow.SetKeyHints`). Verified by screenshot
+  (`--pilldemo`). Note: Esc currently **discards** (D8 wants stop-and-save); hint says "cancel" honestly.
 
 ---
 
@@ -39,7 +56,11 @@ Legend — effort: S (≤1h) · M (half-day) · L (multi-session).
 - **Feature (M):** add **Find & Replace** into that menu (user's request) — a small find/replace bar over
   the transcript, operating on `Item.Transcript`, with replace/replace-all and match count.
 
-### A3. [ ] Simplify Settings layout — M
+### A3. [~] Simplify Settings layout — DONE, awaiting review
+**Done 2026-07-14 (see "Just shipped"):** basic Settings = Appearance + Microphone + Language +
+Advanced-features toggle; all else gated under Advanced. Shortcuts promoted out of Settings entirely into
+its own left-nav page (better than "move the toggle up"). Verified by screenshot in both toggle states.
+Original notes retained below for reference.
 Current order (`SettingsPage.xaml`): Appearance → **Microphone(#2)** → Launch-at-login → Save-location →
 Keep-audio → Return-to-origin(adv) → Advanced-toggle → Wizard → Reset → **Language(#10)** → Model →
 Processing CPU/GPU → Live captions → Auto-paste → Enter-after-paste → Keep-clipboard → AI → Sounds →
@@ -83,10 +104,10 @@ Original diagnosis (still accurate):
 ---
 
 ### A5. [ ] Shortcut rebinding ("click to change") doesn't work — M
-The `HotkeyBox` click-to-capture control (Settings → Shortcuts) does not actually rebind — pressing a
-new combination doesn't stick. Removed the misleading "Click a shortcut to change it" banner and made
-**Toggle + Cancel read-only** for now. Needs a real fix: verify the key-capture → persist → re-register
-path and whether Win11 blocks the low-level capture. Until then, shortcuts are display-only.
+The `HotkeyBox` click-to-capture control does not actually rebind — pressing a new combination doesn't
+stick. Shortcuts now live on their own **read-only** left-nav page (Toggle + Cancel) with a "custom
+shortcuts coming soon" note — no rebinding UI is shown. Needs a real fix: verify the key-capture →
+persist → re-register path and whether Win11 blocks the low-level capture. Until then, display-only.
 
 ### AI cleanup — UNVERIFIED (do NOT claim it works)
 "Turn on cleanup" is wired (Gemini + key + enabled) but NOT confirmed working end-to-end. The stale
