@@ -110,6 +110,33 @@ Processing CPU/GPU → Live captions → Auto-paste → Enter-after-paste → Ke
 
 ---
 
+## D. Product backlog — deferred (future features, not bugs)
+
+Captured 2026-07-14 from user testing. None are urgent; they're future work so nothing gets lost.
+
+- [ ] **D1. Donate to charity → in-app popup + API.** Currently opens the browser
+  (`Views\AboutPage.xaml.cs:17` → `jot-transcribe.com/donations/`). Want: an in-app popup that calls
+  the donations API (the Mac app has it), showing charities + amounts. Framing: Jot is free — steer
+  users to **donate to charity** rather than pay us. — M
+- [ ] **D2. Analytics + "time saved."** Port the Mac app's analytics. Track usage locally and surface
+  "how much time you've saved by dictating" — the hook that motivates the charity donation (D1). Keep it
+  privacy-respecting / on-device. — M–L
+- [ ] **D3. Send feedback → API, not email.** Currently a `mailto:` (`Views\AboutPage.xaml.cs:19-20`).
+  Want: call a feedback API (same pattern as D1), no email client. — S–M
+- [ ] **D4. View log is empty — add real logging.** `OnViewLog` only checks
+  `%LOCALAPPDATA%\Jot\crash.log` (`Views\AboutPage.xaml.cs:22-31`) and ignores the existing
+  `dictation.log`; there's no general activity log. Want: real activity logging + point View Log at it. — S–M
+- [ ] **D5. All logs/data must live in the chosen save folder.** `crash.log` / `dictation.log` write to
+  `%LOCALAPPDATA%\Jot` regardless of the user's `DataDirectory`. Route logs (and any stray writes)
+  through `JotPaths.DataDir(settings)` so nothing lands randomly. — S
+- [x] **D6. Save-location default — VERIFIED already correct (no action).** `JotPaths.DefaultDataDir`
+  (`Services\JotPaths.cs:21`) auto-picks the roomiest **non-system** drive and falls back to
+  `%LOCALAPPDATA%\Jot` on single-drive PCs — it is **not** hardcoded to `D:`. `D:\Jot` is just what it
+  resolves to on this machine. The only real gap is D5 (logs bypass it).
+- [ ] **D7. ARM64 support.** Verify the save-location logic (drive-based, so arch-independent) and,
+  more importantly, that native deps (ONNX Runtime / DirectML / FFmpeg) have arm64 builds before
+  shipping an ARM target. — L
+
 ## Suggested order
 1. **A1** (selectable text, S) → **A2 fix** (…-button opens menu, S) → **A3** (Settings reorg, M) →
    **A4** (rewrite hotkey ungate + selection-capture reliability, M).
