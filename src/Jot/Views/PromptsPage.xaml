@@ -56,20 +56,47 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="4" VerticalAlignment="Center"
+                                            Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                            Visibility="{Binding IsDefault, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="Default" FontSize="10" Foreground="White" />
+                                    </Border>
+                                </StackPanel>
                                 <TextBlock Text="{Binding Body}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                             </StackPanel>
-                            <ui:Button Grid.Column="1" Appearance="Transparent" VerticalAlignment="Center"
-                                       Command="{Binding DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
-                                       CommandParameter="{Binding}" ToolTip="Pin to picker">
-                                <Grid>
-                                    <ui:SymbolIcon Symbol="Pin24"
-                                                   Visibility="{Binding IsPinned, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
-                                    <ui:SymbolIcon Symbol="Pin24" Filled="True" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
-                                                   Visibility="{Binding IsPinned, Converter={StaticResource BoolToVis}}" />
-                                </Grid>
-                            </ui:Button>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:Button Appearance="Transparent" Padding="6"
+                                           Command="{Binding DataContext.SetDefaultCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                           CommandParameter="{Binding}" ToolTip="Use as default for Rewrite">
+                                    <Grid>
+                                        <ui:SymbolIcon Symbol="Flash24"
+                                                       Visibility="{Binding IsDefault, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                                        <ui:SymbolIcon Symbol="Flash24" Filled="True" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                                       Visibility="{Binding IsDefault, Converter={StaticResource BoolToVis}}" />
+                                    </Grid>
+                                </ui:Button>
+                                <ui:Button Appearance="Transparent" Padding="6"
+                                           Command="{Binding DataContext.TogglePinCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                           CommandParameter="{Binding}" ToolTip="Pin to picker">
+                                    <Grid>
+                                        <ui:SymbolIcon Symbol="Pin24"
+                                                       Visibility="{Binding IsPinned, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                                        <ui:SymbolIcon Symbol="Pin24" Filled="True" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                                       Visibility="{Binding IsPinned, Converter={StaticResource BoolToVis}}" />
+                                    </Grid>
+                                </ui:Button>
+                                <ui:Button Appearance="Transparent" Padding="6"
+                                           Visibility="{Binding IsBuiltIn, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
+                                           Command="{Binding DataContext.EditPromptCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                           CommandParameter="{Binding}" ToolTip="Edit" Icon="{ui:SymbolIcon Edit24}" />
+                                <ui:Button Appearance="Transparent" Padding="6"
+                                           Visibility="{Binding IsBuiltIn, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
+                                           Command="{Binding DataContext.DeletePromptCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                           CommandParameter="{Binding}" ToolTip="Delete" Icon="{ui:SymbolIcon Delete24}" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </DataTemplate>
@@ -87,8 +114,12 @@
                 <ui:TextBox PlaceholderText="Instruction (e.g. Rewrite this as a friendly tweet)"
                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60"
                             Text="{Binding NewBody, UpdateSourceTrigger=PropertyChanged}" />
-                <ui:Button Content="Add prompt" Appearance="Primary" Margin="0,10,0,0"
-                           HorizontalAlignment="Right" Command="{Binding AddPromptCommand}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                    <ui:Button Content="Cancel" Margin="0,0,8,0" Command="{Binding CancelEditCommand}"
+                               Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" />
+                    <ui:Button Content="{Binding AddButtonText}" Appearance="Primary"
+                               Command="{Binding AddPromptCommand}" />
+                </StackPanel>
             </StackPanel>
         </ui:CardExpander>
     </Grid>

@@ -32,6 +32,7 @@ public partial class App : System.Windows.Application
     private HotkeyManager? _hotkeys;
     private string _hotkeySignature = "";
     private RecorderController? _recorder;
+    private Rewrite.RewriteController? _rewrite;
     private MainWindow? _mainWindow;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -88,6 +89,7 @@ public partial class App : System.Windows.Application
 
         Services = BuildServices();
         _recorder = Services.GetRequiredService<RecorderController>();
+        _rewrite = Services.GetRequiredService<Rewrite.RewriteController>();
         Services.GetRequiredService<PillController>().Attach(); // status pill now owns pipeline feedback
 
         // Warm up the model off the UI thread so the first dictation isn't a cold start.
@@ -368,6 +370,7 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
             ParseBackend(sp.GetRequiredService<ISettingsStore>().Current.TranscriptionDevice)));
         services.AddSingleton<RecorderController>();
+        services.AddSingleton<Rewrite.RewriteController>();
         services.AddSingleton<Import.MediaImporter>();
         services.AddSingleton<PillController>();
 
@@ -474,8 +477,8 @@ public partial class App : System.Windows.Application
         _hotkeys = Services.GetRequiredService<HotkeyManager>();
         _hotkeys.ToggleRecording += () => _recorder!.Toggle();
         _hotkeys.PasteLast += PasteLastTranscript;
-        _hotkeys.Rewrite += OpenRewritePicker;
-        _hotkeys.RewriteWithVoice += OpenRewritePicker; // voice-driven variant reuses the picker for now
+        _hotkeys.Rewrite += () => _rewrite!.BeginRewrite(OpenRewritePicker);       // default prompt, or pick one
+        _hotkeys.RewriteWithVoice += () => _rewrite!.ToggleVoiceRewrite();          // speak the instruction
         _hotkeys.RegistrationFailed += (label, reason) =>
             Notify($"Shortcut unavailable: {label}", reason, Forms.ToolTipIcon.Warning);
         _hotkeys.Rebuild();
@@ -506,8 +509,12 @@ public partial class App : System.Windows.Application
 
     private void OpenRewritePicker()
     {
+        // The selection was already captured by BeginRewrite; running a picked prompt rewrites it.
         var vm = Services.GetRequiredService<PromptPickerViewModel>();
-        var picker = new Controls.PromptPickerWindow(vm);
+        var picker = new Controls.PromptPickerWindow(vm)
+        {
+            PromptChosen = item => _rewrite!.RunRewrite(item.Body),
+        };
         picker.Show();
         picker.Activate();
     }

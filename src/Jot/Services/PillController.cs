@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Jot.Controls;
 using Jot.Recording;
+using Jot.Rewrite;
 
 namespace Jot.Services;
 
@@ -14,6 +15,7 @@ namespace Jot.Services;
 public sealed class PillController
 {
     private readonly RecorderController _recorder;
+    private readonly RewriteController _rewrite;
     private readonly AudioRecorder _audio;
     private readonly Dispatcher _dispatcher;
 
@@ -23,9 +25,10 @@ public sealed class PillController
     private DateTime _startedAt;
     private bool _transient; // a success/error/notice is showing and manages its own dismissal
 
-    public PillController(RecorderController recorder)
+    public PillController(RecorderController recorder, RewriteController rewrite)
     {
         _recorder = recorder;
+        _rewrite = rewrite;
         _audio = recorder.Recorder;
         _dispatcher = System.Windows.Application.Current.Dispatcher;
     }
@@ -39,6 +42,40 @@ public sealed class PillController
         _recorder.Failed += OnFailed;
         _recorder.NothingTranscribed += OnNothing;
         _audio.LevelChanged += OnLevel;
+
+        // Rewrite pipeline drives the same pill (all events marshalled onto the UI thread).
+        _rewrite.PhaseChanged += p => _dispatcher.BeginInvoke(() => OnRewritePhase(p));
+        _rewrite.Succeeded += t => _dispatcher.BeginInvoke(() => OnTranscriptReady(t));
+        _rewrite.Failed += (title, msg) => _dispatcher.BeginInvoke(() => OnFailed(title, msg));
+        _rewrite.NothingSelected += () => _dispatcher.BeginInvoke(() =>
+        {
+            _transient = true;
+            Pill.SetState(PillState.Notice, "Select some text first");
+            ScheduleHide(3000);
+        });
+    }
+
+    private void OnRewritePhase(RewritePhase phase)
+    {
+        switch (phase)
+        {
+            case RewritePhase.Listening: // recording the spoken instruction — show the waveform
+                CancelAutoHide();
+                _transient = false;
+                _startedAt = DateTime.Now;
+                StartElapsed();
+                Pill.SetState(PillState.Recording);
+                break;
+            case RewritePhase.Working:
+                _transient = false;
+                StopElapsed();
+                Pill.SetState(PillState.Rewriting);
+                break;
+            case RewritePhase.Idle:
+                StopElapsed();
+                if (!_transient) _pill?.SetState(PillState.Hidden);
+                break;
+        }
     }
 
     private PillWindow Pill => _pill ??= new PillWindow();

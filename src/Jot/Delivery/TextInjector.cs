@@ -20,7 +20,10 @@ public static class TextInjector
     private const uint KEYEVENTF_SCANCODE = 0x0008;
     private const ushort SCAN_CONTROL = 0x1D;
     private const ushort SCAN_V = 0x2F;
+    private const ushort SCAN_C = 0x2E;
     private const ushort SCAN_RETURN = 0x1C;
+    private const ushort SCAN_ALT = 0x38;
+    private const ushort SCAN_SHIFT = 0x2A;
 
     /// <summary>The foreground window right now — capture this when recording starts so the
     /// transcript can be delivered back to the app the user was in, even if focus drifts.</summary>
@@ -55,7 +58,8 @@ public static class TextInjector
         // 2. Put our transcript on the clipboard.
         SetClipboardText(text);
 
-        // 3. Synthetic Ctrl+V into the focused app.
+        // 3. Synthetic Ctrl+V into the focused app (release any held hotkey modifier first).
+        ReleaseModifiers();
         SendCtrlV();
 
         // 4. Optionally submit (Enter) — useful for chat boxes and search fields. Give the paste a
@@ -81,6 +85,30 @@ public static class TextInjector
         }
     }
 
+    /// <summary>
+    /// Copies the current selection in the focused app (synthetic Ctrl+C) and returns it, restoring the
+    /// user's previous clipboard afterward. Returns "" when nothing is selected. STA thread only.
+    /// </summary>
+    public static string CaptureSelection()
+    {
+        string? saved = null;
+        try { if (Clipboard.ContainsText()) saved = Clipboard.GetText(); } catch { /* clipboard busy */ }
+
+        // Clear first so we can distinguish "nothing was copied" from "the same text was already there".
+        TryClear();
+        ReleaseModifiers(); // drop the still-held hotkey modifier (e.g. Alt) before Ctrl+C
+        Thread.Sleep(40);
+        SendKeyChord(SCAN_CONTROL, SCAN_C);
+        Thread.Sleep(120); // let the target app service the copy
+
+        string captured = "";
+        try { if (Clipboard.ContainsText()) captured = Clipboard.GetText(); } catch { /* clipboard busy */ }
+
+        // Restore the user's clipboard.
+        if (saved is not null) SetClipboardText(saved); else TryClear();
+        return captured;
+    }
+
     private static void SetClipboardText(string text)
     {
         for (int attempt = 0; attempt < 5; attempt++)
@@ -101,6 +129,19 @@ public static class TextInjector
 
     /// <summary>Presses the given scan codes together (in order), then releases them in reverse — e.g.
     /// <c>SendKeyChord(SCAN_CONTROL, SCAN_A)</c> for Ctrl+A. Shared by the paste path and dev self-tests.</summary>
+    /// <summary>Injects key-ups for Alt/Ctrl/Shift so a still-held global-hotkey modifier (e.g. the Alt
+    /// of "Alt+/") doesn't corrupt the synthetic Ctrl+C/Ctrl+V we're about to send.</summary>
+    private static void ReleaseModifiers()
+    {
+        var ups = new[]
+        {
+            ScanInput(SCAN_ALT, keyUp: true),
+            ScanInput(SCAN_CONTROL, keyUp: true),
+            ScanInput(SCAN_SHIFT, keyUp: true),
+        };
+        SendInput((uint)ups.Length, ups, Marshal.SizeOf<INPUT>());
+    }
+
     internal static void SendKeyChord(params ushort[] scanCodes)
     {
         var inputs = new INPUT[scanCodes.Length * 2];

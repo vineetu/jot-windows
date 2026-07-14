@@ -20,6 +20,15 @@ public sealed partial class PromptsViewModel : ObservableObject
     [ObservableProperty] private string _searchText = "";
     [ObservableProperty] private string _newTitle = "";
     [ObservableProperty] private string _newBody = "";
+    [ObservableProperty] private PromptItem? _editingPrompt;
+
+    public bool IsEditing => EditingPrompt is not null;
+    public string AddButtonText => IsEditing ? "Save changes" : "Add prompt";
+    partial void OnEditingPromptChanged(PromptItem? value)
+    {
+        OnPropertyChanged(nameof(IsEditing));
+        OnPropertyChanged(nameof(AddButtonText));
+    }
 
     public PromptsViewModel(PromptCatalog catalog)
     {
@@ -49,8 +58,39 @@ public sealed partial class PromptsViewModel : ObservableObject
     private void TogglePin(PromptItem? p)
     {
         if (p is null) return;
-        p.IsPinned = !p.IsPinned;
+        _catalog.TogglePin(p);
         Prompts.Refresh();
+    }
+
+    [RelayCommand]
+    private void SetDefault(PromptItem? p)
+    {
+        if (p is not null) _catalog.SetDefault(p);
+    }
+
+    [RelayCommand]
+    private void EditPrompt(PromptItem? p)
+    {
+        if (p is null || p.IsBuiltIn) return;
+        EditingPrompt = p;
+        NewTitle = p.Title;
+        NewBody = p.Body;
+    }
+
+    [RelayCommand]
+    private void DeletePrompt(PromptItem? p)
+    {
+        if (p is null || p.IsBuiltIn) return;
+        if (ReferenceEquals(p, EditingPrompt)) CancelEdit();
+        _catalog.DeleteUserPrompt(p);
+    }
+
+    [RelayCommand]
+    private void CancelEdit()
+    {
+        EditingPrompt = null;
+        NewTitle = "";
+        NewBody = "";
     }
 
     [RelayCommand]
@@ -59,8 +99,12 @@ public sealed partial class PromptsViewModel : ObservableObject
         string title = NewTitle.Trim();
         string body = NewBody.Trim();
         if (title.Length == 0 || body.Length == 0) return;
-        _catalog.AddUserPrompt(title, body);
-        NewTitle = "";
-        NewBody = "";
+
+        if (EditingPrompt is not null)
+            _catalog.EditUserPrompt(EditingPrompt, title, body);
+        else
+            _catalog.AddUserPrompt(title, body);
+
+        CancelEdit();
     }
 }

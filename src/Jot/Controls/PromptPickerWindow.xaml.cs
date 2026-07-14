@@ -22,6 +22,10 @@ public partial class PromptPickerWindow : Window
     /// <summary>Dismiss when focus leaves (command-palette convention). Off for demos/screenshots.</summary>
     public bool CloseOnDeactivate { get; set; } = true;
 
+    /// <summary>Invoked with the chosen prompt just before the overlay closes — the rewrite pipeline
+    /// hooks this to run the rewrite. Null for demos.</summary>
+    public Action<PromptItem>? PromptChosen { get; set; }
+
     public PromptPickerWindow(PromptPickerViewModel vm)
     {
         InitializeComponent();
@@ -45,8 +49,12 @@ public partial class PromptPickerWindow : Window
 
     private void OnPicked(PromptItem item)
     {
-        // Real build: hand the instruction to the rewrite pipeline. This phase is UI-only, so just close.
+        // Hand the chosen instruction to the rewrite pipeline, then close the overlay.
+        Action<PromptItem>? chosen = PromptChosen;
+        PromptChosen = null;            // fire once
+        CloseOnDeactivate = false;      // closing steals focus back; don't double-fire via Deactivated
         Close();
+        chosen?.Invoke(item);
     }
 
     protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
@@ -65,6 +73,10 @@ public partial class PromptPickerWindow : Window
                 break;
             case Key.P when (Keyboard.Modifiers & ModifierKeys.Control) != 0:
                 _vm.TogglePinCommand.Execute(List.SelectedItem);
+                e.Handled = true;
+                break;
+            case Key.D when (Keyboard.Modifiers & ModifierKeys.Control) != 0:
+                _vm.SetDefaultCommand.Execute(List.SelectedItem);
                 e.Handled = true;
                 break;
         }

@@ -64,7 +64,7 @@ public sealed partial class PromptPickerViewModel : ObservableObject
     private void TogglePin(PromptItem? p)
     {
         if (p is null) return;
-        p.IsPinned = !p.IsPinned;
+        _catalog.TogglePin(p);
         Prompts.Refresh();
     }
 

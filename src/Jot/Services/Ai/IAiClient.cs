@@ -33,4 +33,18 @@ public interface IAiClient
     /// unsupported provider — returns the original transcript unchanged. Never throws.
     /// </summary>
     Task<string> CleanupAsync(string transcript, AiConfig config, CancellationToken ct = default);
+
+    /// <summary>
+    /// Rewrites <paramref name="original"/> per <paramref name="instruction"/> (a prompt body or a
+    /// spoken instruction) and returns only the rewritten text. An empty instruction means "improve
+    /// clarity and flow, preserving meaning/tone/length". Unlike cleanup, this SURFACES errors — the
+    /// user is actively waiting on the result — so it throws on failure.
+    /// </summary>
+    Task<string> RewriteAsync(string original, string instruction, AiConfig config, CancellationToken ct = default);
+
+    /// <summary>
+    /// One-shot chat: sends <paramref name="systemPrompt"/> + <paramref name="userMessage"/> to the
+    /// configured provider and returns the reply text. Throws on failure. Used by Ask Jot.
+    /// </summary>
+    Task<string> AskAsync(string systemPrompt, string userMessage, AiConfig config, CancellationToken ct = default);
 }
