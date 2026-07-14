@@ -691,8 +691,8 @@ public partial class App : System.Windows.Application
         menu.Items.Add(_recentItem);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Open Jot…", null, (_, _) => ShowMainWindow());
-        menu.Items.Add("Check for updates…", null, (_, _) =>
-            Notify("Jot is up to date", "You're on the latest version.", Forms.ToolTipIcon.Info));
+        // "Check for updates…" hidden until real: no network check yet (canned "up to date").
+        // Restore when Velopack auto-update lands. See docs/plans/fixit-worklist.md (B3).
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quit Jot", null, (_, _) => Shutdown());
 

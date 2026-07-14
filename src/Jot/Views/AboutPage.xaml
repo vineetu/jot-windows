@@ -22,7 +22,10 @@
                 </StackPanel>
             </StackPanel>
 
-            <ui:Button Content="Check for updates" Icon="{ui:SymbolIcon ArrowSync24}" Click="OnCheckUpdates" />
+            <!-- HIDDEN until real: no network check yet (hardcoded "up to date"). Restore when
+                 Velopack auto-update lands. See docs/plans/fixit-worklist.md (B3). -->
+            <ui:Button Content="Check for updates" Icon="{ui:SymbolIcon ArrowSync24}" Click="OnCheckUpdates"
+                       Visibility="Collapsed" />
 
             <!-- Privacy pledge -->
             <ui:Card Margin="0,20,0,0">

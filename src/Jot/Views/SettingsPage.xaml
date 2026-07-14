@@ -194,8 +194,10 @@
                 </ctl:SettingRow>
             </StackPanel>
 
-            <!-- VOCABULARY (advanced) -->
-            <StackPanel Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">
+            <!-- VOCABULARY (advanced) — HIDDEN until real: custom terms are in-memory only, never
+                 persisted or fed to the decoder. Restore by binding Visibility to AdvancedFeatures
+                 again once implemented. See docs/plans/fixit-worklist.md (B1). -->
+            <StackPanel Visibility="Collapsed">
                 <StackPanel Orientation="Horizontal" Margin="2,22,0,8">
                     <TextBlock Text="Vocabulary" Style="{DynamicResource SubtitleTextBlockStyle}" />
                     <Border Margin="10,2,0,0" Padding="6,1" CornerRadius="4" VerticalAlignment="Center"

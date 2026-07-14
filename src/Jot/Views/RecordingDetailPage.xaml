@@ -42,7 +42,10 @@
                 <ui:Button Appearance="Secondary" Icon="{ui:SymbolIcon MoreHorizontal24}" ToolTip="More">
                     <ui:Button.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="Detect speakers" Command="{Binding DetectSpeakersCommand}" />
+                            <!-- HIDDEN until real: diarization is a stub (fake alternate-by-sentence).
+                                 See docs/plans/fixit-worklist.md (B2). -->
+                            <MenuItem Header="Detect speakers" Command="{Binding DetectSpeakersCommand}"
+                                      Visibility="Collapsed" />
                             <MenuItem Header="Export as WebVTT…" Command="{Binding ExportVttCommand}" />
                             <MenuItem Header="Reveal in File Explorer" Command="{Binding RevealInExplorerCommand}" />
                             <Separator />
