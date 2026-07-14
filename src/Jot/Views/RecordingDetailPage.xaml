@@ -39,7 +39,8 @@
                            Visibility="{Binding IsDictation, Converter={StaticResource BoolToVis}}" />
                 <ui:Button Appearance="Secondary" Content="Copy" Icon="{ui:SymbolIcon Copy24}"
                            Margin="0,0,8,0" Command="{Binding CopyCommand}" />
-                <ui:Button Appearance="Secondary" Icon="{ui:SymbolIcon MoreHorizontal24}" ToolTip="More">
+                <ui:Button Appearance="Secondary" Icon="{ui:SymbolIcon MoreHorizontal24}" ToolTip="More"
+                           Click="OnMoreClick" AutomationProperties.Name="More">
                     <ui:Button.ContextMenu>
                         <ContextMenu>
                             <!-- HIDDEN until real: diarization is a stub (fake alternate-by-sentence).
@@ -81,18 +82,26 @@
                     <TextBlock Text="INSTRUCTION" Style="{DynamicResource CaptionTextBlockStyle}"
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="2,0,0,4" />
                     <ui:Card Margin="0,0,0,14">
-                        <TextBlock Text="{Binding Item.Instruction}" TextWrapping="Wrap" />
+                        <TextBox Text="{Binding Item.Instruction, Mode=OneWay}" Style="{x:Null}"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="False" BorderThickness="0"
+                                 Background="Transparent" Padding="0" TextWrapping="Wrap"
+                                 Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                     </ui:Card>
                     <TextBlock Text="ORIGINAL" Style="{DynamicResource CaptionTextBlockStyle}"
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="2,0,0,4" />
                     <ui:Card Margin="0,0,0,14">
-                        <TextBlock Text="{Binding Item.Original}" TextWrapping="Wrap"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <TextBox Text="{Binding Item.Original, Mode=OneWay}" Style="{x:Null}"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="False" BorderThickness="0"
+                                 Background="Transparent" Padding="0" TextWrapping="Wrap"
+                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     </ui:Card>
                     <TextBlock Text="REWRITTEN" Style="{DynamicResource CaptionTextBlockStyle}"
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="2,0,0,4" />
                     <ui:Card>
-                        <TextBlock Text="{Binding Item.Transcript}" TextWrapping="Wrap" FontSize="15" />
+                        <TextBox Text="{Binding Item.Transcript, Mode=OneWay}" Style="{x:Null}"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="False" BorderThickness="0"
+                                 Background="Transparent" Padding="0" TextWrapping="Wrap" FontSize="15"
+                                 Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                     </ui:Card>
                 </StackPanel>
 
@@ -162,9 +171,14 @@
                         </ui:TextBox>
                     </WrapPanel>
 
-                    <!-- Transcript: read vs edit -->
-                    <TextBlock Text="{Binding Item.Transcript}" TextWrapping="Wrap" FontSize="16" LineHeight="26"
-                               Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                    <!-- Transcript: read vs edit. A read-only, borderless, transparent TextBox reads like
+                         body text but supports drag-select + Ctrl+C (a plain TextBlock can't).
+                         Style="{x:Null}" opts out of WPF-UI's input-box styling so it doesn't look like a field. -->
+                    <TextBox Text="{Binding Item.Transcript, Mode=OneWay}" Style="{x:Null}"
+                             IsReadOnly="True" IsReadOnlyCaretVisible="False" BorderThickness="0"
+                             Background="Transparent" Padding="0" TextWrapping="Wrap" FontSize="16"
+                             Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                             Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
 
                     <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
                         <ui:TextBox Text="{Binding EditableTranscript, UpdateSourceTrigger=PropertyChanged}"

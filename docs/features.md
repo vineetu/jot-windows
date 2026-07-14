@@ -148,8 +148,10 @@ local; the rest need an API key.
   transcribes on the same on-device engine and lands as a normal row. Shows a pending row while it
   works. (`MediaImporter`)
 - ❌ **AI semantic search** — Windows is substring-only; no on-device embedding index. (worklist C: semantic search)
-- ❌ **Transcript text selection** — the read-mode transcript is a plain `TextBlock` and can't be
-  drag-selected (Copy still works via the VM). Same on the rewrite panes. (worklist A1)
+- ✅ **Transcript text selection** — read-mode transcript + rewrite panes are read-only borderless
+  `TextBox`es, so text can be drag-selected and Ctrl+C'd (Copy button still works too). (worklist A1)
+- ✅ **Overflow "…" menu opens on click** — the detail-view "…" button opens its menu (Export WebVTT /
+  Reveal / Delete) on left-click, not just right-click. (worklist A2)
 - ⚠️ **Export transcript as WebVTT** — an Export button writes a `.vtt`, but timestamps are
   **fabricated** (fixed 4 s cues) because the engine doesn't surface word timings yet. (worklist C: WebVTT timings)
 - ❌ **Show original vs cleaned** — only one transcript is stored, so there's no raw/cleaned toggle.

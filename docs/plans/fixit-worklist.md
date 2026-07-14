@@ -40,21 +40,20 @@ Legend — effort: S (≤1h) · M (half-day) · L (multi-session).
 
 ## A. User-reported — DO FIRST (all confirmed in code)
 
-### A1. [ ] Transcript text isn't selectable — S
-- **Now:** read-mode transcript is a plain `TextBlock` (`Views\RecordingDetailPage.xaml:163`); WPF
-  `TextBlock` can't drag-select. Copy works only because it goes through the VM. Same problem on the
-  rewrite view's Instruction/Original/Rewritten bodies (`:81,86,92`).
-- **Fix:** swap to a read-only borderless `TextBox` (`IsReadOnly=True`, `BorderThickness=0`,
-  `Background=Transparent`) or a `SelectableTextBlock`. Keep Edit mode as-is (it already uses a real
-  `ui:TextBox` at `:167`).
+### A1. [~] Transcript text isn't selectable — DONE, awaiting review
+**Done 2026-07-14:** the read-mode transcript and the rewrite Instruction/Original/Rewritten bodies are
+now **read-only borderless transparent `TextBox`es** (`Style="{x:Null}"` to shed WPF-UI's input-box
+look) — they read like body text but support drag-select + Ctrl+C. (`SelectableTextBlock` isn't in this
+SDK's WPF, so used the TextBox approach.) Verified: renders as plain text (screenshot) and the transcript
+is a **read-only Edit control** via UI Automation. Drag-select itself still wants a hands-on test.
 
-### A2. [ ] The "…" (overflow) button does nothing — S (fix) + M (feature)
-- **Now:** the `MoreHorizontal` button (`RecordingDetailPage.xaml:42-52`) has only a `ContextMenu` and
-  **no left-click handler**, so left-click is a no-op (the menu only opens on right-click). The menu's
-  items (Detect speakers / Export VTT / Reveal / Delete) are themselves wired and work.
-- **Fix (S):** left-click should open the menu — `btn.ContextMenu.IsOpen = true` with `PlacementTarget`.
-- **Feature (M):** add **Find & Replace** into that menu (user's request) — a small find/replace bar over
-  the transcript, operating on `Item.Transcript`, with replace/replace-all and match count.
+### A2. [~] The "…" (overflow) button does nothing — FIX done (awaiting review); Find & Replace still TODO
+- **Fix — DONE 2026-07-14:** left-click now opens the menu (`OnMoreClick` sets `ContextMenu.IsOpen` with
+  `PlacementTarget` + `Placement=Bottom`). Verified by invoking the button via UI Automation — the menu
+  (Export as WebVTT / Reveal in File Explorer / Delete) opened under it (screenshot).
+- **Feature (M) — still TODO:** add **Find & Replace** into that menu (user's request) — a small
+  find/replace bar over the transcript, operating on `Item.Transcript`, with replace/replace-all and
+  match count.
 
 ### A3. [~] Simplify Settings layout — DONE, awaiting review
 **Done 2026-07-14 (see "Just shipped"):** basic Settings = Appearance + Microphone + Language +
