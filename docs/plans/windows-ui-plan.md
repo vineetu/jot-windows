@@ -1,5 +1,10 @@
 # Jot for Windows — Native UI Build Plan (v1, pre-review)
 
+**Related docs:** `../features.md` = the canonical Windows feature list + per-feature status;
+`fixit-worklist.md` = what's broken / the prioritized todo; **this doc** = the build plan /
+architecture. Keep the three in sync.
+
+
 **Status:** DRAFT for independent review. No code yet. Scope = build **every visual
 component** of the Windows app with the transcription engine left stubbed behind
 `ITranscriber`. When this plan is solid and approved, we build; STT (milestone 2)

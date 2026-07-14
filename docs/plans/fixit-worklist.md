@@ -1,5 +1,9 @@
 # Jot Windows — Fix-it Worklist
 
+**Related docs:** `../features.md` = the canonical Windows feature list + per-feature status;
+**this worklist** = what's broken / the prioritized todo (items A–D, referenced by ID from
+features.md); `windows-ui-plan.md` = the build plan / architecture. Keep the three in sync.
+
 Compiled 2026-07-14 from (a) user hands-on testing, (b) a fresh "shown-but-broken" code audit, and
 (c) a Mac↔Windows feature-parity gap analysis (source: `projects/JOT-Transcribe/docs/features.md`).
 We work these **one at a time**; nothing here is fixed yet. `file:line` refs are from the audit and
