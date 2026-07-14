@@ -36,7 +36,7 @@
                     <TextBlock Text="AI providers" FontWeight="SemiBold" />
                 </ui:CardExpander.Header>
                 <TextBlock TextWrapping="Wrap"
-                           Text="Cleanup and Rewrite can use OpenAI, Anthropic, Gemini, or a fully-local Ollama server. Set your provider, model, and API key in Settings → AI. (Apple Intelligence is macOS-only and isn't available on Windows.)" />
+                           Text="Cleanup and Rewrite can use OpenAI, Anthropic, Gemini, or a fully-local Ollama server. Set your provider, model, and API key in Settings → AI." />
             </ui:CardExpander>
             <ui:CardExpander Icon="{ui:SymbolIcon TextBulletListSquare24}" Margin="0,0,0,6">
                 <ui:CardExpander.Header>

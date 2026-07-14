@@ -108,7 +108,7 @@
             <TextBlock Text="AI" Style="{StaticResource SectionHeader}" />
             <ui:InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,0,0,8"
                         Title="Bring your own provider"
-                        Message="Apple Intelligence isn't available on Windows. Choose a provider below for optional transcript cleanup and rewrite." />
+                        Message="Choose a provider below for optional transcript cleanup and rewrite. Ollama runs fully on-device; the rest need an API key." />
 
             <ctl:SettingRow Title="Provider" Description="Used for optional cleanup and rewrite. Sensible defaults are chosen for you; Ollama runs locally.">
                 <ComboBox MinWidth="150" ItemsSource="{Binding Providers}"

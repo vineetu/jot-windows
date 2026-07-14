@@ -11,10 +11,10 @@ public static class AiDefaults
 
     public static string Model(string? provider) => Key(provider) switch
     {
-        "openai" => "gpt-4o-mini",
-        "anthropic" => "claude-3-5-haiku-latest",
-        "gemini" => "gemini-1.5-flash",
-        "ollama" => "llama3.2",
+        "openai" => "gpt-5.4-nano",
+        "anthropic" => "claude-haiku-4-5",
+        "gemini" => "gemini-3.1-flash-lite",
+        "ollama" => "gemma4:e4b",
         _ => "",
     };
 
