@@ -84,9 +84,22 @@
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
-            <!-- 5 Done -->
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+            <!-- 5 Save location -->
+            <StackPanel VerticalAlignment="Center"
                         Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=5}">
+                <TextBlock Text="Save location" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,6" />
+                <Border Padding="12,8" CornerRadius="6" Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                        BorderThickness="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}">
+                    <TextBlock Text="{Binding DataDirectory}" TextTrimming="CharacterEllipsis"
+                               FontFamily="{StaticResource JotMonoFont}" FontSize="13" />
+                </Border>
+                <ui:Button Content="Change…" Margin="0,12,0,0" HorizontalAlignment="Left"
+                           Icon="{ui:SymbolIcon Open24}" Command="{Binding BrowseSaveLocationCommand}" />
+            </StackPanel>
+
+            <!-- 6 Done -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=6}">
                 <ui:SymbolIcon Symbol="CheckmarkCircle48" FontSize="72"
                                Foreground="{DynamicResource JotSuccessBrush}" HorizontalAlignment="Center" />
             </StackPanel>

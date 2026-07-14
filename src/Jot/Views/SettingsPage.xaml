@@ -34,7 +34,7 @@
             <ctl:SettingRow Title="Save location" Description="Where Jot keeps your recordings and transcripts.">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="{Binding DataDirectory}" VerticalAlignment="Center" MaxWidth="300"
-                               TextTrimming="MiddleEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     <ui:Button Content="Change…" Margin="10,0,0,0" Command="{Binding BrowseDataDirectoryCommand}" />
                     <ui:Button Content="Default" Margin="6,0,0,0" Command="{Binding UseDefaultDataDirectoryCommand}" />
                 </StackPanel>

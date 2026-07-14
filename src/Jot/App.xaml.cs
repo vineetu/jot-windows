@@ -184,6 +184,9 @@ public partial class App : System.Windows.Application
         // First-run setup wizard: on a normal (no-arg) launch, or forced with `--wizard`.
         bool firstRun = !Services.GetRequiredService<ISettingsStore>().Current.FirstRunComplete;
         if (e.Args.Contains("--wizard") || (e.Args.Length == 0 && firstRun)) ShowWizard();
+        // A normal / launch-at-login start (no args, already set up) opens the window instead of
+        // booting silently to the tray — otherwise users think auto-start didn't work.
+        else if (e.Args.Length == 0) ShowMainWindow();
         // Dev affordance: `--smoketest` constructs every page in turn so XAML-load errors hit crash.log.
         if (e.Args.Contains("--smoketest")) RunSmokeTest();
         // Dev affordance: `--detail` opens the first recording's detail view.
