@@ -32,16 +32,34 @@ public sealed class AudioRecorder : IDisposable
     /// </summary>
     public event Action<float>? LevelChanged;
 
-    public void Start()
+    /// <summary>Starts capture. When <paramref name="deviceId"/> is a valid WASAPI endpoint id the
+    /// selected microphone is used; otherwise the system default device.</summary>
+    public void Start(string? deviceId = null)
     {
         if (IsRecording) return;
 
-        _capture = new WasapiCapture(); // default capture device, shared mode
+        _capture = CreateCapture(deviceId);
         _sourceFormat = _capture.WaveFormat;
         _buffer = new MemoryStream();
 
         _capture.DataAvailable += (_, e) => OnData(e.Buffer, e.BytesRecorded);
         _capture.StartRecording();
+    }
+
+    private static WasapiCapture CreateCapture(string? deviceId)
+    {
+        if (!string.IsNullOrEmpty(deviceId))
+        {
+            try
+            {
+                using var mm = new MMDeviceEnumerator();
+                MMDevice device = mm.GetDevice(deviceId);
+                if (device is not null && device.State == DeviceState.Active)
+                    return new WasapiCapture(device);
+            }
+            catch { /* device gone / access denied — fall back to default below */ }
+        }
+        return new WasapiCapture(); // system default capture device, shared mode
     }
 
     private void OnData(byte[] buffer, int bytes)

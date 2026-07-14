@@ -20,6 +20,10 @@ public sealed class JotSettings
     public int RetentionDays { get; set; } = 7;       // 0 = forever; older recordings are pruned on launch
     public string? InputDeviceId { get; set; }
 
+    /// <summary>Folder where recordings + the transcript library are saved. Null = the default
+    /// (%LOCALAPPDATA%\Jot). Chosen in the setup wizard and changeable in Settings.</summary>
+    public string? DataDirectory { get; set; }
+
     // Transcription / output
     public string Language { get; set; } = "English";
     public string TranscriptionDevice { get; set; } = "CPU"; // CPU | GPU (DirectML) — encoder execution provider
@@ -60,5 +64,9 @@ public interface ISettingsStore
 {
     JotSettings Current { get; }
     void Save();
+
+    /// <summary>Resets every setting to its default and persists — used by "Reset settings".</summary>
+    void Reset();
+
     event EventHandler? Changed;
 }

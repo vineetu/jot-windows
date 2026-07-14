@@ -31,6 +31,14 @@
             <ctl:SettingRow Title="Launch at login" Description="Start Jot in the tray when you sign in.">
                 <ui:ToggleSwitch IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}" />
             </ctl:SettingRow>
+            <ctl:SettingRow Title="Save location" Description="Where Jot keeps your recordings and transcripts.">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding DataDirectory}" VerticalAlignment="Center" MaxWidth="300"
+                               TextTrimming="MiddleEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <ui:Button Content="Change…" Margin="10,0,0,0" Command="{Binding BrowseDataDirectoryCommand}" />
+                    <ui:Button Content="Default" Margin="6,0,0,0" Command="{Binding UseDefaultDataDirectoryCommand}" />
+                </StackPanel>
+            </ctl:SettingRow>
             <ctl:SettingRow Title="Keep audio" Description="Older audio is cleared automatically to save space. Transcripts are always kept.">
                 <ComboBox MinWidth="120" ItemsSource="{Binding RetentionOptions}"
                           SelectedItem="{Binding Retention, Mode=TwoWay}" />

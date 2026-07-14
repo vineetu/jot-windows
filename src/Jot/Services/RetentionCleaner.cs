@@ -11,9 +11,6 @@ namespace Jot.Services;
 /// </summary>
 public sealed class RetentionCleaner
 {
-    private static readonly string RecordingsDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot", "recordings");
-
     private readonly ISettingsStore _settings;
     private readonly IRecordingStore _store;
 
@@ -43,14 +40,15 @@ public sealed class RetentionCleaner
         // 2. Sweep up orphan WAVs on disk older than the window (files no row references).
         try
         {
-            if (Directory.Exists(RecordingsDir))
+            string recordingsDir = JotPaths.RecordingsDir(_settings.Current);
+            if (Directory.Exists(recordingsDir))
             {
                 var referenced = _store.Items
                     .Where(i => !string.IsNullOrEmpty(i.WavPath))
                     .Select(i => Path.GetFullPath(i.WavPath!))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                foreach (string file in Directory.EnumerateFiles(RecordingsDir, "*.wav"))
+                foreach (string file in Directory.EnumerateFiles(recordingsDir, "*.wav"))
                 {
                     if (referenced.Contains(Path.GetFullPath(file))) continue;
                     try { if (File.GetLastWriteTime(file) < cutoff) File.Delete(file); }

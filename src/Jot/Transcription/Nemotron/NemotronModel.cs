@@ -1,4 +1,5 @@
 using System.IO;
+using Jot.Services;
 
 namespace Jot.Transcription.Nemotron;
 
@@ -17,9 +18,9 @@ public sealed class NemotronModel
 
     public NemotronModel(string? directory = null)
     {
+        // Under the data folder (a roomy non-system drive by default) so the ~0.67 GB model stays off C:.
         Directory = directory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Jot", "models", "nemotron-3.5-asr-streaming-0.6b-onnx-int4");
+            JotPaths.DefaultModelsDir, "nemotron-3.5-asr-streaming-0.6b-onnx-int4");
     }
 
     public string Directory { get; }

@@ -99,6 +99,30 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Dev affordance: `--hotkeytest` reports whether a bare Escape (and Alt+Space) can be
+        // registered as a global hotkey on this machine → %TEMP%\jot-hotkeytest.txt.
+        if (e.Args.Contains("--hotkeytest"))
+        {
+            string outHk = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-hotkeytest.txt");
+            var sb = new System.Text.StringBuilder();
+            foreach (var (name, chord) in new[] { ("Escape", "Escape"), ("Alt+Space", "Alt+Space"), ("F13", "F13") })
+            {
+                try
+                {
+                    if (Recording.HotkeyChord.TryParse(chord, out var hc))
+                    {
+                        using var hk = new Recording.GlobalHotkey(hc.Modifiers, hc.VirtualKey, id: 50);
+                        sb.AppendLine($"{name}: registered={hk.IsRegistered}");
+                    }
+                    else sb.AppendLine($"{name}: parse failed");
+                }
+                catch (Exception ex) { sb.AppendLine($"{name}: EXCEPTION {ex.Message}"); }
+            }
+            System.IO.File.WriteAllText(outHk, sb.ToString());
+            Shutdown();
+            return;
+        }
+
         // Dev affordance: `--dmldiag` tries to build the Nemotron encoder on DirectML with VERBOSE
         // logging (ORT prints node placement to stderr) to find the operator DirectML rejects.
         if (e.Args.Contains("--dmldiag"))
@@ -252,7 +276,8 @@ public partial class App : System.Windows.Application
         const string marker = "LIBRARYTEST_MARKER_7731";
         try
         {
-            var store1 = new JsonRecordingStore();
+            var settings = new JsonSettingsStore();
+            var store1 = new JsonRecordingStore(settings);
             int before = store1.Items.Count;
             store1.Add(new Models.RecordingItem
             {
@@ -263,12 +288,11 @@ public partial class App : System.Windows.Application
                 Status = Models.RecordingStatus.Complete,
             });
 
-            string libPath = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot", "library.json");
+            string libPath = Jot.Services.JotPaths.LibraryFile(settings.Current);
             bool fileWritten = System.IO.File.Exists(libPath);
 
             // Fresh store instance = simulates a restart; must load the marker back.
-            var store2 = new JsonRecordingStore();
+            var store2 = new JsonRecordingStore(settings);
             var loaded = store2.Items.FirstOrDefault(i => i.Title == marker);
             bool survived = loaded is not null;
 

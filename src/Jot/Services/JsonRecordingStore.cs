@@ -17,17 +17,18 @@ namespace Jot.Services;
 /// </summary>
 public sealed class JsonRecordingStore : IRecordingStore
 {
-    private static readonly string Dir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
-    private static readonly string FilePath = Path.Combine(Dir, "library.json");
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
+    private readonly string _dir;
+    private readonly string _filePath;
     private bool _loading;
 
     public ObservableCollection<RecordingItem> Items { get; } = new();
 
-    public JsonRecordingStore()
+    public JsonRecordingStore(ISettingsStore settings)
     {
+        _dir = JotPaths.DataDir(settings.Current);
+        _filePath = JotPaths.LibraryFile(settings.Current);
         Load();
         // Persist structural changes (add/remove) that bypass the mutator methods too.
         Items.CollectionChanged += OnItemsChanged;
@@ -54,9 +55,9 @@ public sealed class JsonRecordingStore : IRecordingStore
         _loading = true;
         try
         {
-            if (File.Exists(FilePath))
+            if (File.Exists(_filePath))
             {
-                var dtos = JsonSerializer.Deserialize<List<RecordingDto>>(File.ReadAllText(FilePath), Options);
+                var dtos = JsonSerializer.Deserialize<List<RecordingDto>>(File.ReadAllText(_filePath), Options);
                 if (dtos is not null)
                     foreach (RecordingDto d in dtos)
                         Items.Add(ToItem(d));
@@ -112,9 +113,9 @@ public sealed class JsonRecordingStore : IRecordingStore
         if (_loading) return;
         try
         {
-            Directory.CreateDirectory(Dir);
+            Directory.CreateDirectory(_dir);
             var dtos = Items.Select(ToDto).ToList();
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(dtos, Options));
+            File.WriteAllText(_filePath, JsonSerializer.Serialize(dtos, Options));
         }
         catch { /* best-effort; a failed write shouldn't crash the UI */ }
     }

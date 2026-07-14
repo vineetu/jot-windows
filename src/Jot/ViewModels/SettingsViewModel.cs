@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Jot.Services;
 using Jot.Services.Abstractions;
 using Jot.Services.Ai;
 using Jot.Transcription;
@@ -55,6 +56,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _advancedFeatures;
     [ObservableProperty] private bool _launchAtLogin;
     [ObservableProperty] private string _retention = "7 days";
+    [ObservableProperty] private string _dataDirectory = "";
     [ObservableProperty] private bool _returnToOrigin;
     [ObservableProperty] private AudioInputDevice? _selectedDevice;
 
@@ -133,6 +135,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _advancedFeatures = S.AdvancedFeatures;
         _launchAtLogin = S.LaunchAtLogin;
         _retention = DaysToLabel(S.RetentionDays);
+        _dataDirectory = JotPaths.DataDir(S);
         _returnToOrigin = S.ReturnToOrigin;
         _language = S.Language;
         _transcriptionDevice = S.TranscriptionDevice;
@@ -292,6 +295,33 @@ public sealed partial class SettingsViewModel : ObservableObject
     };
 
     // ---- commands ----
+
+    [RelayCommand]
+    private void BrowseDataDirectory()
+    {
+        using var dlg = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = "Choose where Jot saves your recordings and transcripts",
+            UseDescriptionForTitle = true,
+            SelectedPath = DataDirectory,
+        };
+        if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK || string.IsNullOrWhiteSpace(dlg.SelectedPath))
+            return;
+        S.DataDirectory = dlg.SelectedPath;
+        Save();
+        DataDirectory = dlg.SelectedPath;
+        System.Windows.MessageBox.Show(
+            "Save location updated. Restart Jot for it to fully take effect.",
+            "Save location", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+    }
+
+    [RelayCommand]
+    private void UseDefaultDataDirectory()
+    {
+        S.DataDirectory = null;
+        Save();
+        DataDirectory = JotPaths.DataDir(S);
+    }
 
     [RelayCommand]
     private void PlaySound() => _sound.Preview();

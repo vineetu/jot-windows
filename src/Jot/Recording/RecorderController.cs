@@ -1,5 +1,6 @@
 using System.IO;
 using Jot.Delivery;
+using Jot.Services;
 using Jot.Services.Abstractions;
 using Jot.Services.Ai;
 using Jot.Transcription;
@@ -17,9 +18,6 @@ public enum RecorderState { Idle, Recording, Transcribing }
 /// </summary>
 public sealed class RecorderController : IDisposable
 {
-    private static readonly string RecordingsDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot", "recordings");
-
     private readonly AudioRecorder _recorder;
     private readonly ITranscriber _transcriber;
     private readonly ISettingsStore _settings;
@@ -77,7 +75,7 @@ public sealed class RecorderController : IDisposable
         {
             // Remember where the user is typing so we can deliver the transcript back there.
             _originWindow = Delivery.TextInjector.CaptureForegroundWindow();
-            _recorder.Start();
+            _recorder.Start(_settings.Current.InputDeviceId);
             SetState(RecorderState.Recording);
             _sound.PlayStart();
             _liveActive = _settings.Current.LiveCaptions && _live is not null;
@@ -96,6 +94,7 @@ public sealed class RecorderController : IDisposable
     public async void Cancel()
     {
         if (State != RecorderState.Recording) return;
+        Log("cancel fired (Esc) — discarding recording");
         DisarmCancelHotkey();
         try
         {
@@ -122,7 +121,9 @@ public sealed class RecorderController : IDisposable
         _sound.PlayStop();
         try
         {
-            string wav = Path.Combine(RecordingsDir, $"{DateTime.Now:yyyyMMdd-HHmmss}.wav");
+            string recordingsDir = JotPaths.RecordingsDir(_settings.Current);
+            Directory.CreateDirectory(recordingsDir);
+            string wav = Path.Combine(recordingsDir, $"{DateTime.Now:yyyyMMdd-HHmmss}.wav");
 
             // Native streaming: the transcript is already built as the user spoke, so finishing (while
             // the recorder is still capturing, to catch the last words) is near-instant.
@@ -208,17 +209,22 @@ public sealed class RecorderController : IDisposable
     private void ArmCancelHotkey()
     {
         DisarmCancelHotkey();
-        if (!HotkeyChord.TryParse(_settings.Current.CancelRecordingHotkey, out HotkeyChord chord)) return;
+        if (!HotkeyChord.TryParse(_settings.Current.CancelRecordingHotkey, out HotkeyChord chord))
+        {
+            Log($"cancel-hotkey: could not parse '{_settings.Current.CancelRecordingHotkey}'");
+            return;
+        }
         try
         {
             _cancelHotkey = new GlobalHotkey(chord.Modifiers, chord.VirtualKey, id: 9);
             _cancelHotkey.Pressed += Cancel;
+            Log($"cancel-hotkey armed: {chord} registered={_cancelHotkey.IsRegistered}");
         }
         catch (Exception ex)
         {
             // The cancel key being unavailable shouldn't stop recording — just skip Esc-to-cancel.
             _cancelHotkey = null;
-            LogSuppressed(ex);
+            Log($"cancel-hotkey FAILED to register ({chord}): {ex.Message}");
         }
     }
 
