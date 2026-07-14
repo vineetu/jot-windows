@@ -140,10 +140,21 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
   (traced): cancel is a **global** `RegisterHotKey` for **bare Escape** (`Recording\RecorderController.cs:209-221`;
   `CancelRecordingHotkey` default `Esc`), registered system-wide while recording. **Any** Escape
   keypress anywhere — including dismissing a Windows UAC / permission / app popup that appears
-  mid-dictation — fires `Cancel()` and discards the recording. Fix it properly (no bare global Esc):
-  scope Esc-to-cancel to when the pill/app is foreground, or drop the global Esc entirely and cancel
-  via the pill's **Stop** button (now exists) or a modifier chord. Secondary: verify WASAPI capture
-  survives a UAC secure-desktop switch (it may error out and abort the recording independently). — M
+  mid-dictation — fires `Cancel()` and discards the recording.
+  **Target behavior (user, 2026-07-14):** Escape should **stop-and-SAVE** the in-progress recording into
+  the library so it's viewable/recoverable later — **not discard**. (Windows currently discards; the Mac
+  `features.md` says "discard," but the user wants save — matches the crash-recovery / never-lose-audio
+  goal.) Fix properly: (a) change cancel semantics from discard → **stop-and-save** (reuse the normal
+  stop→transcribe→save path, or persist audio as a pending/recoverable row); (b) stop stealing Escape
+  globally — mirror the Mac app's **"dynamic Escape"** routing (claim Esc contextually, not a system-wide
+  `RegisterHotKey`), or drop global Esc and use the pill's **Stop** button / a modifier chord. Secondary:
+  verify WASAPI capture survives a UAC secure-desktop switch. Unifies with crash-recovery. — M
+- [ ] **D9. Refresh AI provider model defaults.** `Services\Ai\AiDefaults.cs` ships stale models
+  (`gpt-4o-mini` / `claude-3-5-haiku-latest` / `gemini-1.5-flash` / `llama3.2`). Anthropic →
+  `claude-haiku-4-5` (confirmed current Haiku tier). Still need current OpenAI (GPT-5.x), Gemini (3.x
+  flash/lite), and a modern small Ollama model (~2–4B, e.g. gemma) IDs before wiring. — S
+- [ ] **D10. Remove macOS "Apple Intelligence" references.** No Apple Intelligence on Windows; drop the
+  mentions in `SettingsPage.xaml:111` (InfoBar) and `HelpPage.xaml:39`. Keep "Bring your own provider." — S
 
 ## Cross-cutting — do it the right way (no shortcuts)
 
