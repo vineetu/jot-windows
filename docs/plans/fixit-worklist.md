@@ -136,6 +136,23 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
 - [ ] **D7. ARM64 support.** Verify the save-location logic (drive-based, so arch-independent) and,
   more importantly, that native deps (ONNX Runtime / DirectML / FFmpeg) have arm64 builds before
   shipping an ARM target. — L
+- [ ] **D8. A system dialog mid-recording cancels the dictation — HIGH (data loss).** Root cause
+  (traced): cancel is a **global** `RegisterHotKey` for **bare Escape** (`Recording\RecorderController.cs:209-221`;
+  `CancelRecordingHotkey` default `Esc`), registered system-wide while recording. **Any** Escape
+  keypress anywhere — including dismissing a Windows UAC / permission / app popup that appears
+  mid-dictation — fires `Cancel()` and discards the recording. Fix it properly (no bare global Esc):
+  scope Esc-to-cancel to when the pill/app is foreground, or drop the global Esc entirely and cancel
+  via the pill's **Stop** button (now exists) or a modifier chord. Secondary: verify WASAPI capture
+  survives a UAC secure-desktop switch (it may error out and abort the recording independently). — M
+
+## Cross-cutting — do it the right way (no shortcuts)
+
+Once the basics above are solid, do a **hardening / cleanup pass** before adding more features — the
+user's explicit direction: don't build on a shaky foundation. Scope: consolidate the record→
+transcribe→deliver pipeline's error handling, remove dev hooks/dead fields, ensure every write goes
+through `JotPaths` (D5), make "recording survives interruptions" a first-class invariant (crash
+recovery + D8 + WASAPI resilience), and add real logging (D4) so failures are diagnosable. Treat this
+as a milestone, not a side quest.
 
 ## Suggested order
 1. **A1** (selectable text, S) → **A2 fix** (…-button opens menu, S) → **A3** (Settings reorg, M) →
