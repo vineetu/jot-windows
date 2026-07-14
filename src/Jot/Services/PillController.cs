@@ -65,15 +65,18 @@ public sealed class PillController
                 _startedAt = DateTime.Now;
                 StartElapsed();
                 Pill.SetState(PillState.Recording);
+                Pill.SetStopAction(_rewrite.ToggleVoiceRewrite);
                 break;
             case RewritePhase.Working:
                 _transient = false;
                 StopElapsed();
                 Pill.SetState(PillState.Rewriting);
+                _pill?.SetStopAction(null);
                 break;
             case RewritePhase.Idle:
                 StopElapsed();
                 if (!_transient) _pill?.SetState(PillState.Hidden);
+                _pill?.SetStopAction(null);
                 break;
         }
     }
@@ -102,12 +105,14 @@ public sealed class PillController
                 _startedAt = DateTime.Now;
                 StartElapsed();
                 Pill.SetState(PillState.Recording);
+                Pill.SetStopAction(_recorder.Toggle);
                 break;
 
             case RecorderState.Transcribing:
                 _transient = false;
                 StopElapsed();
                 Pill.SetState(PillState.Transcribing);
+                _pill?.SetStopAction(null);
                 break;
 
             case RecorderState.Idle:
@@ -115,6 +120,7 @@ public sealed class PillController
                 // Success/error/notice fire just before Idle and own their own timed dismissal;
                 // a plain idle with nothing pending simply hides the pill.
                 if (!_transient) _pill?.SetState(PillState.Hidden);
+                _pill?.SetStopAction(null);
                 break;
         }
     }

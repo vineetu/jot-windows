@@ -21,6 +21,7 @@ public partial class PillWindow : Window
     private Point _dragStart;
     private bool _expanded;             // is the transcript panel open?
     private bool _lineWhenCollapsed;    // does the current state have a one-line summary to show while collapsed?
+    private Action? _onStop;            // set while a recording is in flight; null hides the Stop button
     private const double RecordingWidth = 460; // fixed pill width while dictating, so streaming text doesn't resize it
 
     public PillWindow()
@@ -53,7 +54,19 @@ public partial class PillWindow : Window
         LineText.Text = FitTail(full);   // newest words that fit the (fixed-width) pill line
         _lineWhenCollapsed = true;
         ApplyExpansion();                // respects whether the user has expanded the pill
+        TranscriptScroll.ScrollToEnd();  // keep the newest words in view as the caption streams
         Reposition();
+    }
+
+    /// <summary>
+    /// Shows/hides the Stop button and wires its action. Called by <see cref="Services.PillController"/>
+    /// with a non-null callback while a dictation or voice-rewrite recording is in flight, and null
+    /// once it stops being interruptible (transcribing, or nothing recording at all).
+    /// </summary>
+    public void SetStopAction(Action? onStop)
+    {
+        _onStop = onStop;
+        StopButton.Visibility = onStop is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // Longest word-aligned suffix of the caption that fits the pill line, prefixed with an ellipsis.
@@ -169,6 +182,7 @@ public partial class PillWindow : Window
                 break;
         }
 
+        TranscriptScroll.ScrollToHome(); // start at the top for a freshly-entered state (not mid-scroll from a prior one)
         ApplyExpansion();
         ShowPill();
     }
@@ -274,6 +288,8 @@ public partial class PillWindow : Window
     {
         try { System.Windows.Clipboard.SetText(TranscriptText.Text); } catch { /* clipboard busy */ }
     }
+
+    private void OnStopClick(object sender, RoutedEventArgs e) => _onStop?.Invoke();
 
     // ---------------- helpers ----------------
 
