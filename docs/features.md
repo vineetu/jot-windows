@@ -87,18 +87,18 @@ local; the rest need an API key.
   Graceful fallback to raw on any failure. (`AiClient.CleanupAsync`)
 - ✅ **Test connection** — a real credentialed probe per provider (GET /models, 1-token messages
   call, /api/tags) with friendly HTTP error messaging. (`AiClient.TestConnectionAsync`)
-- ✅ **Rewrite (no voice)** — select text anywhere → press the Rewrite hotkey → the default prompt is
-  applied (or the prompt picker opens) and the result replaces the selection. (`RewriteController.BeginRewrite`)
-- ✅ **Rewrite with voice** — select text → press the hotkey → speak an instruction → it's
-  transcribed on-device and applied, replacing the selection. Toggle-style (press to start/stop).
-  (`RewriteController.ToggleVoiceRewrite`)
-- ✅ **Rewrite prompt picker** — a searchable overlay of bundled + custom prompts; pinned and
-  recently-picked float to the top; selecting one applies it. (`PromptPickerWindow` / `PromptPickerViewModel`)
-- ⚠️ **Rewrite selection capture** — works, but the synthetic-Ctrl+C capture uses a fixed 120 ms
-  wait, so slow apps (browsers/Electron/Office) can produce a false "Select some text first."
-  (worklist A4)
-- ⚠️ **Rewrite/Paste-last are Advanced-gated** — hidden in Settings **and** unregistered as hotkeys
-  when Advanced features is off, so they're invisible by default. (worklist A4)
+- ❌ **Rewrite (no voice)** — DOES NOT WORK on Windows 11 (user-tested). The code path exists
+  (`RewriteController.BeginRewrite`) but the selection is captured empty, so it just says "select text
+  first." (worklist A4)
+- ❌ **Rewrite with voice** — DOES NOT WORK (same root cause). (`RewriteController.ToggleVoiceRewrite`,
+  worklist A4)
+- ⚠️ **Rewrite prompt picker** — the overlay UI exists (`PromptPickerWindow`) but is unreachable in
+  practice because the Rewrite hotkey/selection doesn't work. (worklist A4)
+- ❌ **Selection capture (synthetic Ctrl+C via SendInput) is unreliable on Win11** — the root cause of
+  the above. A longer clipboard poll did NOT fix it; needs UI Automation `TextPattern` + Win11 input-
+  permission (UIPI) research. (worklist A4)
+- ❌ **Rewrite / paste-last / rewrite-with-voice hotkeys** — not registered and hidden from Settings
+  (only Toggle + Cancel shown) until they actually work. (worklist A4/A5)
 - ❌ **Rewrite intent classifier** — Mac routes instructions into voice-preserving / structural /
   translation / code branches; Windows uses one shared rewrite preamble. (worklist C: intent classifier)
 - ❌ **Editable prompts** — the cleanup prompt and the rewrite invariants are hardcoded constants in
@@ -128,7 +128,8 @@ local; the rest need an API key.
   and delivers back to it. Off by default.
 - ✅ **Clipboard preservation** — keep the transcript on the clipboard, or restore the previous
   contents after paste.
-- ✅ **Copy last transcription** — from the tray, a Recents row, and the Paste-last hotkey path.
+- ⚠️ **Copy last transcription** — the tray and Recents-row (button) paths work; the **Paste-last
+  hotkey** path does NOT work on Win11 (same selection/paste issue as rewrite). (worklist A4)
 - ✅ **Quick copy from any row** — inline copy on every Recents row. (`RecentsViewModel.Copy`)
 
 ## Library & transcripts (Recents)
@@ -172,9 +173,10 @@ local; the rest need an API key.
 
 ## Global shortcuts & tray
 
-- ✅ **Rebindable hotkeys** — Toggle recording (always active), Cancel (Esc), and — when Advanced is
-  on — Paste last, Rewrite, Rewrite with voice. Rebinding via the in-app `HotkeyBox` recorder takes
-  effect immediately. (`HotkeyManager`)
+- ⚠️ **Hotkeys** — only **Toggle recording** and **Cancel** (Esc) are active. Paste-last / Rewrite /
+  Rewrite-with-voice are **not registered** (they don't work — worklist A4). ❌ **Rebinding does NOT
+  work** — the in-app `HotkeyBox` capture doesn't stick, so shortcuts are shown **read-only** (Toggle +
+  Cancel only). (`HotkeyManager`, worklist A5)
   - Windows note: `RegisterHotKey` **does** accept some bare keys (F13–F24, media keys); the real
     constraints are no key-up event and OS-reserved combos.
 - ✅ **System tray menu** — Start/Stop dictation (dynamic label), Copy last transcription, Recent

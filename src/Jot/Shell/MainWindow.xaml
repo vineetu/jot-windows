@@ -30,12 +30,12 @@
                         <ui:SymbolIcon Symbol="Home24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
-                <ui:NavigationViewItem x:Name="AskJotItem" Content="Ask Jot" TargetPageType="{x:Type views:AskJotPage}">
+                <ui:NavigationViewItem x:Name="AskJotItem" Content="Ask Jot" Visibility="Collapsed" TargetPageType="{x:Type views:AskJotPage}">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="Chat24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
-                <ui:NavigationViewItem Content="Prompts" TargetPageType="{x:Type views:PromptsPage}">
+                <ui:NavigationViewItem Content="Prompts" Visibility="Collapsed" TargetPageType="{x:Type views:PromptsPage}">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="Wand24" />
                     </ui:NavigationViewItem.Icon>

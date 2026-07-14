@@ -104,7 +104,10 @@
                 <ui:ToggleSwitch IsChecked="{Binding KeepInClipboard, Mode=TwoWay}" />
             </ctl:SettingRow>
 
-            <!-- AI -->
+            <!-- AI — HIDDEN: cleanup/rewrite/Ask Jot aren't usable yet, so the whole AI section is
+                 turned off until the features actually work. Un-collapse this StackPanel to restore.
+                 See docs/plans/fixit-worklist.md (A4/A5 + AI cleanup unverified). -->
+            <StackPanel Visibility="Collapsed">
             <TextBlock Text="AI" Style="{StaticResource SectionHeader}" />
             <ui:InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,0,0,8"
                         Title="Bring your own provider"
@@ -149,6 +152,8 @@
                     </StackPanel>
                 </ctl:SettingRow>
             </StackPanel>
+            </StackPanel>
+            <!-- /AI hidden -->
 
             <!-- SOUND -->
             <TextBlock Text="Sound" Style="{StaticResource SectionHeader}" />
@@ -173,26 +178,18 @@
 
             <!-- SHORTCUTS -->
             <TextBlock Text="Shortcuts" Style="{StaticResource SectionHeader}" />
-            <ui:InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,0,0,8"
-                        Title="Click a shortcut to change it"
-                        Message="Click a shortcut, then press the new combination (Esc to cancel, Backspace to clear). Global shortcuts work best with a modifier (Ctrl/Alt/Win); single keys like F13–F24 work too." />
+            <!-- Only Toggle + Cancel are shown, and read-only. Rebinding (HotkeyBox click-to-capture)
+                 does NOT work on Windows 11, and the rewrite / rewrite-with-voice / paste-last
+                 shortcuts don't work either (synthetic-copy selection capture + SendInput paste is
+                 unreliable on Win11). All hidden + tracked in docs/plans/fixit-worklist.md (A4, A5). -->
             <ctl:SettingRow Title="Toggle recording" Description="Start and stop dictation.">
-                <ctl:HotkeyBox Chord="{Binding ToggleRecordingHotkey, Mode=TwoWay}" />
+                <TextBlock Text="{Binding ToggleRecordingHotkey}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             </ctl:SettingRow>
             <ctl:SettingRow Title="Cancel recording" Description="Discards the current recording (active only while recording).">
-                <ctl:HotkeyBox Chord="{Binding CancelRecordingHotkey, Mode=TwoWay}" />
+                <TextBlock Text="{Binding CancelRecordingHotkey}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             </ctl:SettingRow>
-            <StackPanel>
-                <ctl:SettingRow Title="Paste last transcription" Description="Paste the most recent transcript at your cursor.">
-                    <ctl:HotkeyBox Chord="{Binding PasteLastHotkey, Mode=TwoWay}" />
-                </ctl:SettingRow>
-                <ctl:SettingRow Title="Rewrite" Description="Select text, then press this to rewrite it via AI (opens the prompt picker).">
-                    <ctl:HotkeyBox Chord="{Binding RewriteHotkey, Mode=TwoWay}" />
-                </ctl:SettingRow>
-                <ctl:SettingRow Title="Rewrite with voice" Description="Dictate an instruction to rewrite the selected text.">
-                    <ctl:HotkeyBox Chord="{Binding RewriteWithVoiceHotkey, Mode=TwoWay}" />
-                </ctl:SettingRow>
-            </StackPanel>
 
             <!-- VOCABULARY (advanced) — HIDDEN until real: custom terms are in-memory only, never
                  persisted or fed to the decoder. Restore by binding Visibility to AdvancedFeatures

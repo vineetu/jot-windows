@@ -51,14 +51,25 @@ Processing CPU/GPU → Live captions → Auto-paste → Enter-after-paste → Ke
 - Note: shortcut **rebinding already exists** (`Controls\HotkeyBox`) — the user thought it didn't
   because it's buried; surfacing it near the top addresses "should be able to change it."
 
-### A4. [x] AI rewrite: "Select some text first" + not shown in Shortcuts — FIXED 2026-07-14
-- ✅ Rewrite / paste-last / rewrite-with-voice hotkeys now register **always** (removed the
-  `AdvancedFeatures` gate in `HotkeyManager.Rebuild`), so Alt+/ actually fires out of the box.
-- ✅ `TextInjector.CaptureSelection` now polls the clipboard up to ~600ms instead of a fixed 120ms
-  wait — slow apps (browsers/Electron/Office) no longer wrongly report nothing-selected.
-- ✅ The three shortcuts are shown in Settings regardless of Advanced mode.
-- Remaining to verify with the user: end-to-end transform (select text → Alt+/ → picker → AI rewrite)
-  against the live Gemini provider. Original notes below.
+### A4. [ ] Rewrite / paste-last / rewrite-with-voice DON'T WORK on Windows 11 — HIGH (core AI feature)
+**Reality (user-tested 2026-07-14): none of these work.** Rewrite still says "select text first";
+paste-last doesn't paste; rewrite-with-voice does nothing.
+- ❌ **My first attempt was WRONG** — I un-gated the hotkeys + polled the clipboard longer (~600ms) in
+  `CaptureSelection`, then told the user it worked **without testing it**. It does not: the hotkey
+  fires but the selection still comes back empty. (Lesson: never claim a Win11 input feature works
+  without an end-to-end test — see [[claude-verify-before-claiming]].)
+- **Root problem:** grabbing the selection via synthetic **Ctrl+C** (`SendInput`) and pasting via
+  synthetic **Ctrl+V** is unreliable/broken on Windows 11 — most likely a focus / **UIPI** input-
+  permission issue, not timing. Genuinely hard Win11 problem, not a one-liner.
+- **Proper fix (needs real research; do NOT guess or claim success without an end-to-end test):** read
+  the foreground selection via **UI Automation `TextPattern.GetSelection`** instead of synthetic copy;
+  determine what Windows 11 requires to read another app's selection / inject input (UIPI / UIAccess /
+  foreground rules). Test against a real app before saying it works.
+- **Done 2026-07-14 (honesty, not a fix):** the three hotkeys are **not registered** and **hidden** from
+  Settings (only Toggle + Cancel shown, read-only). The `CaptureSelection` clipboard-poll was kept
+  (harmless, insufficient alone).
+
+Original diagnosis (still accurate):
 - **False negative (bug):** `TextInjector.CaptureSelection` (`TextInjector.cs:92-110`) clears the
   clipboard, sends synthetic Ctrl+C, then reads after a **fixed 120 ms sleep**. Slow apps
   (browsers/Electron/Office) don't finish the copy in time → empty read → treated as "nothing selected."
@@ -68,6 +79,20 @@ Processing CPU/GPU → Live captions → Auto-paste → Enter-after-paste → Ke
   **two** places — the Settings UI (`SettingsPage.xaml:185-195`) **and** registration
   (`HotkeyManager.cs:39-44`). With Advanced off they're invisible AND unregistered. **Fix:** decide
   whether rewrite is a core (always-on) hotkey or keep it advanced but at least always *show* it.
+
+---
+
+### A5. [ ] Shortcut rebinding ("click to change") doesn't work — M
+The `HotkeyBox` click-to-capture control (Settings → Shortcuts) does not actually rebind — pressing a
+new combination doesn't stick. Removed the misleading "Click a shortcut to change it" banner and made
+**Toggle + Cancel read-only** for now. Needs a real fix: verify the key-capture → persist → re-register
+path and whether Win11 blocks the low-level capture. Until then, shortcuts are display-only.
+
+### AI cleanup — UNVERIFIED (do NOT claim it works)
+"Turn on cleanup" is wired (Gemini + key + enabled) but NOT confirmed working end-to-end. The stale
+default `gemini-1.5-flash` was likely deprecated → silent 404 → raw transcript; D9 changed the default
+to `gemini-3.1-flash-lite`, which *might* fix it — but this has NOT been tested against a live dictation.
+Reliable alternative: point cleanup at local Ollama `gemma4:e4b` (installed + running) and actually verify.
 
 ---
 
@@ -167,6 +192,16 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
 - [ ] **D10. Remove macOS "Apple Intelligence" references.** No Apple Intelligence on Windows; drop the
   mentions in `SettingsPage.xaml:111` (InfoBar) and `HelpPage.xaml:39`. Keep "Bring your own provider." — S
 
+- [ ] **D11. API key not persisted across restarts — HIGH annoyance.** The AI provider API key must be
+  re-entered every time the app restarts. `aikey.dat` is written (DPAPI) and the Settings row even says
+  "Stored only for this session in the preview build" — the key almost certainly isn't loaded back into
+  `AiCredentials` on startup, so the client sees no key until it's re-typed. Fix when AI is revived:
+  load the persisted key on startup and drop the "session only" label. (Moot right now — AI UI hidden.)
+
+> **2026-07-14: AI turned OFF in the UI.** The whole **AI Settings section**, the **Ask Jot** nav item,
+> and the **Prompts** nav item are hidden — AI (cleanup/rewrite/Ask Jot) isn't usable yet, and prompts
+> do little without AI. Un-hide per-feature as each is built properly. Backing code is untouched.
+
 ## Cross-cutting — do it the right way (no shortcuts)
 
 Once the basics above are solid, do a **hardening / cleanup pass** before adding more features — the
@@ -175,6 +210,11 @@ transcribe→deliver pipeline's error handling, remove dev hooks/dead fields, en
 through `JotPaths` (D5), make "recording survives interruptions" a first-class invariant (crash
 recovery + D8 + WASAPI resilience), and add real logging (D4) so failures are diagnosable. Treat this
 as a milestone, not a side quest.
+
+**Principle (user, 2026-07-14):** never surface a component/control unless its whole feature actually
+works. A feature is the unit — if it isn't ready, hide the entire thing. No dead buttons, no toggles
+that no-op, no shortcuts that don't fire, no config for a pipeline that fails. Wire a component in only
+as part of a working feature.
 
 ## Suggested order
 1. **A1** (selectable text, S) → **A2 fix** (…-button opens menu, S) → **A3** (Settings reorg, M) →

@@ -6,25 +6,27 @@ namespace Jot.Recording;
 /// Owns every global hotkey and keeps them in sync with <see cref="JotSettings"/>. Chords are stored
 /// as human strings in settings and (re)registered here, so rebinding in Settings takes effect
 /// immediately — <see cref="Rebuild"/> tears down the old registrations and re-reads the chords.
-/// All hotkeys are registered from settings and kept in sync. Toggle-recording, paste-last, rewrite,
-/// and rewrite-with-voice are all active — rewrite is a core feature, not gated behind advanced mode.
+/// Only the toggle-recording hotkey is registered. Rewrite / paste-last / rewrite-with-voice are
+/// disabled: they don't work on Windows 11 yet (selection capture + paste is unreliable), so we don't
+/// grab global keys for dead features. Re-enable once they actually work — see fixit-worklist A4.
 /// </summary>
 public sealed class HotkeyManager : IDisposable
 {
     private readonly ISettingsStore _settings;
 
     private GlobalHotkey? _toggle;
-    private GlobalHotkey? _pasteLast;
-    private GlobalHotkey? _rewrite;
-    private GlobalHotkey? _rewriteVoice;
 
     /// <summary>Raised when a chord couldn't be registered (already taken / invalid): (label, reason).</summary>
     public event Action<string, string>? RegistrationFailed;
 
     public event Action? ToggleRecording;
+    // Kept for when rewrite/paste-last are revived (worklist A4); not raised while those hotkeys are
+    // disabled, so suppress the "event never used" warning rather than deleting the public surface.
+#pragma warning disable CS0067
     public event Action? PasteLast;
     public event Action? Rewrite;
     public event Action? RewriteWithVoice;
+#pragma warning restore CS0067
 
     public HotkeyManager(ISettingsStore settings) => _settings = settings;
 
@@ -35,11 +37,9 @@ public sealed class HotkeyManager : IDisposable
         JotSettings s = _settings.Current;
 
         _toggle = Register(s.ToggleRecordingHotkey, "Toggle recording", 1, () => ToggleRecording?.Invoke());
-        // Rewrite / paste-last are core features — register them always (not only in advanced mode) so
-        // the transform shortcut actually fires out of the box.
-        _pasteLast = Register(s.PasteLastHotkey, "Paste last transcription", 2, () => PasteLast?.Invoke());
-        _rewrite = Register(s.RewriteHotkey, "Rewrite", 3, () => Rewrite?.Invoke());
-        _rewriteVoice = Register(s.RewriteWithVoiceHotkey, "Rewrite with voice", 4, () => RewriteWithVoice?.Invoke());
+        // Rewrite / rewrite-with-voice / paste-last are intentionally NOT registered: they don't work
+        // on Windows 11 (selection capture + paste is unreliable), so registering global keys for them
+        // just grabs shortcuts for dead features. Re-enable when the transform works. See worklist A4.
     }
 
     private GlobalHotkey? Register(string? chordText, string label, int id, Action onPressed)
@@ -67,9 +67,6 @@ public sealed class HotkeyManager : IDisposable
     private void DisposeHotkeys()
     {
         _toggle?.Dispose(); _toggle = null;
-        _pasteLast?.Dispose(); _pasteLast = null;
-        _rewrite?.Dispose(); _rewrite = null;
-        _rewriteVoice?.Dispose(); _rewriteVoice = null;
     }
 
     public void Dispose() => DisposeHotkeys();
