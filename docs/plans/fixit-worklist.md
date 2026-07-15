@@ -209,8 +209,13 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
   records each completed dictation. About shows a **"Your impact"** card — words, recordings, and estimated
   minutes saved vs typing at ~40 wpm — tied to the donate ask (D1). Verified by screenshot with seeded
   stats (3,200 words / 12 recs / 900 s → 65 min saved; math correct). Real accrual needs live dictations.
-- [ ] **D3. Send feedback → API, not email.** Currently a `mailto:` (`Views\AboutPage.xaml.cs:19-20`).
-  Want: call a feedback API (same pattern as D1), no email client. — S–M
+- [~] **D3. Send feedback → API, not email — DONE, awaiting review.** New `FeedbackWindow` (About →
+  Send feedback) posts to `POST https://jot-donations.ideaflow.page/feedback` via
+  `Services\FeedbackClient`, mirroring the Mac wire format exactly (`{platform:"windows", version,
+  message}` → `{status, id | error}`); surfaces the server's own success/rate-limit/error text inline.
+  No more `mailto:`. UI verified by screenshot; the client matches the Mac `FeedbackClient` 1:1.
+  **Not auto-sent** (would put a test entry in the real feedback inbox) — a one-click user test confirms
+  the live POST.
 - [~] **D4. Real activity log + View Log — DONE, awaiting review.** New `Services\JotLog` is the single
   best-effort activity log (INFO/WARN/ERROR, ~2 MB roll + one backup). App startup, the full dictation
   trace (`RecorderController`), suppressed errors, and unhandled crashes (`App.LogCrash`) all funnel to

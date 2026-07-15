@@ -32,7 +32,10 @@ public partial class AboutPage : Page
     }
 
     private void OnSendFeedback(object sender, RoutedEventArgs e)
-        => OpenUrl("mailto:jottranscribe@gmail.com?subject=Jot%20for%20Windows%20feedback");
+    {
+        var win = new Controls.FeedbackWindow { Owner = Window.GetWindow(this) };
+        win.ShowDialog();
+    }
 
     // Troubleshooting: relaunch the app cleanly (a fresh process, then shut this one down).
     private void OnRestart(object sender, RoutedEventArgs e)

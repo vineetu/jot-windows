@@ -223,6 +223,8 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--pickerdemo")) RunPickerDemo();
         // Dev affordance: `--donatedemo` shows the donate popup (fetches the live donations summary).
         if (e.Args.Contains("--donatedemo")) { new Controls.DonationsWindow().Show(); }
+        // Dev affordance: `--feedbackdemo` shows the feedback composer (does not auto-send).
+        if (e.Args.Contains("--feedbackdemo")) { new Controls.FeedbackWindow().Show(); }
         // First-run setup wizard: on a normal (no-arg) launch, or forced with `--wizard`.
         bool firstRun = !Services.GetRequiredService<ISettingsStore>().Current.FirstRunComplete;
         if (e.Args.Contains("--wizard") || (e.Args.Length == 0 && firstRun)) ShowWizard();

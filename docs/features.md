@@ -223,6 +223,8 @@ local; the rest need an API key.
 - ✅ **Donate to charity popup** — About → Donate opens an in-app window that fetches the live donations
   summary (`jot-donations.ideaflow.page/summary`) and lists charities with per-charity Donate buttons
   (out to Every.org); Jot never handles money or PII. (worklist D1)
+- ✅ **Send feedback (API, not email)** — About → Send feedback opens an in-app composer that POSTs to
+  the feedback service (`jot-donations.ideaflow.page/feedback`); no mailto/email client. (worklist D3)
 - ✅ **Setup wizard** — first-run guided flow, re-runnable from Settings. (`SetupWizardWindow`)
 
 ## About, updates & feedback
