@@ -179,12 +179,14 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
   privacy-respecting / on-device. — M–L
 - [ ] **D3. Send feedback → API, not email.** Currently a `mailto:` (`Views\AboutPage.xaml.cs:19-20`).
   Want: call a feedback API (same pattern as D1), no email client. — S–M
-- [ ] **D4. View log is empty — add real logging.** `OnViewLog` only checks
-  `%LOCALAPPDATA%\Jot\crash.log` (`Views\AboutPage.xaml.cs:22-31`) and ignores the existing
-  `dictation.log`; there's no general activity log. Want: real activity logging + point View Log at it. — S–M
-- [ ] **D5. All logs/data must live in the chosen save folder.** `crash.log` / `dictation.log` write to
-  `%LOCALAPPDATA%\Jot` regardless of the user's `DataDirectory`. Route logs (and any stray writes)
-  through `JotPaths.DataDir(settings)` so nothing lands randomly. — S
+- [~] **D4. Real activity log + View Log — DONE, awaiting review.** New `Services\JotLog` is the single
+  best-effort activity log (INFO/WARN/ERROR, ~2 MB roll + one backup). App startup, the full dictation
+  trace (`RecorderController`), suppressed errors, and unhandled crashes (`App.LogCrash`) all funnel to
+  it; About → View Log opens it. Verified: launching Jot writes `Jot starting` to the log.
+- [~] **D5. All logs live in the chosen save folder — DONE, awaiting review.** `JotLog` writes to
+  `<DataDir>\logs\jot.log` via `JotPaths.DataDir(settings)` (falls back to `%LOCALAPPDATA%\Jot\logs`
+  before init). No more `crash.log`/`dictation.log` scattered in `%LOCALAPPDATA%`. Verified: the log
+  landed at `D:\Jot\logs\jot.log` (this machine's data dir), not LocalAppData.
 - [x] **D6. Save-location default — VERIFIED already correct (no action).** `JotPaths.DefaultDataDir`
   (`Services\JotPaths.cs:21`) auto-picks the roomiest **non-system** drive and falls back to
   `%LOCALAPPDATA%\Jot` on single-drive PCs — it is **not** hardcoded to `D:`. `D:\Jot` is just what it

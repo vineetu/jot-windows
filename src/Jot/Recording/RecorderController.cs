@@ -273,31 +273,11 @@ public sealed class RecorderController : IDisposable
         StateChanged?.Invoke(state);
     }
 
-    private static void LogSuppressed(Exception ex)
-    {
-        try
-        {
-            string dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
-            Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "crash.log"), $"{DateTime.Now:O}  (suppressed) {ex}\n\n");
-        }
-        catch { /* best effort */ }
-    }
+    private static void LogSuppressed(Exception ex) => JotLog.Error("suppressed during recording", ex);
 
     // A plain-text dictation trace so a failed "save" is never a black box: each stage of every
-    // recording is appended to %LOCALAPPDATA%\Jot\dictation.log.
-    private static void Log(string message)
-    {
-        try
-        {
-            string dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
-            Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "dictation.log"), $"{DateTime.Now:HH:mm:ss}  {message}\n");
-        }
-        catch { /* best effort */ }
-    }
+    // recording goes to the shared activity log (JotLog) under the user's data folder.
+    private static void Log(string message) => JotLog.Info(message);
 
     public void Dispose()
     {

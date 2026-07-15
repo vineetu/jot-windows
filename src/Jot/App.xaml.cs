@@ -160,6 +160,10 @@ public partial class App : System.Windows.Application
         }
 
         Services = BuildServices();
+        // Route all logging into the user's chosen data folder (D5) via the single activity log (D4).
+        var settingsForLog = Services.GetRequiredService<ISettingsStore>();
+        JotLog.Initialize(() => JotPaths.DataDir(settingsForLog.Current));
+        JotLog.Info("Jot starting");
         _recorder = Services.GetRequiredService<RecorderController>();
         _rewrite = Services.GetRequiredService<Rewrite.RewriteController>();
         Services.GetRequiredService<PillController>().Attach(); // status pill now owns pipeline feedback
@@ -861,17 +865,7 @@ public partial class App : System.Windows.Application
         => _tray?.ShowBalloonTip(2500, title, message, icon);
 
     private static void LogCrash(Exception? ex)
-    {
-        try
-        {
-            string dir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
-            System.IO.Directory.CreateDirectory(dir);
-            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "crash.log"),
-                $"{DateTime.Now:O}  {ex}\n\n");
-        }
-        catch { /* logging is best-effort */ }
-    }
+        => JotLog.Error("Unhandled exception", ex);
 
     protected override void OnExit(ExitEventArgs e)
     {

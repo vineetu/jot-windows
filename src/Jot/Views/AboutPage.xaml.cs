@@ -21,8 +21,7 @@ public partial class AboutPage : Page
 
     private void OnViewLog(object sender, RoutedEventArgs e)
     {
-        string log = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot", "crash.log");
+        string log = Jot.Services.JotLog.LogFilePath;
         if (File.Exists(log))
             Process.Start(new ProcessStartInfo(log) { UseShellExecute = true });
         else
