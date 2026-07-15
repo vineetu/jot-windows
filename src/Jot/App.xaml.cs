@@ -89,6 +89,17 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Dev affordance: `--ffmpegtest <wav>` proves FfmpegInstaller's lazy download (no longer
+        // bundled — see Import/FfmpegInstaller.cs) actually fetches a working ffmpeg.exe and decodes a
+        // non-wav format end-to-end. Result → %TEMP%\jot-ffmpegtest.txt.
+        int ffmpegTestArg = Array.IndexOf(e.Args, "--ffmpegtest");
+        if (ffmpegTestArg >= 0 && ffmpegTestArg + 1 < e.Args.Length)
+        {
+            RunFfmpegTest(e.Args[ffmpegTestArg + 1]);
+            Shutdown();
+            return;
+        }
+
         // Dev affordance: `--pasteselftest` exercises the REAL paste path (paste into whatever's
         // foreground, as in a live dictation) against a freshly-launched Notepad, then verifies via a
         // clipboard round-trip (select-all + copy). Result → %TEMP%\jot-pasteselftest.txt.
@@ -1119,6 +1130,65 @@ public partial class App : System.Windows.Application
         }
     }
 
+    private static void RunFfmpegTest(string wavPath)
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-ffmpegtest.txt");
+        var sb = new System.Text.StringBuilder();
+        try
+        {
+            // Force a real download: wipe any previously-installed copy first.
+            if (System.IO.Directory.Exists(Import.FfmpegInstaller.InstallDir))
+                System.IO.Directory.Delete(Import.FfmpegInstaller.InstallDir, recursive: true);
+            sb.AppendLine($"Pre-check: IsInstalled={Import.FfmpegInstaller.IsInstalled} (expect False)");
+
+            var installer = new Import.FfmpegInstaller();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Task.Run(() => installer.EnsureInstalledAsync()).GetAwaiter().GetResult();
+            sw.Stop();
+            bool installedNow = Import.FfmpegInstaller.IsInstalled;
+            long size = installedNow ? new System.IO.FileInfo(Import.FfmpegInstaller.ExePath).Length : 0;
+            sb.AppendLine($"Downloaded in {sw.ElapsedMilliseconds} ms, IsInstalled={installedNow}, size={size} bytes");
+
+            // Transcode the given WAV to MP3 with the freshly-downloaded ffmpeg (proves it's a real
+            // working binary, not just a byte-count match), then decode that MP3 the same way
+            // MediaImporter.Decode does — a non-wav format, end to end, post-download.
+            string mp3Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-ffmpegtest-source.mp3");
+            RunFfmpeg(Import.FfmpegInstaller.ExePath, $"-y -hide_banner -loglevel error -i \"{wavPath}\" \"{mp3Path}\"");
+            long mp3Size = new System.IO.FileInfo(mp3Path).Length;
+            sb.AppendLine($"Transcoded WAV->MP3: {mp3Size} bytes");
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = Import.FfmpegInstaller.ExePath,
+                RedirectStandardOutput = true, RedirectStandardError = true,
+                UseShellExecute = false, CreateNoWindow = true,
+            };
+            foreach (string a in new[] { "-hide_banner", "-loglevel", "error", "-i", mp3Path,
+                "-ac", "1", "-ar", "16000", "-f", "f32le", "-" }) psi.ArgumentList.Add(a);
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            using var ms = new System.IO.MemoryStream();
+            proc.StandardOutput.BaseStream.CopyTo(ms);
+            proc.WaitForExit();
+            byte[] pcm = ms.ToArray();
+            sb.AppendLine($"Decoded MP3->PCM: exitCode={proc.ExitCode}, {pcm.Length} bytes ({pcm.Length / 4} float samples)");
+            sb.AppendLine(pcm.Length > 1000 && proc.ExitCode == 0 ? "RESULT: PASS" : "RESULT: FAIL");
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine("RESULT: FAIL (exception)");
+            sb.AppendLine(ex.ToString());
+        }
+        System.IO.File.WriteAllText(outPath, sb.ToString());
+    }
+
+    private static void RunFfmpeg(string exe, string args)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo(exe, args)
+        { UseShellExecute = false, RedirectStandardError = true, CreateNoWindow = true };
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        p.WaitForExit();
+    }
+
     private async Task EnsureSpeechModelReadyAsync(ParakeetTranscriber transcriber)
     {
         try
@@ -1704,6 +1774,7 @@ public partial class App : System.Windows.Application
         });
         services.AddSingleton<RecorderController>();
         services.AddSingleton<Rewrite.RewriteController>();
+        services.AddSingleton<Import.FfmpegInstaller>();
         services.AddSingleton<Import.MediaImporter>();
         services.AddSingleton<PillController>();
 

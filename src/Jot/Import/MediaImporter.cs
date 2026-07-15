@@ -7,10 +7,11 @@ using Jot.Transcription;
 namespace Jot.Import;
 
 /// <summary>
-/// Imports an audio OR video file of any format into the library. Decodes it to 16 kHz mono via the
-/// bundled FFmpeg (which handles mp3/mp4/m4a/mov/webm/mkv/ogg/opus/flac/aac/wav/… — everything), then
-/// runs it through the on-device transcriber and adds the result to the store. A "Needs transcription"
-/// row appears immediately and fills in when done.
+/// Imports an audio OR video file of any format into the library. Decodes it to 16 kHz mono via
+/// FFmpeg (which handles mp3/mp4/m4a/mov/webm/mkv/ogg/opus/flac/aac/wav/… — everything, downloaded on
+/// first use rather than bundled — see <see cref="FfmpegInstaller"/>), then runs it through the
+/// on-device transcriber and adds the result to the store. A "Needs transcription" row appears
+/// immediately and fills in when done.
 /// </summary>
 public sealed class MediaImporter
 {
@@ -18,15 +19,16 @@ public sealed class MediaImporter
 
     private readonly ITranscriber _transcriber;
     private readonly IRecordingStore _store;
+    private readonly FfmpegInstaller _ffmpeg;
 
-    public MediaImporter(ITranscriber transcriber, IRecordingStore store)
+    public MediaImporter(ITranscriber transcriber, IRecordingStore store, FfmpegInstaller ffmpeg)
     {
         _transcriber = transcriber;
         _store = store;
+        _ffmpeg = ffmpeg;
     }
 
-    private static string FfmpegPath =>
-        Path.Combine(AppContext.BaseDirectory, "Assets", "ffmpeg", "ffmpeg.exe");
+    private static string FfmpegPath => FfmpegInstaller.ExePath;
 
     /// <summary>Call on the UI thread. Adds a pending row, then decodes + transcribes off-thread and
     /// updates the row in place.</summary>
@@ -44,6 +46,8 @@ public sealed class MediaImporter
 
         try
         {
+            await _ffmpeg.EnsureInstalledAsync();
+
             (string text, double duration) = await Task.Run(async () =>
             {
                 (float[] samples, double dur) = Decode(path);
@@ -69,7 +73,7 @@ public sealed class MediaImporter
     private static (float[] samples, double durationSeconds) Decode(string path)
     {
         if (!File.Exists(FfmpegPath))
-            throw new FileNotFoundException("Bundled FFmpeg is missing.", FfmpegPath);
+            throw new FileNotFoundException("FFmpeg download did not complete.", FfmpegPath);
 
         var psi = new ProcessStartInfo
         {

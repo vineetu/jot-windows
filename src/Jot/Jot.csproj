@@ -37,11 +37,9 @@
   <ItemGroup>
     <!-- App icon, embedded as a WPF resource so windows + the tray can load it via pack URI -->
     <Resource Include="Assets\jot.ico" />
-    <!-- Bundled FFmpeg: decodes any audio/video format for file import. Copied next to the exe. -->
-    <None Include="Assets\ffmpeg\ffmpeg.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <TargetPath>Assets\ffmpeg\ffmpeg.exe</TargetPath>
-    </None>
+    <!-- FFmpeg (decodes any audio/video format for file import) is no longer bundled — it's ~138 MB
+         and only needed by the optional file-import feature. Jot.Import.FfmpegInstaller downloads it
+         on first use from a standalone GitHub release, decoupled from the app's own version tags. -->
   </ItemGroup>
 
 </Project>

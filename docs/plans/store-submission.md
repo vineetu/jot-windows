@@ -42,12 +42,18 @@ actual MSIX package (that packaging step itself hasn't been attempted yet — se
   requires **identity verification: a photo ID + a selfie match** — this is tied to the
   user's own government ID and can't be delegated. Sign up at
   <https://partner.microsoft.com/dashboard/registration>.
-- [ ] **Code-signing certificate.** MSIX packages must be signed. Options: a certificate from
-  a public CA (e.g. DigiCert, Sectigo) tied to the developer's verified identity/organization,
-  or — once enrolled in Partner Center — Microsoft's own package-signing flow for Store
-  submissions can sign on the developer's behalf at submission time (no separate cert
-  purchase needed if publishing exclusively through the Store). Confirm which applies once
-  the Partner Center account exists.
+- [x] **Code-signing certificate — NOT needed.** Confirmed via Microsoft Learn (2026-07-15
+  research pass): Store submissions do **not** require a CA-trusted certificate. Microsoft
+  re-signs the package with its own certificate automatically after certification passes.
+  A developer-owned cert is only required for **sideloading/enterprise distribution outside
+  the Store** — not applicable here since Jot is Store-only. One less thing to buy/manage.
+- [ ] **Reserve the app name + get package identity.** In Partner Center → create a new app
+  submission → reserve a name (e.g. "Jot" or "Jot for Windows" if taken) → the app's
+  **"App identity"** page (under Product management) then generates the **Package/Identity/Name**,
+  **Publisher** (a `CN=...` string), and **Publisher Display Name** values needed for the MSIX
+  manifest. This has to happen in the user's own Partner Center account. Once reserved, paste
+  those 3 values back so the MSIX packaging attempt (below) can use the real identity instead
+  of a placeholder.
 - [ ] **The actual Store submission + review.** Listing text, screenshots, pricing, age
   rating questionnaire answers, and hitting "Submit" all happen in Partner Center under the
   verified account.
@@ -95,8 +101,7 @@ the `dotnet publish` MSIX route stays inside the existing single-project, CLI-dr
    it's a one-liner).
 3. Verify a packaged build actually launches, dictates, and that
    `IsRunningAsPackagedApp()` correctly returns `true` and skips Velopack.
-4. Code-signing (via Partner Center's submission-time signing if publishing Store-only, or a
-   purchased cert if also side-loading).
-5. Fill out the Store listing (capability justification, IARC questionnaire, privacy URL,
-   data-collection disclosure, screenshots, description).
-6. Submit for review (human).
+4. Fill out the Store listing (capability justification, IARC questionnaire, privacy URL,
+   data-collection disclosure, screenshots, description). No separate code-signing step —
+   the Store signs the package automatically at certification.
+5. Submit for review (human).
