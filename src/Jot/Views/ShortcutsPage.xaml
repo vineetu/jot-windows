@@ -29,8 +29,8 @@
                                Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                 </Border>
             </ctl:SettingRow>
-            <ctl:SettingRow Title="Cancel recording"
-                            Description="Discards the current recording (active only while recording).">
+            <ctl:SettingRow Title="Stop &amp; save recording"
+                            Description="Ends the current recording and saves it (active only while recording). Never discards.">
                 <Border Padding="10,4" CornerRadius="6"
                         Background="{DynamicResource ControlFillColorSecondaryBrush}">
                     <TextBlock Text="{Binding CancelRecordingHotkey}" VerticalAlignment="Center"

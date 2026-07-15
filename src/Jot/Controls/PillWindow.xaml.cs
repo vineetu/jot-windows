@@ -308,15 +308,19 @@ public partial class PillWindow : Window
 
     // ---------------- helpers ----------------
 
-    // Composes the recording hint from whatever chords were provided ("<stop> to stop · <cancel> to
-    // cancel"), omitting either half if its chord is null, and hides the line entirely if neither is set.
+    // Composes the recording hint. Both keys now STOP AND SAVE (Esc no longer discards — see worklist
+    // D8), so they collapse into one "<stop> or <esc> to stop" line; either half is dropped if null,
+    // and the line hides entirely if neither chord is set.
     private void ApplyKeyHint()
     {
-        var parts = new List<string>(2);
-        if (!string.IsNullOrWhiteSpace(_stopChord)) parts.Add($"{_stopChord} to stop");
-        if (!string.IsNullOrWhiteSpace(_cancelChord)) parts.Add($"{_cancelChord} to cancel");
-        if (parts.Count == 0) { Hint.Visibility = Visibility.Collapsed; return; }
-        Hint.Text = string.Join("      ·      ", parts);
+        bool hasStop = !string.IsNullOrWhiteSpace(_stopChord);
+        bool hasCancel = !string.IsNullOrWhiteSpace(_cancelChord);
+        string text;
+        if (hasStop && hasCancel) text = $"{_stopChord} or {_cancelChord} to stop";
+        else if (hasStop) text = $"{_stopChord} to stop";
+        else if (hasCancel) text = $"{_cancelChord} to stop";
+        else { Hint.Visibility = Visibility.Collapsed; return; }
+        Hint.Text = text;
         Hint.Visibility = Visibility.Visible;
     }
 

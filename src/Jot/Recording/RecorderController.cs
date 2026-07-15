@@ -13,8 +13,9 @@ public enum RecorderState { Idle, Recording, Transcribing }
 /// <summary>
 /// Owns the record → transcribe → paste state machine. The UI (tray + pill) subscribes to state
 /// rather than orchestrating. Transcription runs off the UI thread; the paste hops back onto the STA
-/// dispatcher (clipboard requires it). While recording, a global cancel hotkey (Esc by default) is
-/// armed so the user can abandon a dictation; it's released the moment recording ends.
+/// dispatcher (clipboard requires it). While recording, a global Esc hotkey is armed that STOPS AND
+/// SAVES the dictation (never discards — a stray Esc, e.g. dismissing a dialog mid-recording, must not
+/// lose the recording; see worklist D8); it's released the moment recording ends.
 /// </summary>
 public sealed class RecorderController : IDisposable
 {
@@ -28,7 +29,7 @@ public sealed class RecorderController : IDisposable
     private readonly LiveTranscription? _live;   // null if the engine can't stream
     private bool _liveActive;                     // is this recording being live-streamed?
     private IntPtr _originWindow;                 // the app that was focused when this recording began
-    private GlobalHotkey? _cancelHotkey;          // armed only while recording
+    private GlobalHotkey? _stopHotkey;            // Esc, armed only while recording — stops AND saves
 
     public RecorderController(AudioRecorder recorder, ITranscriber transcriber,
         ISettingsStore settings, IRecordingStore store, ISoundService sound,
@@ -56,7 +57,7 @@ public sealed class RecorderController : IDisposable
     public event Action<string>? PartialTranscript;   // live-caption partial (background thread)
     public event Action<string, string>? Failed;      // (title, message)
     public event Action? NothingTranscribed;
-    public event Action? Cancelled;                   // recording abandoned via the cancel hotkey
+    public event Action? Cancelled;                   // discard path (Cancel()); not wired to any key today
 
     /// <summary>Hotkey / tray entry point: start if idle, stop+deliver if recording, ignore while busy.</summary>
     public async void Toggle()
@@ -80,7 +81,7 @@ public sealed class RecorderController : IDisposable
             _sound.PlayStart();
             _liveActive = _settings.Current.LiveCaptions && _live is not null;
             if (_liveActive) _live!.Start();
-            ArmCancelHotkey();
+            ArmStopHotkey();
             Log($"--- start (live={_liveActive}, device={_settings.Current.TranscriptionDevice}) ---");
         }
         catch (Exception ex)
@@ -90,12 +91,24 @@ public sealed class RecorderController : IDisposable
         }
     }
 
-    /// <summary>Abandons the in-flight recording without transcribing or pasting (the cancel hotkey).</summary>
+    /// <summary>
+    /// Esc entry point while recording: STOP AND SAVE (mirrors the Mac app). Routed to the normal
+    /// stop→transcribe→save path so a stray Esc can never lose the recording — the whole point of D8.
+    /// </summary>
+    private async void StopAndSaveFromHotkey()
+    {
+        if (State != RecorderState.Recording) return;
+        Log("stop-and-save fired (Esc)");
+        await StopAndDeliverAsync();
+    }
+
+    /// <summary>Discards the in-flight recording without transcribing or pasting. Kept as an API for a
+    /// future explicit "discard" affordance; deliberately NOT bound to Esc anymore (Esc now saves).</summary>
     public async void Cancel()
     {
         if (State != RecorderState.Recording) return;
-        Log("cancel fired (Esc) — discarding recording");
-        DisarmCancelHotkey();
+        Log("cancel fired — discarding recording");
+        DisarmStopHotkey();
         try
         {
             if (_liveActive && _live is not null) await _live.CancelAsync();
@@ -116,7 +129,7 @@ public sealed class RecorderController : IDisposable
 
     private async Task StopAndDeliverAsync()
     {
-        DisarmCancelHotkey();
+        DisarmStopHotkey();
         SetState(RecorderState.Transcribing);
         _sound.PlayStop();
         try
@@ -204,34 +217,34 @@ public sealed class RecorderController : IDisposable
         }
     }
 
-    // ---- cancel hotkey (Esc by default), live only while recording ------------------------------
+    // ---- stop hotkey (Esc by default), live only while recording — stops AND saves ----------------
 
-    private void ArmCancelHotkey()
+    private void ArmStopHotkey()
     {
-        DisarmCancelHotkey();
+        DisarmStopHotkey();
         if (!HotkeyChord.TryParse(_settings.Current.CancelRecordingHotkey, out HotkeyChord chord))
         {
-            Log($"cancel-hotkey: could not parse '{_settings.Current.CancelRecordingHotkey}'");
+            Log($"stop-hotkey: could not parse '{_settings.Current.CancelRecordingHotkey}'");
             return;
         }
         try
         {
-            _cancelHotkey = new GlobalHotkey(chord.Modifiers, chord.VirtualKey, id: 9);
-            _cancelHotkey.Pressed += Cancel;
-            Log($"cancel-hotkey armed: {chord} registered={_cancelHotkey.IsRegistered}");
+            _stopHotkey = new GlobalHotkey(chord.Modifiers, chord.VirtualKey, id: 9);
+            _stopHotkey.Pressed += StopAndSaveFromHotkey;
+            Log($"stop-hotkey armed: {chord} registered={_stopHotkey.IsRegistered}");
         }
         catch (Exception ex)
         {
-            // The cancel key being unavailable shouldn't stop recording — just skip Esc-to-cancel.
-            _cancelHotkey = null;
-            Log($"cancel-hotkey FAILED to register ({chord}): {ex.Message}");
+            // The stop key being unavailable shouldn't stop recording — just skip Esc-to-stop.
+            _stopHotkey = null;
+            Log($"stop-hotkey FAILED to register ({chord}): {ex.Message}");
         }
     }
 
-    private void DisarmCancelHotkey()
+    private void DisarmStopHotkey()
     {
-        _cancelHotkey?.Dispose();
-        _cancelHotkey = null;
+        _stopHotkey?.Dispose();
+        _stopHotkey = null;
     }
 
     private Models.RecordingItem BuildRecording(RecordingResult result, string transcript) => new()
@@ -288,7 +301,7 @@ public sealed class RecorderController : IDisposable
 
     public void Dispose()
     {
-        DisarmCancelHotkey();
+        DisarmStopHotkey();
         _live?.CancelAsync().GetAwaiter().GetResult();
         _recorder.Dispose();
     }

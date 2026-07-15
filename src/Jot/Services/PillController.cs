@@ -119,7 +119,7 @@ public sealed class PillController
                 _transient = false;
                 _startedAt = DateTime.Now;
                 StartElapsed();
-                var (stop, cancel) = RecordingHints();   // Esc (cancel) is armed by RecorderController while recording
+                var (stop, cancel) = RecordingHints();   // both stop AND save (Esc no longer discards — D8)
                 Pill.SetKeyHints(stop, cancel);
                 Pill.SetState(PillState.Recording);
                 Pill.SetStopAction(_recorder.Toggle);

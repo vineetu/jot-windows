@@ -192,7 +192,19 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
 - [ ] **D7. ARM64 support.** Verify the save-location logic (drive-based, so arch-independent) and,
   more importantly, that native deps (ONNX Runtime / DirectML / FFmpeg) have arm64 builds before
   shipping an ARM target. — L
-- [ ] **D8. A system dialog mid-recording cancels the dictation — HIGH (data loss).** Root cause
+- [~] **D8. Escape now STOPS-AND-SAVES (no more data loss) — DONE (part a), awaiting review.**
+  **Done 2026-07-14:** the Esc hotkey (armed only while recording) is rerouted from `Cancel()` (discard)
+  to `StopAndSaveFromHotkey()` → the normal `StopAndDeliverAsync` path, so a stray Esc — e.g. dismissing
+  a dialog mid-dictation — saves the recording instead of losing it. Relabelled the Shortcuts row
+  ("Stop & save recording … Never discards") and the pill hint ("Alt + Space or Esc to stop").
+  `Cancel()`/discard kept as an unwired API for a future explicit discard affordance.
+  **Still TODO (part b, harder):** Esc is still a *global* hotkey while recording, so it's swallowed
+  system-wide during a dictation (a dialog's own Esc won't reach it, and recording ends early — but now
+  safely saved). True fix = dynamic/contextual Esc (low-level hook that passes Esc through) instead of a
+  global `RegisterHotKey`; plus verify WASAPI survives a UAC secure-desktop switch. Behavior needs a
+  hands-on mic+Esc test (can't be driven headlessly).
+  Original diagnosis below.
+- [ ] ~~D8 original~~ — A system dialog mid-recording cancels the dictation — HIGH (data loss). Root cause
   (traced): cancel is a **global** `RegisterHotKey` for **bare Escape** (`Recording\RecorderController.cs:209-221`;
   `CancelRecordingHotkey` default `Esc`), registered system-wide while recording. **Any** Escape
   keypress anywhere — including dismissing a Windows UAC / permission / app popup that appears
