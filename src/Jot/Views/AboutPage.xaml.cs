@@ -2,12 +2,23 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using Jot.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Jot.Views;
 
 public partial class AboutPage : Page
 {
-    public AboutPage() => InitializeComponent();
+    public AboutPage()
+    {
+        InitializeComponent();
+        var stats = App.Services.GetRequiredService<UsageStats>();
+        StatsText.Text = stats.TotalDictations == 0
+            ? "Dictate something and Jot will start tracking how much time you've saved versus typing."
+            : $"You've dictated {stats.TotalWords:N0} words across {stats.TotalDictations:N0} recordings — " +
+              $"about {stats.MinutesSaved:N0} minutes saved versus typing. Jot is free; if it saves you time, " +
+              $"consider donating to charity below.";
+    }
 
     private void OnCheckUpdates(object sender, RoutedEventArgs e)
         => System.Windows.MessageBox.Show(

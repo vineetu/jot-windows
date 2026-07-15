@@ -40,6 +40,18 @@
                 </StackPanel>
             </ui:Card>
 
+            <!-- Usage impact (on-device counters — D2) -->
+            <ui:Card Margin="0,16,0,0">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Timer24" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                        <TextBlock Text="Your impact" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock x:Name="StatsText" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </ui:Card>
+
             <!-- Support -->
             <TextBlock Text="Support Jot" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,24,0,8" />
             <ui:Button Content="Donate to charity" Icon="{ui:SymbolIcon Heart24}" Appearance="Primary" Click="OnDonate" />

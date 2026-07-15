@@ -214,6 +214,8 @@ local; the rest need an API key.
 - ❌ **Per-field info popovers / "Learn more →" deep-links** — Mac has an info dot on every field.
   (worklist C: info popovers)
 - ✅ **"Restart Jot" troubleshooting action** — About → Troubleshooting relaunches the app cleanly.
+- ✅ **Usage impact / "time saved"** — on-device counters (`UsageStats`, `stats.json`) surface words,
+  recordings, and estimated minutes saved vs typing on the About page; nothing leaves the PC. (worklist D2)
 - ✅ **Setup wizard** — first-run guided flow, re-runnable from Settings. (`SetupWizardWindow`)
 
 ## About, updates & feedback

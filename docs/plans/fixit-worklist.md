@@ -188,9 +188,11 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
   (`Views\AboutPage.xaml.cs:17` → `jot-transcribe.com/donations/`). Want: an in-app popup that calls
   the donations API (the Mac app has it), showing charities + amounts. Framing: Jot is free — steer
   users to **donate to charity** rather than pay us. — M
-- [ ] **D2. Analytics + "time saved."** Port the Mac app's analytics. Track usage locally and surface
-  "how much time you've saved by dictating" — the hook that motivates the charity donation (D1). Keep it
-  privacy-respecting / on-device. — M–L
+- [~] **D2. Analytics + "time saved" — DONE, awaiting review.** New `Services\UsageStats` (on-device,
+  `<DataDir>\stats.json`, never sent anywhere) counts total dictations/words/seconds; `RecorderController`
+  records each completed dictation. About shows a **"Your impact"** card — words, recordings, and estimated
+  minutes saved vs typing at ~40 wpm — tied to the donate ask (D1). Verified by screenshot with seeded
+  stats (3,200 words / 12 recs / 900 s → 65 min saved; math correct). Real accrual needs live dictations.
 - [ ] **D3. Send feedback → API, not email.** Currently a `mailto:` (`Views\AboutPage.xaml.cs:19-20`).
   Want: call a feedback API (same pattern as D1), no email client. — S–M
 - [~] **D4. Real activity log + View Log — DONE, awaiting review.** New `Services\JotLog` is the single

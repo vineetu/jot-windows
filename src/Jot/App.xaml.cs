@@ -195,7 +195,7 @@ public partial class App : System.Windows.Application
 
         // Dev affordance: `--show` surfaces the main window immediately (Jot normally boots to tray).
         if (e.Args.Contains("--show") || e.Args.Contains("--detail") || e.Args.Contains("--settings")
-            || e.Args.Contains("--shortcuts"))
+            || e.Args.Contains("--shortcuts") || e.Args.Contains("--about"))
             ShowMainWindow();
         if (e.Args.Contains("--settings"))
             Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.SettingsPage)),
@@ -203,6 +203,10 @@ public partial class App : System.Windows.Application
         // Dev affordance: `--shortcuts` opens the window on the new Shortcuts page for a visual check.
         if (e.Args.Contains("--shortcuts"))
             Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.ShortcutsPage)),
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        // Dev affordance: `--about` opens the window on the About page.
+        if (e.Args.Contains("--about"))
+            Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.AboutPage)),
                 System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         // Dev affordance: `--pilldemo` drives the pill with a speech-like envelope (no mic needed).
         if (e.Args.Contains("--pilldemo")) RunPillDemo();
@@ -706,6 +710,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<Transcription.Nemotron.NemotronFp16Model>();
         services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>();
         services.AddSingleton<RetentionCleaner>();
+        services.AddSingleton<UsageStats>();
         services.AddSingleton<HotkeyManager>();
         // Nemotron 3.5 (streaming RNNT) is the engine. Two builds: the int4 export runs CPU-only
         // (int4 has no DirectML kernels); the FP16 export runs on DirectML. When the user picks the GPU

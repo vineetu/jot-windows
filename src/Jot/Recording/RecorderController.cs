@@ -26,6 +26,7 @@ public sealed class RecorderController : IDisposable
     private readonly ISoundService _sound;
     private readonly IAiClient _ai;
     private readonly AiCredentials _credentials;
+    private readonly UsageStats _stats;
     private readonly LiveTranscription? _live;   // null if the engine can't stream
     private bool _liveActive;                     // is this recording being live-streamed?
     private IntPtr _originWindow;                 // the app that was focused when this recording began
@@ -33,7 +34,7 @@ public sealed class RecorderController : IDisposable
 
     public RecorderController(AudioRecorder recorder, ITranscriber transcriber,
         ISettingsStore settings, IRecordingStore store, ISoundService sound,
-        IAiClient ai, AiCredentials credentials)
+        IAiClient ai, AiCredentials credentials, UsageStats stats)
     {
         _recorder = recorder;
         _transcriber = transcriber;
@@ -42,6 +43,7 @@ public sealed class RecorderController : IDisposable
         _sound = sound;
         _ai = ai;
         _credentials = credentials;
+        _stats = stats;
         if (transcriber is IStreamingTranscriber streaming)
         {
             _live = new LiveTranscription(recorder, streaming);
@@ -175,6 +177,7 @@ public sealed class RecorderController : IDisposable
             {
                 text = await MaybeCleanupAsync(text);
                 _store.Add(BuildRecording(result, text));
+                _stats.RecordDictation(text, result.Duration.TotalSeconds); // on-device usage counters (D2)
                 Log($"SAVED: \"{TitleFrom(text)}\" ({text.Length} chars); library items={_store.Items.Count}");
                 if (_settings.Current.AutoPaste)
                 {
