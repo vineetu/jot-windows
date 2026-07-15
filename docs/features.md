@@ -190,6 +190,10 @@ local; the rest need an API key.
   tray; Quit exits. (`App.SetupTray`)
 - ❌ **"Check for updates…" in the tray** — hidden because it's a canned "up to date" with no network
   check. (worklist B3)
+- ⚠️ **Uninstall via "Add or remove programs" + wipe data** — the Velopack uninstall hook
+  (`WipeAllData`) is wired to delete all Jot data + the launch-at-login entry on removal; the
+  Add/Remove Programs entry appears once Jot is installed via the Velopack `Setup.exe` (packaging
+  step pending). (worklist B3b)
 
 ## Main window, navigation & settings
 

@@ -39,6 +39,15 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Velopack must run before anything else: it services the install / update / uninstall hooks the
+        // Setup.exe invokes. When the user removes Jot from "Add or remove programs", the uninstaller runs
+        // us with the uninstall hook and OnBeforeUninstallFastCallback wipes all Jot data. On a normal
+        // launch this returns immediately. (Registration in Add/Remove Programs comes from installing via
+        // the Velopack-built Setup.exe — see docs/plans/fixit-worklist.md B3/uninstall.)
+        VelopackApp.Build()
+            .OnBeforeUninstallFastCallback(_ => WipeAllData())
+            .Run();
+
         base.OnStartup(e);
 
         DispatcherUnhandledException += (_, ex) => { LogCrash(ex.Exception); };
@@ -947,6 +956,66 @@ public partial class App : System.Windows.Application
 
     private static void LogCrash(Exception? ex)
         => JotLog.Error("Unhandled exception", ex);
+
+    /// <summary>
+    /// Called by the Velopack uninstaller (Add or remove programs → Uninstall): removes all of Jot's
+    /// data and its launch-at-login entry. Deliberately targets known Jot artifacts (recordings, models,
+    /// logs, library, key, stats) rather than blindly nuking the data folder, in case the user pointed
+    /// their save location at a shared directory. Best-effort — never throw out of an uninstall hook.
+    /// </summary>
+    private static void WipeAllData()
+    {
+        // 1. Remove the per-user "launch at login" Run entry so nothing tries to start after removal.
+        try
+        {
+            using Microsoft.Win32.RegistryKey? run = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+            run?.DeleteValue("Jot", throwOnMissingValue: false);
+        }
+        catch { /* best effort */ }
+
+        // 2. Delete Jot's data under the chosen save location.
+        try
+        {
+            var settings = new JsonSettingsStore();
+            JotSettings s = settings.Current;
+            string dataDir = JotPaths.DataDir(s);
+            TryDeleteDir(JotPaths.RecordingsDir(s));
+            TryDeleteDir(JotPaths.ModelsDir(s));
+            TryDeleteDir(System.IO.Path.Combine(dataDir, "logs"));
+            TryDeleteFile(JotPaths.LibraryFile(s));
+            TryDeleteFile(System.IO.Path.Combine(dataDir, "aikey.dat"));
+            TryDeleteFile(System.IO.Path.Combine(dataDir, "stats.json"));
+            // Remove the data folder itself only if it's now empty (don't delete a shared folder's contents).
+            try
+            {
+                if (System.IO.Directory.Exists(dataDir) &&
+                    !System.IO.Directory.EnumerateFileSystemEntries(dataDir).Any())
+                    System.IO.Directory.Delete(dataDir);
+            }
+            catch { /* leave a non-empty custom folder in place */ }
+        }
+        catch { /* best effort */ }
+
+        // 3. Delete the app-config folder in LocalAppData (settings.json + any legacy logs).
+        try
+        {
+            string local = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
+            if (System.IO.Directory.Exists(local)) System.IO.Directory.Delete(local, recursive: true);
+        }
+        catch { /* best effort */ }
+    }
+
+    private static void TryDeleteDir(string dir)
+    {
+        try { if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, recursive: true); } catch { }
+    }
+
+    private static void TryDeleteFile(string file)
+    {
+        try { if (System.IO.File.Exists(file)) System.IO.File.Delete(file); } catch { }
+    }
 
     protected override void OnExit(ExitEventArgs e)
     {

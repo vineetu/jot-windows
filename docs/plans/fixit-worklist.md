@@ -146,6 +146,18 @@ Reliable alternative: point cleanup at local Ollama `gemma4:e4b` (installed + ru
   ✅ **Hidden** in both the tray menu (`App.xaml.cs`) and About page (`AboutPage.xaml`). To build: tie
   into Velopack auto-update.
 
+- [~] **B3b. Uninstall via "Add or remove programs" + wipe data — hook DONE, needs packaging + hands-on.**
+  (User request 2026-07-14: users should remove Jot the Windows way, and it should delete all data.)
+  **Done:** `VelopackApp.Build().OnBeforeUninstallFastCallback(_ => WipeAllData()).Run()` now runs first in
+  `App.OnStartup`; `WipeAllData` removes the launch-at-login Run key + Jot's data (recordings, models,
+  logs, library.json, aikey.dat, stats.json; and `%LOCALAPPDATA%\Jot`), targeting known artifacts so a
+  shared custom save folder isn't blindly nuked. Verified: normal launch still works with Velopack wired
+  (no regression). **Remaining (packaging, not code):** the **Add/Remove Programs entry only exists once
+  Jot is installed via the Velopack `Setup.exe`** — the current dev build runs from `bin`, so it won't
+  appear there yet. Build the installer with `vpk` (`dotnet publish -c Release -r win-x64` → `vpk pack`),
+  install it, then the uninstall→wipe path is real. End-to-end uninstall NOT yet verified (needs a real
+  install). The `WipeAllData` deletion logic itself is unit-testable but only fires from the Velopack hook.
+
 ---
 
 ## C. Mac feature gaps (parity backlog — prioritize later)
