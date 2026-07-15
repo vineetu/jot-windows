@@ -104,11 +104,16 @@ Original diagnosis (still accurate):
 
 ---
 
-### A5. [ ] Shortcut rebinding ("click to change") doesn't work — M
-The `HotkeyBox` click-to-capture control does not actually rebind — pressing a new combination doesn't
-stick. Shortcuts now live on their own **read-only** left-nav page (Toggle + Cancel) with a "custom
-shortcuts coming soon" note — no rebinding UI is shown. Needs a real fix: verify the key-capture →
-persist → re-register path and whether Win11 blocks the low-level capture. Until then, display-only.
+### A5. [~] Shortcut rebinding — RE-ENABLED, awaiting hands-on review
+**Investigated 2026-07-14.** The `HotkeyBox` capture logic is actually **correct**: a `--hotkeyboxtest`
+harness that focuses a real `HotkeyBox` and raises a routed `PreviewKeyDown` shows the box captures the
+key and updates its two-way `Chord` DP (PASS; `after=[J]`). The earlier "doesn't work" could not be
+reproduced — synthetic OS key input can't be routed to a non-foreground window in this headless env
+(`foregroundMatch=False`, `rawKeysSeenByBox=0`), which is why physical-input testing failed here, not a
+control bug. So **re-enabled rebinding**: the Shortcuts page now uses editable `HotkeyBox`es (Toggle +
+Stop) bound TwoWay to the VM (persists + App re-registers on change). **Still needs the user's physical
+keyboard test** — I can't drive real OS key input headlessly. If it doesn't stick when tested, reopen
+(check click-to-focus in the NavigationView page context, and that the new chord actually re-registers).
 
 ### AI cleanup — UNVERIFIED (do NOT claim it works)
 "Turn on cleanup" is wired (Gemini + key + enabled) but NOT confirmed working end-to-end. The stale

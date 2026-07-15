@@ -133,6 +133,14 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Dev affordance: `--hotkeyboxtest` focuses a real HotkeyBox and sends a synthetic Ctrl+J to
+        // prove the click-to-capture → chord path works (worklist A5). Result → %TEMP%\jot-hotkeyboxtest.txt.
+        if (e.Args.Contains("--hotkeyboxtest"))
+        {
+            RunHotkeyBoxTest();
+            return;
+        }
+
         // Dev affordance: `--dmldiag` tries to build the Nemotron encoder on DirectML with VERBOSE
         // logging (ORT prints node placement to stderr) to find the operator DirectML rejects.
         if (e.Args.Contains("--dmldiag"))
@@ -237,6 +245,8 @@ public partial class App : System.Windows.Application
     private static extern IntPtr GetForegroundWindow();
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
     private static extern bool SystemParametersInfo(uint action, uint param, IntPtr vparam, uint winIni);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
     private void RunPasteSelfTest()
     {
@@ -549,6 +559,69 @@ public partial class App : System.Windows.Application
         {
             System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
         }
+    }
+
+    private void RunHotkeyBoxTest()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-hotkeyboxtest.txt");
+        var log = new System.Text.StringBuilder();
+        try
+        {
+            var box = new Controls.HotkeyBox { Chord = "Alt+Space" };
+            int rawKeysSeen = 0;
+            var w = new Window
+            {
+                Width = 320, Height = 130, Topmost = true, Title = "HotkeyBox test",
+                Content = box, WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            };
+            // Observe every key that reaches the box, even ones its own handler marks handled.
+            box.AddHandler(System.Windows.Input.Keyboard.PreviewKeyDownEvent,
+                new System.Windows.Input.KeyEventHandler((_, ke) => rawKeysSeen++), handledEventsToo: true);
+
+            SystemParametersInfo(0x2001, 0, IntPtr.Zero, 0); // defeat the foreground lock
+
+            w.Show(); w.Activate();
+            IntPtr hwnd = new System.Windows.Interop.WindowInteropHelper(w).EnsureHandle();
+            Delivery.TextInjector.FocusWindow(hwnd);
+            Pump(300);
+            Delivery.TextInjector.FocusWindow(hwnd);
+            box.Focus();
+            System.Windows.Input.Keyboard.Focus(box);
+            Pump(400);
+
+            string focused = System.Windows.Input.Keyboard.FocusedElement?.GetType().Name ?? "null";
+            bool foreground = GetForegroundWindow() == hwnd;
+            string before = box.Chord;
+
+            // Foreground-independent capture check: raise a routed PreviewKeyDown for 'J' directly on the
+            // box (synthetic OS input can't be routed to a non-foreground window in this environment). No
+            // modifier is physically held, so the expected captured chord is just "J".
+            var src = System.Windows.PresentationSource.FromVisual(box);
+            if (src is not null)
+            {
+                var args = new System.Windows.Input.KeyEventArgs(
+                    System.Windows.Input.Keyboard.PrimaryDevice, src, 0, System.Windows.Input.Key.J)
+                { RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent };
+                box.RaiseEvent(args);
+            }
+            Pump(250);
+
+            string after = box.Chord;
+            bool pass = after == "J";
+            log.AppendLine($"focused={focused}");
+            log.AppendLine($"foregroundMatch={foreground}");
+            log.AppendLine($"rawKeysSeenByBox={rawKeysSeen}");
+            log.AppendLine($"presentationSource={(src is not null)}");
+            log.AppendLine($"before=[{before}]");
+            log.AppendLine($"after=[{after}]  (expected J)");
+            System.IO.File.WriteAllText(outPath, $"{(pass ? "PASS" : "FAIL")}\n{log}");
+            w.Close();
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n{log}");
+        }
+        Shutdown();
     }
 
     private void RunPillDemo()

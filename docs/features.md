@@ -177,10 +177,10 @@ local; the rest need an API key.
 
 ## Global shortcuts & tray
 
-- ⚠️ **Hotkeys** — only **Toggle recording** and **Cancel** (Esc) are active. Paste-last / Rewrite /
-  Rewrite-with-voice are **not registered** (they don't work — worklist A4). ❌ **Rebinding does NOT
-  work** — the in-app `HotkeyBox` capture doesn't stick, so shortcuts are shown **read-only** (Toggle +
-  Cancel only) on a dedicated **Shortcuts** left-nav page. (`HotkeyManager`, `ShortcutsPage`, worklist A5)
+- ⚠️ **Hotkeys** — only **Toggle recording** and **Stop & save** (Esc) are active. Paste-last / Rewrite /
+  Rewrite-with-voice are **not registered** (they don't work — worklist A4). ⚠️ **Rebinding re-enabled**
+  on the **Shortcuts** left-nav page (editable `HotkeyBox`; capture verified, physical round-trip awaits a
+  hands-on test). (`HotkeyManager`, `ShortcutsPage`, worklist A5)
 - ✅ **Pill key hint** — while recording, the status pill shows the stop/cancel chords under the waveform
   (e.g. `Alt + Space to stop  ·  Esc to cancel`), read live from settings. (`PillWindow.SetKeyHints`)
   - Windows note: `RegisterHotKey` **does** accept some bare keys (F13–F24, media keys); the real
