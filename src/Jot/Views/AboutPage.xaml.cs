@@ -25,7 +25,11 @@ public partial class AboutPage : Page
             "You're on the latest preview build.", "Check for updates",
             MessageBoxButton.OK, MessageBoxImage.Information);
 
-    private void OnDonate(object sender, RoutedEventArgs e) => OpenUrl("https://jot-transcribe.com/donations/");
+    private void OnDonate(object sender, RoutedEventArgs e)
+    {
+        var win = new Controls.DonationsWindow { Owner = Window.GetWindow(this) };
+        win.ShowDialog();
+    }
 
     private void OnSendFeedback(object sender, RoutedEventArgs e)
         => OpenUrl("mailto:jottranscribe@gmail.com?subject=Jot%20for%20Windows%20feedback");

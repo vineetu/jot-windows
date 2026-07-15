@@ -220,6 +220,9 @@ local; the rest need an API key.
 - ✅ **"Restart Jot" troubleshooting action** — About → Troubleshooting relaunches the app cleanly.
 - ✅ **Usage impact / "time saved"** — on-device counters (`UsageStats`, `stats.json`) surface words,
   recordings, and estimated minutes saved vs typing on the About page; nothing leaves the PC. (worklist D2)
+- ✅ **Donate to charity popup** — About → Donate opens an in-app window that fetches the live donations
+  summary (`jot-donations.ideaflow.page/summary`) and lists charities with per-charity Donate buttons
+  (out to Every.org); Jot never handles money or PII. (worklist D1)
 - ✅ **Setup wizard** — first-run guided flow, re-runnable from Settings. (`SetupWizardWindow`)
 
 ## About, updates & feedback

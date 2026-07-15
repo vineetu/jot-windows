@@ -196,10 +196,14 @@ Reliable alternative: point cleanup at local Ollama `gemma4:e4b` (installed + ru
 
 Captured 2026-07-14 from user testing. None are urgent; they're future work so nothing gets lost.
 
-- [ ] **D1. Donate to charity → in-app popup + API.** Currently opens the browser
-  (`Views\AboutPage.xaml.cs:17` → `jot-transcribe.com/donations/`). Want: an in-app popup that calls
-  the donations API (the Mac app has it), showing charities + amounts. Framing: Jot is free — steer
-  users to **donate to charity** rather than pay us. — M
+- [~] **D1. Donate to charity → in-app popup + API — DONE, awaiting review.** New `DonationsWindow`
+  (opened from About → Donate) fetches the live `GET https://jot-donations.ideaflow.page/summary`
+  (public, read-only, no auth/PII — same endpoint the Mac/iOS apps use) via `Services\DonationsService`
+  and lists charities (biggest supporters first) with per-charity **Donate** buttons that open the
+  Every.org fundraiser; a header shows total raised. Framing kept: Jot is free, donate to charity.
+  **Verified end-to-end via `--donatedemo`**: shows "$40 raised … across 3 donations" with PCRF / Foster
+  Love / Room to Read etc. from live data. (The actual donating happens on Every.org, so Jot never
+  touches money/PII.)
 - [~] **D2. Analytics + "time saved" — DONE, awaiting review.** New `Services\UsageStats` (on-device,
   `<DataDir>\stats.json`, never sent anywhere) counts total dictations/words/seconds; `RecorderController`
   records each completed dictation. About shows a **"Your impact"** card — words, recordings, and estimated

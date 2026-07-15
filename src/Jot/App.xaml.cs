@@ -221,6 +221,8 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--pilldemo")) RunPillDemo();
         // Dev affordance: `--pickerdemo` shows the rewrite prompt-picker overlay (stays open for review).
         if (e.Args.Contains("--pickerdemo")) RunPickerDemo();
+        // Dev affordance: `--donatedemo` shows the donate popup (fetches the live donations summary).
+        if (e.Args.Contains("--donatedemo")) { new Controls.DonationsWindow().Show(); }
         // First-run setup wizard: on a normal (no-arg) launch, or forced with `--wizard`.
         bool firstRun = !Services.GetRequiredService<ISettingsStore>().Current.FirstRunComplete;
         if (e.Args.Contains("--wizard") || (e.Args.Length == 0 && firstRun)) ShowWizard();
