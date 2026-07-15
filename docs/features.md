@@ -150,8 +150,10 @@ local; the rest need an API key.
 - ❌ **AI semantic search** — Windows is substring-only; no on-device embedding index. (worklist C: semantic search)
 - ✅ **Transcript text selection** — read-mode transcript + rewrite panes are read-only borderless
   `TextBox`es, so text can be drag-selected and Ctrl+C'd (Copy button still works too). (worklist A1)
-- ✅ **Overflow "…" menu opens on click** — the detail-view "…" button opens its menu (Export WebVTT /
-  Reveal / Delete) on left-click, not just right-click. (worklist A2)
+- ✅ **Overflow "…" menu opens on click** — the detail-view "…" button opens its menu (Find & Replace /
+  Export WebVTT / Reveal / Delete) on left-click, not just right-click. (worklist A2)
+- ✅ **Find & Replace in the transcript** — a bar (… menu or Ctrl+F) with Find/Replace fields, live
+  match count, Match-case, Replace and Replace all; edits persist to the library. (worklist A2)
 - ⚠️ **Export transcript as WebVTT** — an Export button writes a `.vtt`, but timestamps are
   **fabricated** (fixed 4 s cues) because the engine doesn't surface word timings yet. (worklist C: WebVTT timings)
 - ❌ **Show original vs cleaned** — only one transcript is stored, so there's no raw/cleaned toggle.

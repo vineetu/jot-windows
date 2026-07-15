@@ -39,6 +39,26 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
     [ObservableProperty] private string _newTag = "";
     [ObservableProperty] private bool _showPlain = true;
 
+    // ---- Find & Replace (worklist A2) -------------------------------------------------------------
+    [ObservableProperty] private bool _isFindReplaceOpen;
+    [ObservableProperty] private string _findText = "";
+    [ObservableProperty] private string _replaceText = "";
+    [ObservableProperty] private bool _matchCase;
+
+    /// <summary>Live match count for the current Find text over the transcript.</summary>
+    public string MatchSummary
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(FindText)) return "";
+            int n = CountMatches(Item.Transcript, FindText, MatchCase);
+            return n switch { 0 => "No matches", 1 => "1 match", _ => $"{n} matches" };
+        }
+    }
+
+    partial void OnFindTextChanged(string value) => OnPropertyChanged(nameof(MatchSummary));
+    partial void OnMatchCaseChanged(bool value) => OnPropertyChanged(nameof(MatchSummary));
+
     public ObservableCollection<SpeakerTurn> SpeakerTurns { get; } = new();
 
     public bool IsDictation => Item.Kind == RecordingKind.Dictation;
@@ -95,6 +115,49 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
 
     [RelayCommand]
     private void CancelEdit() => IsEditing = false;
+
+    // ---- Find & Replace commands (operate on Item.Transcript; the store auto-persists the change) --
+
+    [RelayCommand]
+    private void OpenFindReplace() => IsFindReplaceOpen = true;
+
+    [RelayCommand]
+    private void CloseFindReplace() => IsFindReplaceOpen = false;
+
+    /// <summary>Replace the first occurrence of Find with Replace.</summary>
+    [RelayCommand]
+    private void ReplaceNext()
+    {
+        if (string.IsNullOrEmpty(FindText)) return;
+        var cmp = MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        int i = Item.Transcript.IndexOf(FindText, cmp);
+        if (i < 0) return;
+        Item.Transcript = Item.Transcript.Remove(i, FindText.Length).Insert(i, ReplaceText ?? "");
+        Item.IsEdited = true;
+        OnPropertyChanged(nameof(MatchSummary));
+    }
+
+    /// <summary>Replace every occurrence of Find with Replace.</summary>
+    [RelayCommand]
+    private void ReplaceAll()
+    {
+        if (string.IsNullOrEmpty(FindText)) return;
+        var cmp = MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        string updated = Item.Transcript.Replace(FindText, ReplaceText ?? "", cmp);
+        if (updated == Item.Transcript) return;
+        Item.Transcript = updated;
+        Item.IsEdited = true;
+        OnPropertyChanged(nameof(MatchSummary));
+    }
+
+    private static int CountMatches(string haystack, string needle, bool matchCase)
+    {
+        if (string.IsNullOrEmpty(needle)) return 0;
+        var cmp = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        int count = 0, i = 0;
+        while ((i = haystack.IndexOf(needle, i, cmp)) >= 0) { count++; i += needle.Length; }
+        return count;
+    }
 
     [RelayCommand]
     private void PlayPause()

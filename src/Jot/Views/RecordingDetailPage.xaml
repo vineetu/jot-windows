@@ -43,6 +43,10 @@
                            Click="OnMoreClick" AutomationProperties.Name="More">
                     <ui:Button.ContextMenu>
                         <ContextMenu>
+                            <MenuItem Header="Find &amp; Replace…" InputGestureText="Ctrl+F"
+                                      Command="{Binding OpenFindReplaceCommand}"
+                                      Visibility="{Binding IsDictation, Converter={StaticResource BoolToVis}}" />
+                            <Separator Visibility="{Binding IsDictation, Converter={StaticResource BoolToVis}}" />
                             <!-- HIDDEN until real: diarization is a stub (fake alternate-by-sentence).
                                  See docs/plans/fixit-worklist.md (B2). -->
                             <MenuItem Header="Detect speakers" Command="{Binding DetectSpeakersCommand}"
@@ -170,6 +174,42 @@
                             </ui:TextBox.InputBindings>
                         </ui:TextBox>
                     </WrapPanel>
+
+                    <!-- Find & Replace bar (worklist A2), opened from the … menu or Ctrl+F. Operates on
+                         Item.Transcript; the store auto-persists the change. -->
+                    <Border Margin="0,0,0,14" Padding="12" CornerRadius="6"
+                            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                            Visibility="{Binding IsFindReplaceOpen, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ui:TextBox x:Name="FindBox" Grid.Column="0" Margin="0,0,6,0" PlaceholderText="Find"
+                                            AutomationProperties.Name="Find field"
+                                            Text="{Binding FindText, UpdateSourceTrigger=PropertyChanged}" />
+                                <ui:TextBox Grid.Column="1" Margin="6,0,0,0" PlaceholderText="Replace with"
+                                            AutomationProperties.Name="Replace field"
+                                            Text="{Binding ReplaceText, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                            <Grid Margin="0,10,0,0">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding MatchSummary}" VerticalAlignment="Center" MinWidth="86"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    <CheckBox Content="Match case" IsChecked="{Binding MatchCase}"
+                                              Margin="10,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <ui:Button Content="Replace" Margin="0,0,8,0" Command="{Binding ReplaceNextCommand}" />
+                                    <ui:Button Content="Replace all" Appearance="Primary" Margin="0,0,8,0"
+                                               Command="{Binding ReplaceAllCommand}" />
+                                    <ui:Button Content="Close" Command="{Binding CloseFindReplaceCommand}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
 
                     <!-- Transcript: read vs edit. A read-only, borderless, transparent TextBox reads like
                          body text but supports drag-select + Ctrl+C (a plain TextBlock can't).

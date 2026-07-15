@@ -35,4 +35,20 @@ public partial class RecordingDetailPage : Page
             menu.IsOpen = true;
         }
     }
+
+    // Ctrl+F opens Find & Replace for a dictation and focuses the Find box. (Wired in code-behind
+    // because a KeyBinding's Command doesn't reliably inherit the page DataContext.)
+    protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.F
+            && (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) != 0
+            && DataContext is RecordingDetailViewModel { IsDictation: true } vm)
+        {
+            vm.OpenFindReplaceCommand.Execute(null);
+            Dispatcher.BeginInvoke(new Action(() => FindBox.Focus()),
+                System.Windows.Threading.DispatcherPriority.Input);
+            e.Handled = true;
+        }
+        base.OnKeyDown(e);
+    }
 }

@@ -51,9 +51,11 @@ is a **read-only Edit control** via UI Automation. Drag-select itself still want
 - **Fix — DONE 2026-07-14:** left-click now opens the menu (`OnMoreClick` sets `ContextMenu.IsOpen` with
   `PlacementTarget` + `Placement=Bottom`). Verified by invoking the button via UI Automation — the menu
   (Export as WebVTT / Reveal in File Explorer / Delete) opened under it (screenshot).
-- **Feature (M) — still TODO:** add **Find & Replace** into that menu (user's request) — a small
-  find/replace bar over the transcript, operating on `Item.Transcript`, with replace/replace-all and
-  match count.
+- **Feature — DONE 2026-07-14, awaiting review:** Find & Replace bar over the transcript (opened from
+  the … menu or **Ctrl+F**): Find + Replace fields, live match count, Match-case toggle, **Replace**
+  (first) and **Replace all**. Operates on `Item.Transcript`; the store auto-persists. Verified
+  end-to-end via UI Automation — replacing "content"→"SECTION" changed the saved transcript (then
+  reverted so the sample recording is untouched).
 
 ### A3. [~] Simplify Settings layout — DONE, awaiting review
 **Done 2026-07-14 (see "Just shipped"):** basic Settings = Appearance + Microphone + Language +
