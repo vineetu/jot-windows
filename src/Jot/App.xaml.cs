@@ -44,9 +44,17 @@ public partial class App : System.Windows.Application
         // us with the uninstall hook and OnBeforeUninstallFastCallback wipes all Jot data. On a normal
         // launch this returns immediately. (Registration in Add/Remove Programs comes from installing via
         // the Velopack-built Setup.exe — see docs/plans/fixit-worklist.md B3/uninstall.)
-        VelopackApp.Build()
-            .OnBeforeUninstallFastCallback(_ => WipeAllData())
-            .Run();
+        //
+        // Skip entirely when running as an MSIX/Store-packaged app: a Store build is installed/updated/
+        // uninstalled by the Store's own mechanism, not Velopack's Setup.exe, so there is no Velopack
+        // install to service and OnBeforeUninstallFastCallback would never legitimately fire anyway. See
+        // docs/plans/store-submission.md.
+        if (!IsRunningAsPackagedApp())
+        {
+            VelopackApp.Build()
+                .OnBeforeUninstallFastCallback(_ => WipeAllData())
+                .Run();
+        }
 
         base.OnStartup(e);
 
@@ -309,6 +317,24 @@ public partial class App : System.Windows.Application
                     () => nav.Navigate(typeof(Views.RecordingDetailPage), store.Items[0]),
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
+    }
+
+    // Win32 APPMODEL_ERROR_NO_PACKAGE (15700): returned by GetCurrentPackageFullName when the
+    // current process has NO package identity — i.e. a normal unpackaged/Velopack-installed run.
+    // Any other return value (typically ERROR_INSUFFICIENT_BUFFER, 122, since we pass a zero-length
+    // buffer) means the process DOES have package identity — i.e. it's running as an MSIX/Store
+    // package. Deliberately raw P/Invoke (no NuGet/WinRT dependency) to match this file's existing
+    // Win32 interop style. See docs/plans/store-submission.md.
+    private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern int GetCurrentPackageFullName(ref int packageFullNameLength, System.Text.StringBuilder? packageFullName);
+
+    private static bool IsRunningAsPackagedApp()
+    {
+        int length = 0;
+        int result = GetCurrentPackageFullName(ref length, null);
+        return result != APPMODEL_ERROR_NO_PACKAGE;
     }
 
     // Runs the dispatcher for a spell so queued input (e.g. a synthetic WM_PASTE) is actually

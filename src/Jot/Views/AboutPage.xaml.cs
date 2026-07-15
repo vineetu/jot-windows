@@ -51,6 +51,9 @@ public partial class AboutPage : Page
                 MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    private void OnOpenPrivacyPolicy(object sender, RoutedEventArgs e)
+        => OpenUrl("https://sites.simple-host.app/jot-transcribe/jot-windows-privacy/");
+
     private static void OpenUrl(string url)
     {
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
