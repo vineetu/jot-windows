@@ -689,6 +689,29 @@ public partial class App : System.Windows.Application
         picker.Activate();
     }
 
+    /// <summary>
+    /// Relaunch Jot cleanly. Releases the single-instance mutex FIRST so the freshly-spawned process
+    /// can claim it — otherwise the child sees us still holding the mutex, treats itself as a duplicate
+    /// and bows out, and then we shut down too, leaving nothing running (the "Restart quits" bug).
+    /// </summary>
+    public static void RestartApp()
+    {
+        string? exe = Environment.ProcessPath;
+        if (Current is App app)
+        {
+            // Closing our only handle frees the named mutex so the child's ClaimSingleInstance succeeds.
+            try { app._instanceMutex?.Dispose(); } catch { /* ignore */ }
+            app._instanceMutex = null;
+        }
+        try
+        {
+            if (exe is not null)
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = true });
+        }
+        catch { /* if relaunch fails we still shut down; the user can reopen from the Start menu */ }
+        Current.Shutdown();
+    }
+
     private bool ClaimSingleInstance()
     {
         _instanceMutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
@@ -984,20 +1007,33 @@ public partial class App : System.Windows.Application
             var settings = new JsonSettingsStore();
             JotSettings s = settings.Current;
             string dataDir = JotPaths.DataDir(s);
-            TryDeleteDir(JotPaths.RecordingsDir(s));
-            TryDeleteDir(JotPaths.ModelsDir(s));
-            TryDeleteDir(System.IO.Path.Combine(dataDir, "logs"));
+
+            // Only recursively remove the named subfolders (recordings/models/logs) if this really is a
+            // Jot data dir — guards a user who pointed the save location at a shared folder that happens
+            // to contain its own recordings/ etc. The marker: a library.json here, or a "…\Jot" basename.
+            bool looksLikeJotDir = System.IO.File.Exists(JotPaths.LibraryFile(s))
+                || string.Equals(System.IO.Path.GetFileName(dataDir.TrimEnd('\\', '/')), "Jot",
+                                 StringComparison.OrdinalIgnoreCase);
+
+            // Always safe: Jot's own files.
             TryDeleteFile(JotPaths.LibraryFile(s));
             TryDeleteFile(System.IO.Path.Combine(dataDir, "aikey.dat"));
             TryDeleteFile(System.IO.Path.Combine(dataDir, "stats.json"));
-            // Remove the data folder itself only if it's now empty (don't delete a shared folder's contents).
-            try
+
+            if (looksLikeJotDir)
             {
-                if (System.IO.Directory.Exists(dataDir) &&
-                    !System.IO.Directory.EnumerateFileSystemEntries(dataDir).Any())
-                    System.IO.Directory.Delete(dataDir);
+                TryDeleteDir(JotPaths.RecordingsDir(s));
+                TryDeleteDir(JotPaths.ModelsDir(s));
+                TryDeleteDir(System.IO.Path.Combine(dataDir, "logs"));
+                // Remove the data folder itself only if it's now empty.
+                try
+                {
+                    if (System.IO.Directory.Exists(dataDir) &&
+                        !System.IO.Directory.EnumerateFileSystemEntries(dataDir).Any())
+                        System.IO.Directory.Delete(dataDir);
+                }
+                catch { /* leave a non-empty folder in place */ }
             }
-            catch { /* leave a non-empty custom folder in place */ }
         }
         catch { /* best effort */ }
 

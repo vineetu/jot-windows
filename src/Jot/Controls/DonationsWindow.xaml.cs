@@ -27,7 +27,15 @@ public partial class DonationsWindow : FluentWindow
         Spinner.Visibility = Visibility.Visible;
         ErrorText.Visibility = Visibility.Collapsed;
 
-        DonationsSummary? summary = await _service.FetchSummaryAsync();
+        DonationsSummary? summary;
+        try
+        {
+            summary = await _service.FetchSummaryAsync();
+        }
+        catch
+        {
+            summary = null; // FetchSummaryAsync already swallows, but never let the async-void Loaded throw
+        }
 
         Spinner.Visibility = Visibility.Collapsed;
 
@@ -39,12 +47,16 @@ public partial class DonationsWindow : FluentWindow
             return;
         }
 
+        // Invariant culture for the amount so a non-US locale doesn't render "$1.234" with a $ sign.
+        string amount = summary.TotalRaisedUsd.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        string count = summary.TotalDonations.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
         SummaryText.Text = summary.TotalDonations > 0
-            ? $"${summary.TotalRaisedUsd:N0} raised for charity across {summary.TotalDonations:N0} donations."
+            ? $"${amount} raised for charity across {count} donations."
             : "Be the first to donate — every dollar goes to charity.";
 
         // Show charities that have a fundraiser link, biggest supporters first, then alphabetical.
-        CharityList.ItemsSource = summary.PerCharity
+        // per_charity can arrive as an explicit null (System.Text.Json overwrites the initializer), so guard.
+        CharityList.ItemsSource = (summary.PerCharity ?? new System.Collections.Generic.List<DonationCharity>())
             .Where(c => !string.IsNullOrWhiteSpace(c.FundraiserUrl))
             .OrderByDescending(c => c.TotalRaisedUsd)
             .ThenBy(c => c.Name, System.StringComparer.CurrentCultureIgnoreCase)

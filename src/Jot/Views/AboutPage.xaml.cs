@@ -37,14 +37,9 @@ public partial class AboutPage : Page
         win.ShowDialog();
     }
 
-    // Troubleshooting: relaunch the app cleanly (a fresh process, then shut this one down).
-    private void OnRestart(object sender, RoutedEventArgs e)
-    {
-        string? exe = Environment.ProcessPath;
-        if (exe is not null)
-            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
-        System.Windows.Application.Current.Shutdown();
-    }
+    // Troubleshooting: relaunch the app. App.RestartApp releases the single-instance mutex before
+    // spawning so the new process isn't rejected as a duplicate (which would leave nothing running).
+    private void OnRestart(object sender, RoutedEventArgs e) => App.RestartApp();
 
     private void OnViewLog(object sender, RoutedEventArgs e)
     {

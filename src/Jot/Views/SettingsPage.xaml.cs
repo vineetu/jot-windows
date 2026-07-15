@@ -83,10 +83,7 @@ public partial class SettingsPage : Page
         try { if (System.IO.File.Exists(file)) System.IO.File.Delete(file); } catch { }
     }
 
-    private static void Restart()
-    {
-        string? exe = Environment.ProcessPath;
-        if (exe is not null) System.Diagnostics.Process.Start(exe);
-        System.Windows.Application.Current.Shutdown();
-    }
+    // Releases the single-instance mutex before spawning the new process (see App.RestartApp) so the
+    // relaunch after Reset / Erase isn't rejected as a duplicate.
+    private static void Restart() => App.RestartApp();
 }
