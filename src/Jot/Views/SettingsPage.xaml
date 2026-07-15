@@ -123,9 +123,14 @@
                               SelectedItem="{Binding AiProvider, Mode=TwoWay}" />
                 </ctl:SettingRow>
                 <StackPanel Visibility="{Binding AiConfigured, Converter={StaticResource BoolToVis}}">
-                    <ctl:SettingRow Title="API key" Description="Stored only for this session in the preview build."
+                    <ctl:SettingRow Title="API key" Description="Saved securely on this PC (Windows DPAPI) and reused after every restart."
                                     Visibility="{Binding NeedsApiKey, Converter={StaticResource BoolToVis}}">
-                        <ui:PasswordBox MinWidth="260" PasswordChanged="OnApiKeyChanged" />
+                        <StackPanel MinWidth="260">
+                            <ui:PasswordBox PasswordChanged="OnApiKeyChanged" />
+                            <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="A key is already saved. Type a new one to replace it."
+                                       Visibility="{Binding HasSavedKey, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
                     </ctl:SettingRow>
                     <!-- Default model, shown read-only unless the user turns on advanced overrides. -->
                     <ctl:SettingRow Title="Model" Description="The default model for this provider."

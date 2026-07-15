@@ -87,7 +87,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _aiProvider = "None";
     [ObservableProperty] private string _aiBaseUrl = "";
     [ObservableProperty] private string _aiModel = "";
-    [ObservableProperty] private string _aiApiKey = ""; // in-memory only; a real build uses the Windows Credential Locker / DPAPI
+    [ObservableProperty] private string _aiApiKey = ""; // persisted encrypted via AiCredentials (DPAPI); seeded from it at startup
     [ObservableProperty] private bool _cleanupEnabled;
     [ObservableProperty] private string _testConnectionResult = "";
     [ObservableProperty] private bool _isTestingConnection;
@@ -100,6 +100,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool AiConfigured => AiProvider != "None";
     public bool NeedsApiKey => AiConfigured && AiDefaults.NeedsKey(AiProvider);
+    /// <summary>True when an encrypted key is already stored — the PasswordBox is blank on load (WPF
+    /// can't pre-fill it for security), so surface that the key is saved rather than looking unset.</summary>
+    public bool HasSavedKey => !string.IsNullOrEmpty(_credentials.ApiKey);
     public bool ShowAiOverrides => AiConfigured && AdvancedFeatures;          // base URL + model overrides
     public bool ShowAiModelReadonly => AiConfigured && !AdvancedFeatures;      // just show the default
     public string EffectiveAiModel => string.IsNullOrWhiteSpace(AiModel) ? AiDefaults.Model(AiProvider) : AiModel;
@@ -222,7 +225,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnSoundErrorChanged(bool value) { S.SoundError = value; Save(); }
     partial void OnAiBaseUrlChanged(string value) { S.AiBaseUrl = value; Save(); }
     partial void OnAiModelChanged(string value) { S.AiModel = value; Save(); OnPropertyChanged(nameof(EffectiveAiModel)); }
-    partial void OnAiApiKeyChanged(string value) { _credentials.ApiKey = value; } // session-only, never persisted
+    // Persisted encrypted (DPAPI) by AiCredentials and reloaded on the next launch — survives restarts.
+    partial void OnAiApiKeyChanged(string value) { _credentials.ApiKey = value; OnPropertyChanged(nameof(HasSavedKey)); }
 
     // Shortcuts: persist, then Save() raises ISettingsStore.Changed, which App uses to re-register.
     partial void OnToggleRecordingHotkeyChanged(string value) { S.ToggleRecordingHotkey = value; Save(); }

@@ -228,11 +228,14 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
 - [ ] **D10. Remove macOS "Apple Intelligence" references.** No Apple Intelligence on Windows; drop the
   mentions in `SettingsPage.xaml:111` (InfoBar) and `HelpPage.xaml:39`. Keep "Bring your own provider." — S
 
-- [ ] **D11. API key not persisted across restarts — HIGH annoyance.** The AI provider API key must be
-  re-entered every time the app restarts. `aikey.dat` is written (DPAPI) and the Settings row even says
-  "Stored only for this session in the preview build" — the key almost certainly isn't loaded back into
-  `AiCredentials` on startup, so the client sees no key until it's re-typed. Fix when AI is revived:
-  load the persisted key on startup and drop the "session only" label. (Moot right now — AI UI hidden.)
+- [~] **D11. API key persistence — DONE, awaiting review (persistence was already implemented).**
+  Turns out `AiCredentials` already saves the key DPAPI-encrypted to `aikey.dat` and **loads it in its
+  constructor** (a startup singleton), and `SettingsViewModel` seeds `_aiApiKey = credentials.ApiKey` at
+  startup — so the key already survives restarts. The bug was the **stale UI/text**: the API-key row said
+  "Stored only for this session" and the code comments said "session-only, never persisted". Fixed those
+  to state it's saved encrypted, and added a "A key is already saved — type a new one to replace it" hint
+  (the WPF PasswordBox is blank on load for security, which looked like the key was lost). Verified the
+  DPAPI save→load round-trip works on this machine. (AI UI still hidden; correct for when it's revived.)
 
 > **2026-07-14: AI turned OFF in the UI.** The whole **AI Settings section**, the **Ask Jot** nav item,
 > and the **Prompts** nav item are hidden — AI (cleanup/rewrite/Ask Jot) isn't usable yet, and prompts
