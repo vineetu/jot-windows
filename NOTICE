@@ -1,0 +1,30 @@
+Jot for Windows
+Required Notice: Copyright Vineet Sriram (https://jot-transcribe.com)
+
+Licensed under the PolyForm Noncommercial License 1.0.0
+<https://polyformproject.org/licenses/noncommercial/1.0.0> — see LICENSE.
+
+Third-party packages
+---------------------
+Jot for Windows depends on the following NuGet packages; each remains
+under its own license:
+
+- CommunityToolkit.Mvvm — MIT
+- Microsoft.Extensions.DependencyInjection — MIT
+- NAudio — MIT
+- WPF-UI (lepoco) — MIT
+- Velopack — MIT
+- Microsoft.ML.OnnxRuntime.DirectML — MIT
+- Microsoft.AI.DirectML — Microsoft NuGet package license
+
+Bundled binary
+--------------
+- FFmpeg (Assets\ffmpeg\ffmpeg.exe) — LGPL v2.1 or later. Used only as a
+  decode-only fallback for audio/video file import, invoked as a separate
+  process (not statically linked into Jot's binary).
+
+Speech models
+-------------
+On-device speech models (Parakeet-TDT, Nemotron ASR) are fetched at
+runtime and are covered by their own upstream licenses — see the model's
+page on Hugging Face.

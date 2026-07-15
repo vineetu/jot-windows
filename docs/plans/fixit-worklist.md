@@ -73,9 +73,59 @@ Processing CPU/GPU → Live captions → Auto-paste → Enter-after-paste → Ke
 - Note: shortcut **rebinding already exists** (`Controls\HotkeyBox`) — the user thought it didn't
   because it's buried; surfacing it near the top addresses "should be able to change it."
 
-### A4. [ ] Rewrite / paste-last / rewrite-with-voice DON'T WORK on Windows 11 — HIGH (core AI feature)
-**Reality (user-tested 2026-07-14): none of these work.** Rewrite still says "select text first";
-paste-last doesn't paste; rewrite-with-voice does nothing.
+### A4. [~] Rewrite / paste-last / rewrite-with-voice — REAL BUG FOUND AND FIXED 2026-07-14, needs the
+user's own hands-on retest before this can be called done
+**Given this item's history — a previous claim of "fixed" here was wrong and cost trust (see
+[[claude-verify-before-claiming]]) — this is deliberately NOT marked done, even though the fix is real
+this time.** Timeline of today's session, in full, so nothing gets glossed over:
+
+1. First re-enabled the hotkeys off `--rewriteselftest` passing against an in-process target — the user
+   tested Alt+/ against real Notepad and it **still failed** ("no text selected"). The earlier test
+   result was real but didn't generalize; re-opened the investigation instead of re-asserting it worked.
+2. Built `--notepadselftest` to drive REAL `notepad.exe` (Windows 11's packaged/MSIX Notepad — a
+   genuinely separate process). Chased two real environmental red herrings first: (a) Notepad is
+   single-instance and **tabbed**, and every test run left a leftover tab; UIA reads were picking up a
+   **stale background tab** (from an earlier run where `SendUnicodeText`-based typing had genuinely
+   corrupted the content — a separate, unresolved minor bug, not investigated further since it's not on
+   the critical path). (b) Notepad **persists tabs/session to disk**
+   (`%LOCALAPPDATA%\Packages\...WindowsNotepad...\LocalState\TabState`) and restores them across
+   launches regardless of process kill — deliberately NOT wiped (that's the user's real Notepad history);
+   worked around by explicitly selecting our tab and focusing the document element via UI Automation
+   instead.
+3. With a clean, correctly-focused single tab, found the REAL bug: `TextInjector.CaptureSelection`'s
+   `ReleaseModifiers()` sends a *synthetic* key-up for Alt, but a real, physically-still-held Alt (the
+   normal case — `WM_HOTKEY` fires the instant the combo completes, before the user has necessarily
+   released either key) is NOT reliably cleared by that alone. Empirically confirmed with a dedicated
+   test (`--notepadselftest` step E: hold Alt down via `SendScanKeyDown`, call the real
+   `CaptureSelection` — FAILS, reproducing the user's exact symptom; every step that never touched Alt
+   passed cleanly).
+4. First fix attempt (`TextInjector.WaitForRealModifiersReleased`, polling `GetAsyncKeyState`) didn't
+   fully explain the mechanism on its own — diagnostic logging showed Alt reads as already "up" (via
+   `GetAsyncKeyState` and WPF's own `Keyboard.Modifiers`) by the time `SendKeyChord(Ctrl, C)` runs, yet
+   capture still failed in one test variant. The piece that actually made it reliably pass: re-selecting
+   the text **immediately** before the real (Alt-held) capture attempt, matching real usage (select →
+   immediately press the hotkey) rather than the test's earlier order (select once, do an unrelated
+   isolation check, *then* attempt capture minutes of test-time later). **Honest residual uncertainty:**
+   the exact mechanism may be "a bare Alt tap disturbs the target's text selection" rather than purely
+   "stuck modifier state" — both `WaitForRealModifiersReleased` (kept, it's cheap and correct regardless)
+   and realistic immediate-selection timing contributed to the fix; not claiming perfect mechanistic
+   certainty, only a **reproducible pass** (3/3 runs) against the realistic scenario (select text, hold
+   Alt ~100ms as in a normal fast tap, release, capture).
+5. Result: `--rewriteselftest` now passes end-to-end **including the real Alt-held timing case** —
+   selection captured, AI rewrite correct, paste-back landed, library row saved. 3 consecutive PASSes.
+6. Rebuilt (`dotnet publish -c Release`) and redeployed to the real running install
+   (`%LOCALAPPDATA%\Programs\Jot`) — confirmed via `--hotkeytest` that the live instance owns
+   PasteLast/Rewrite/RewriteWithVoice (Win32 error 1409 "already taken" from a second process trying the
+   same chords).
+
+**What's still NOT verified: the user's own hands, on real Notepad, again, after this fix.** That's the
+step that actually failed last time, and it's the only thing that gets to close this out. Still hidden
+from the Shortcuts page (only Toggle + Cancel shown) — the hotkeys now fire with their default chords
+but aren't yet visible/rebindable there.
+
+Reality as of the *previous* audit (now superseded by the above, kept for context — user-tested
+2026-07-14): none of these worked. Rewrite still said "select text first"; paste-last didn't paste;
+rewrite-with-voice did nothing.
 - ❌ **My first attempt was WRONG** — I un-gated the hotkeys + polled the clipboard longer (~600ms) in
   `CaptureSelection`, then told the user it worked **without testing it**. It does not: the hotkey
   fires but the selection still comes back empty. (Lesson: never claim a Win11 input feature works
@@ -122,11 +172,42 @@ Stop) bound TwoWay to the VM (persists + App re-registers on change). **Still ne
 keyboard test** — I can't drive real OS key input headlessly. If it doesn't stick when tested, reopen
 (check click-to-focus in the NavigationView page context, and that the new chord actually re-registers).
 
-### AI cleanup — UNVERIFIED (do NOT claim it works)
-"Turn on cleanup" is wired (Gemini + key + enabled) but NOT confirmed working end-to-end. The stale
-default `gemini-1.5-flash` was likely deprecated → silent 404 → raw transcript; D9 changed the default
-to `gemini-3.1-flash-lite`, which *might* fix it — but this has NOT been tested against a live dictation.
-Reliable alternative: point cleanup at local Ollama `gemma4:e4b` (installed + running) and actually verify.
+### AI cleanup — VERIFIED BROKEN for slow/local models (2026-07-14 dev-hook test, real bug found)
+Tested for real via a new `--cleanuptest` dev hook (App.xaml.cs) that calls the actual
+`AiClient.CleanupAsync` (production code, including the faithfulness guard) against local Ollama
+`gemma4:e4b` on a filler-laden sample transcript. **Result: FAIL, reproducibly.** Root cause confirmed
+by an independent raw `POST /api/chat` call: `gemma4:e4b` on this box (partial CPU offload, see
+[[jot-local-ai-eval]]) takes **~80 seconds** to answer, but `AiClient`'s shared `HttpClient` has a
+**hardcoded 30-second `Timeout`**. The call always times out, the exception is swallowed by
+`CleanupAsync`'s `catch { return transcript; }` (by design — cleanup must never lose the transcript),
+and the ORIGINAL unclean text is silently returned every time — no error surfaced anywhere. The raw
+API call confirms the prompt/model itself IS faithful when given enough time (fillers removed, all
+content/dates preserved, output matched exactly). **Fix needed:** either raise `AiClient`'s HTTP
+timeout (cleanup already has its own 30s `CancellationTokenSource` at the call site in
+`RecorderController.MaybeCleanupAsync` — that's the one to extend, since it's tighter than a slow
+local model needs) or default Ollama cleanup to a faster model. Gemini path (the actual configured
+default) still separately unverified against a live key — this only confirms/roots the Ollama case.
+
+### AI Rewrite (replace selected text) — mechanics VERIFIED WORKING end-to-end (2026-07-14, reverses A4's premise)
+A4 disabled the Rewrite/PasteLast/RewriteWithVoice hotkeys on the belief that selection capture
+(synthetic Ctrl+C) + paste-back is fundamentally broken on Windows 11. Built `--rewriteselftest` (App.xaml.cs)
+to test the REAL, unmodified pipeline (`RewriteController.CaptureContext` → `AiClient.RewriteAsync` →
+`TextInjector.PasteAtCursor`) against a target text window running on its **own thread with its own
+message pump** (not the caller's thread — see method doc on `RewriteTestTarget`), using local Ollama
+`qwen3:4b-instruct` (fast enough to stay under the 30s HTTP timeout). **Result: PASS, twice in a row** —
+selection captured (60/60 chars), AI rewrite came back faithful ("um so yeah i think we should uh ship
+this on friday you know" → "So, yeah, I think we should ship this on Friday."), pasted back exactly
+matching the AI output, and a `Kind=Rewrite` row was saved. **Important caveat (be honest, don't
+over-claim):** the target here is a separate *thread* in the same process, not a separate OS *process*
+like a real foreign app (Notepad/browser/Office) — chosen deliberately because an EARLIER same-thread
+self-test attempt gave a false-negative FAIL: `TextInjector.CaptureSelection` blocks the calling thread
+with `Thread.Sleep` while polling, which — when the "target" shared that same thread/dispatcher — also
+froze the target's own message pump and starved it of the Ctrl+C we'd just sent. A genuinely separate
+thread (or process) doesn't have that problem, since its message pump runs independently. This result
+is strong evidence the mechanism itself is sound, but a hands-on test against a real foreign app
+(Notepad, browser, Office) is still the gold-standard confirmation before re-enabling the hotkeys in
+`HotkeyManager`/Settings — the original A4 diagnosis may simply have been the same same-thread
+test artifact, not a real Windows 11 selection-capture limitation.
 
 ---
 
@@ -232,6 +313,75 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
   (`Services\JotPaths.cs:21`) auto-picks the roomiest **non-system** drive and falls back to
   `%LOCALAPPDATA%\Jot` on single-drive PCs — it is **not** hardcoded to `D:`. `D:\Jot` is just what it
   resolves to on this machine. The only real gap is D5 (logs bypass it).
+- [ ] **D12. Offer NumLock / CapsLock / F13+ / the Menu(Apps) key as toggle-hotkey options — RESEARCHED
+  2026-07-14, empirically verified, not yet built.** User wants single "special" keys (no modifier held)
+  as options for the toggle-recording hotkey. Findings from a new `--specialkeytest` dev hook
+  (registers each bare via `RegisterHotKey`, synthesizes a press, checks `GetKeyState` before/after):
+  - **`HotkeyBox`/`HotkeyChord` already support this with ZERO code changes** — the chord parser/capture
+    (`HotkeyChord.TryParse`, `HotkeyBox.OnPreviewKeyDown`) is generic over any WPF `Key`, including
+    `NumLock`/`CapsLock`/`Apps`/`F13`–`F24`, and `RegisterHotKey` already accepts bare (no-modifier) keys
+    (`CancelRecordingHotkey` defaults to bare `Escape` today). So the answer to "select one of these, or
+    a full combination" is **both, for free** — the existing capture box lets the user press any single
+    key alone (these included) OR a modifier combo; no separate preset-picker control is technically
+    required, though a short "Tip: NumLock, the Menu key, or F13+ work well as a single tap" hint in the
+    UI would help users discover it.
+  - **Apps (Menu/"right-click") key** — clean. Registers, fires, no side effects. Best safe option.
+  - **F13** — clean, same as Apps. Registers, fires, no conflicts. **Caveat: most consumer keyboards
+    have no physical F13–F24 key** (present on some mechanical/programmable boards, or reachable via
+    software remap e.g. PowerToys Keyboard Manager) — fine to offer, but won't be usable out of the box
+    for most users.
+  - **F1 (representative of F1–F12)** — registers fine too, but while registered **F1 stops reaching
+    every other app system-wide** (browser Help, etc.) — `RegisterHotKey` steals the key wholesale, not
+    just when Jot has focus. Usable but a real conflict-risk; if offered, warn the user.
+  - **NumLock / CapsLock / Scroll Lock — CONFIRMED real gotcha: registering any of the three does NOT
+    stop the OS from ALSO toggling its LED/state.** Empirically verified: `hotkeyFired=True` **and**
+    `UNWANTED_TOGGLE_SIDE_EFFECT=True` for all three (added Scroll Lock 2026-07-14, same result as
+    NumLock/CapsLock). Each dictation toggle would also flip whether the numpad emits numbers vs.
+    navigation, or flip text case, or flip Scroll Lock — but **practical severity differs a lot**:
+    NumLock/CapsLock toggling is genuinely disruptive (breaks numpad typing / flips case); **Scroll
+    Lock does essentially nothing in almost any modern app**, so it's the one of the three that's
+    reasonably safe to ship even WITHOUT the fix below — the other two really do want it. Two fix
+    options if wanted: **(a) compensate** — immediately re-synthesize the same key
+    (`TextInjector.SendVirtualKeyPress`, added for this test) right after handling the hotkey, to flip
+    the LED back to where it was; simple, reuses code already written for the test, tiny visible LED
+    flicker. **(b) suppress properly** — a `WH_KEYBOARD_LL` low-level keyboard hook that swallows the
+    key before Windows' own toggle handling runs (how AutoHotkey/PowerToys remap CapsLock cleanly); no
+    flicker, but Jot has no low-level hook today — bigger, separate piece of infrastructure (would also
+    be reusable for D8's "true" contextual-Escape fix).
+  **Decide:** which keys to actually surface (Apps + F13 are risk-free; NumLock/CapsLock need the
+  compensate-or-hook decision above; F1–F12 need a conflict warning) and whether to add a short
+  discovery hint near the `HotkeyBox` rows. — S (Apps/F13, already works) / S (NumLock/CapsLock via
+  compensate) / M (NumLock/CapsLock via low-level hook, shared with D8b)
+
+  **Update 2026-07-14 (user's follow-up, changes the recommended approach):** user asked for a
+  **passive, non-consuming listener** instead — detect the press but let the key's normal OS behavior
+  keep happening untouched (F1 still reaches the foreground app, NumLock still toggles as it always
+  has), rather than `RegisterHotKey`'s exclusive grab. Built `--passivehooktest` (`App.xaml.cs`) using a
+  `WH_KEYBOARD_LL` low-level keyboard hook that **always calls `CallNextHookEx`** (never swallows) and
+  just watches for the target VK codes. **Result: PASS, twice in a row.** Against a real focused target
+  window (the same separate-thread `RewriteTestTarget` used for the rewrite test): F1 was detected by
+  the hook AND still delivered a normal KeyDown to the focused window; NumLock was detected by the hook
+  AND its LED still toggled exactly as it always does. This is a strictly better fit than
+  `RegisterHotKey` for every key in this list:
+  - **F1–F12**: no longer steals the key from other apps at all — solves that conflict outright.
+  - **Apps/Menu key**: the context menu would still open normally alongside toggling dictation.
+  - **NumLock/CapsLock/ScrollLock**: the LED toggling is no longer an "unwanted side effect" to fight —
+    it's just the key doing what it's always done, same as if Jot didn't exist, plus dictation toggles
+    as a bonus. **The compensate/suppress work above becomes unnecessary if this approach is adopted** —
+    one mechanism handles all three toggle keys with zero special-casing.
+  **Trade-offs to weigh before building this into production:** (1) new infrastructure — a
+  `WH_KEYBOARD_LL`-based listener to sit alongside (not replace) `GlobalHotkey`'s `RegisterHotKey` path;
+  natural split is combo chords (Alt+Space) stay on `RegisterHotKey`, bare special keys use the passive
+  hook. (2) `WH_KEYBOARD_LL` fires on every keystroke system-wide (filtered in-process to the VK codes
+  we care about, nothing logged/stored) — the same mechanism keylogging tools use, so some antivirus/
+  endpoint software may flag a raw keyboard hook with more scrutiny than `RegisterHotKey`, though this
+  is how AutoHotkey/PowerToys/most remap tools already work. (3) Needs real engineering care: dedupe
+  key-repeat manually (unlike `RegisterHotKey`'s built-in `NoRepeat` flag, `WH_KEYBOARD_LL` fires
+  repeatedly while a key is held), and keep the hook callback fast — Windows silently unhooks a slow
+  one (~a few hundred ms budget), so the actual toggle-recording call must be dispatched off the hook
+  callback rather than run inline. **Not yet wired into `HotkeyManager`** — proven in isolation only;
+  next step is deciding whether to build it in.
+
 - [ ] **D7. ARM64 support.** Verify the save-location logic (drive-based, so arch-independent) and,
   more importantly, that native deps (ONNX Runtime / DirectML / FFmpeg) have arm64 builds before
   shipping an ARM target. — L

@@ -52,11 +52,17 @@ public partial class PillWindow : Window
         string full = (text ?? "").Trim();
         if (full.Length == 0) return;
 
+        // Sticky scroll: only follow the newest text if the user was already at (or very near) the
+        // bottom. If they've scrolled up to read something earlier, further streamed words shouldn't
+        // yank the view back down — same behavior as a chat/log window. Checked BEFORE the text
+        // changes, since that's the scroll position the user actually left it at.
+        bool wasAtBottom = TranscriptScroll.VerticalOffset >= TranscriptScroll.ScrollableHeight - 4;
+
         TranscriptText.Text = full;      // full running transcript, shown in the expand panel
         LineText.Text = FitTail(full);   // newest words that fit the (fixed-width) pill line
         _lineWhenCollapsed = true;
         ApplyExpansion();                // respects whether the user has expanded the pill
-        TranscriptScroll.ScrollToEnd();  // keep the newest words in view as the caption streams
+        if (wasAtBottom) TranscriptScroll.ScrollToEnd(); // keep following only if they hadn't scrolled up
         Reposition();
     }
 
