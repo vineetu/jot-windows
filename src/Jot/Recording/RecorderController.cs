@@ -95,11 +95,16 @@ public sealed class RecorderController : IDisposable
     /// Esc entry point while recording: STOP AND SAVE (mirrors the Mac app). Routed to the normal
     /// stop→transcribe→save path so a stray Esc can never lose the recording — the whole point of D8.
     /// </summary>
-    private async void StopAndSaveFromHotkey()
+    private void StopAndSaveFromHotkey()
     {
         if (State != RecorderState.Recording) return;
         Log("stop-and-save fired (Esc)");
-        await StopAndDeliverAsync();
+        // Defer off the hotkey's WndProc: StopAndDeliverAsync disarms (disposes) THIS Esc hotkey window
+        // synchronously, and destroying an HwndSource from inside its own message dispatch is a
+        // re-entrancy hazard. Posting to the dispatcher runs it after WndProc returns.
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null) dispatcher.BeginInvoke(new Action(() => _ = StopAndDeliverAsync()));
+        else _ = StopAndDeliverAsync();
     }
 
     /// <summary>Discards the in-flight recording without transcribing or pasting. Kept as an API for a
@@ -243,7 +248,7 @@ public sealed class RecorderController : IDisposable
 
     private void DisarmStopHotkey()
     {
-        _stopHotkey?.Dispose();
+        try { _stopHotkey?.Dispose(); } catch { /* best effort — never surface a disposal fault */ }
         _stopHotkey = null;
     }
 

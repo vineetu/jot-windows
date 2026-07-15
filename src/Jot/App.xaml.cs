@@ -584,10 +584,13 @@ public partial class App : System.Windows.Application
             IntPtr hwnd = new System.Windows.Interop.WindowInteropHelper(w).EnsureHandle();
             Delivery.TextInjector.FocusWindow(hwnd);
             Pump(300);
-            Delivery.TextInjector.FocusWindow(hwnd);
-            box.Focus();
-            System.Windows.Input.Keyboard.Focus(box);
-            Pump(400);
+
+            // Simulate a real CLICK on the box (no programmatic focus) to exercise the exact path the
+            // user reported broken: click -> keyboard focus -> capture starts.
+            box.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(
+                System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+                { RoutedEvent = System.Windows.UIElement.PreviewMouseLeftButtonDownEvent });
+            Pump(300);
 
             string focused = System.Windows.Input.Keyboard.FocusedElement?.GetType().Name ?? "null";
             bool foreground = GetForegroundWindow() == hwnd;
@@ -607,8 +610,8 @@ public partial class App : System.Windows.Application
             Pump(250);
 
             string after = box.Chord;
-            bool pass = after == "J";
-            log.AppendLine($"focused={focused}");
+            bool pass = focused == "HotkeyBox" && after == "J";
+            log.AppendLine($"focusedAfterClick={focused}  (expected HotkeyBox — this is the click->focus fix)");
             log.AppendLine($"foregroundMatch={foreground}");
             log.AppendLine($"rawKeysSeenByBox={rawKeysSeen}");
             log.AppendLine($"presentationSource={(src is not null)}");

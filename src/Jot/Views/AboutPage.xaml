@@ -48,6 +48,7 @@
             <TextBlock Text="Troubleshooting" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,24,0,8" />
             <StackPanel Orientation="Horizontal">
                 <ui:Button Content="View log" Icon="{ui:SymbolIcon DocumentText24}" Margin="0,0,8,0" Click="OnViewLog" />
+                <ui:Button Content="Restart Jot" Icon="{ui:SymbolIcon ArrowClockwise24}" Margin="0,0,8,0" Click="OnRestart" />
                 <ui:Button Content="Send feedback" Icon="{ui:SymbolIcon Mail24}" Click="OnSendFeedback" />
             </StackPanel>
 

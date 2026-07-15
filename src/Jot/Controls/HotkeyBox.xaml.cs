@@ -30,7 +30,11 @@ public partial class HotkeyBox : UserControl
     public HotkeyBox()
     {
         InitializeComponent();
-        MouseLeftButtonDown += (_, _) => Focus();
+        // Take *keyboard* focus on click. `Focus()` alone only set logical focus within the hosting
+        // focus scope (the NavigationView page), so GotKeyboardFocus never fired and capture never
+        // started — that was the "clicking does nothing" bug. Keyboard.Focus(this) forces keyboard
+        // focus; PreviewMouseLeftButtonDown (tunneling) guarantees we see the click before any child.
+        PreviewMouseLeftButtonDown += (_, e) => { Keyboard.Focus(this); e.Handled = true; };
         GotKeyboardFocus += (_, _) => { _capturing = true; UpdateLabel(); };
         LostKeyboardFocus += (_, _) => { _capturing = false; UpdateLabel(); };
         PreviewKeyDown += OnPreviewKeyDown;

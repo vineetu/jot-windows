@@ -179,8 +179,8 @@ local; the rest need an API key.
 
 - ⚠️ **Hotkeys** — only **Toggle recording** and **Stop & save** (Esc) are active. Paste-last / Rewrite /
   Rewrite-with-voice are **not registered** (they don't work — worklist A4). ⚠️ **Rebinding re-enabled**
-  on the **Shortcuts** left-nav page (editable `HotkeyBox`; capture verified, physical round-trip awaits a
-  hands-on test). (`HotkeyManager`, `ShortcutsPage`, worklist A5)
+  on the **Shortcuts** left-nav page (editable `HotkeyBox`; the click-to-focus bug is fixed and capture
+  verified — physical click+rebind awaits a hands-on test). (`HotkeyManager`, `ShortcutsPage`, worklist A5)
 - ✅ **Pill key hint** — while recording, the status pill shows the stop/cancel chords under the waveform
   (e.g. `Alt + Space to stop  ·  Esc to cancel`), read live from settings. (`PillWindow.SetKeyHints`)
   - Windows note: `RegisterHotKey` **does** accept some bare keys (F13–F24, media keys); the real
@@ -213,7 +213,7 @@ local; the rest need an API key.
   currently **hidden**. Needs real persistence + decoder biasing. (worklist B1)
 - ❌ **Per-field info popovers / "Learn more →" deep-links** — Mac has an info dot on every field.
   (worklist C: info popovers)
-- ❌ **"Restart Jot" troubleshooting action.** (worklist C)
+- ✅ **"Restart Jot" troubleshooting action** — About → Troubleshooting relaunches the app cleanly.
 - ✅ **Setup wizard** — first-run guided flow, re-runnable from Settings. (`SetupWizardWindow`)
 
 ## About, updates & feedback

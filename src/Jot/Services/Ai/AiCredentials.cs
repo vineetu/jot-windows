@@ -1,22 +1,30 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using Jot.Services.Abstractions;
 
 namespace Jot.Services.Ai;
 
 /// <summary>
 /// Holds the AI provider API key, persisted encrypted at rest with Windows DPAPI (per-user, per-
 /// machine) so cleanup/rewrite keep working across restarts. Previously in-memory only, which made a
-/// configured provider silently stop working after relaunch.
+/// configured provider silently stop working after relaunch. The file lives under the user's chosen
+/// data folder (<c>&lt;DataDir&gt;\aikey.dat</c>) so nothing lands in %LOCALAPPDATA% (worklist D5).
 /// </summary>
 public sealed class AiCredentials
 {
-    private static readonly string FilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot", "aikey.dat");
+    private readonly ISettingsStore _settings;
+
+    // Resolved from the current data directory each access, so it follows a changed save location.
+    private string FilePath => Path.Combine(JotPaths.DataDir(_settings.Current), "aikey.dat");
 
     private string? _apiKey;
 
-    public AiCredentials() => _apiKey = Load();
+    public AiCredentials(ISettingsStore settings)
+    {
+        _settings = settings;
+        _apiKey = Load();
+    }
 
     public string? ApiKey
     {
@@ -24,7 +32,7 @@ public sealed class AiCredentials
         set { _apiKey = value; Save(value); }
     }
 
-    private static string? Load()
+    private string? Load()
     {
         try
         {
@@ -35,7 +43,7 @@ public sealed class AiCredentials
         catch { return null; } // corrupt / different user — treat as unset
     }
 
-    private static void Save(string? value)
+    private void Save(string? value)
     {
         try
         {

@@ -111,6 +111,7 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
             Item.IsEdited = true;
         }
         IsEditing = false;
+        OnPropertyChanged(nameof(MatchSummary)); // transcript may have changed under an open find bar
     }
 
     [RelayCommand]
@@ -134,6 +135,7 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
         if (i < 0) return;
         Item.Transcript = Item.Transcript.Remove(i, FindText.Length).Insert(i, ReplaceText ?? "");
         Item.IsEdited = true;
+        EditableTranscript = Item.Transcript; // keep edit-mode snapshot in sync so a later Save can't clobber
         OnPropertyChanged(nameof(MatchSummary));
     }
 
@@ -147,6 +149,7 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
         if (updated == Item.Transcript) return;
         Item.Transcript = updated;
         Item.IsEdited = true;
+        EditableTranscript = Item.Transcript; // keep edit-mode snapshot in sync so a later Save can't clobber
         OnPropertyChanged(nameof(MatchSummary));
     }
 
@@ -242,6 +245,7 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
         Item.Status = RecordingStatus.Complete;
         EditableTranscript = text;
         OnPropertyChanged(nameof(CanPlay));
+        OnPropertyChanged(nameof(MatchSummary));
     }
 
     [RelayCommand]

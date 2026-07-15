@@ -104,7 +104,14 @@ Original diagnosis (still accurate):
 
 ---
 
-### A5. [~] Shortcut rebinding — RE-ENABLED, awaiting hands-on review
+### A5. [~] Shortcut rebinding — FIXED the click bug, awaiting hands-on review
+**Root cause found & fixed 2026-07-14 (user reported "clicking does nothing").** The click handler
+called `Focus()`, which only sets *logical* focus within the NavigationView page's focus scope — not
+keyboard focus — so `GotKeyboardFocus` never fired and capture never started. Changed to
+`Keyboard.Focus(this)` on `PreviewMouseLeftButtonDown`. Verified headlessly: simulating a click now
+focuses the box and a following keypress is captured (`--hotkeyboxtest` → PASS, `focusedAfterClick=HotkeyBox`,
+`after=[J]`). Physical click+rebind still wants a hands-on confirm. Original investigation below.
+
 **Investigated 2026-07-14.** The `HotkeyBox` capture logic is actually **correct**: a `--hotkeyboxtest`
 harness that focuses a real `HotkeyBox` and raises a routed `PreviewKeyDown` shows the box captures the
 key and updates its two-way `Chord` DP (PASS; `after=[J]`). The earlier "doesn't work" could not be
@@ -168,7 +175,7 @@ Reliable alternative: point cleanup at local Ollama `gemma4:e4b` (installed + ru
 ### Settings & polish
 - Custom Vocabulary made real (see B1). — L
 - Per-field info popovers / "Learn more →" deep-links (Mac has info dots on every field). — S
-- "Restart Jot" troubleshooting action. — S
+- [~] "Restart Jot" troubleshooting action — **DONE, awaiting review** (About → Troubleshooting → Restart Jot). — S
 - Auto-update (Velopack; see B3) + verify About donate/feedback flows are real not stubbed. — M
 
 ---
@@ -190,10 +197,14 @@ Captured 2026-07-14 from user testing. None are urgent; they're future work so n
   best-effort activity log (INFO/WARN/ERROR, ~2 MB roll + one backup). App startup, the full dictation
   trace (`RecorderController`), suppressed errors, and unhandled crashes (`App.LogCrash`) all funnel to
   it; About → View Log opens it. Verified: launching Jot writes `Jot starting` to the log.
-- [~] **D5. All logs live in the chosen save folder — DONE, awaiting review.** `JotLog` writes to
-  `<DataDir>\logs\jot.log` via `JotPaths.DataDir(settings)` (falls back to `%LOCALAPPDATA%\Jot\logs`
-  before init). No more `crash.log`/`dictation.log` scattered in `%LOCALAPPDATA%`. Verified: the log
-  landed at `D:\Jot\logs\jot.log` (this machine's data dir), not LocalAppData.
+- [~] **D5. All logs/data live in the chosen save folder — DONE, awaiting review.** `JotLog` writes to
+  `<DataDir>\logs\jot.log` and `aikey.dat` now lives at `<DataDir>\aikey.dat` (both via
+  `JotPaths.DataDir`). Verified: the log landed at `D:\Jot\logs\jot.log`, not LocalAppData.
+  **Honest caveat (from adversarial review):** an unhandled crash during the first moments of startup —
+  *before* `JotLog.Initialize` runs (Services aren't built yet, so the data dir isn't known) — falls back
+  to `%LOCALAPPDATA%\Jot\logs`. That's the only remaining case that can write to LocalAppData; everything
+  after startup goes to the data folder. `settings.json` intentionally stays in `%LOCALAPPDATA%` (small
+  app config, must be found before the data dir is known).
 - [x] **D6. Save-location default — VERIFIED already correct (no action).** `JotPaths.DefaultDataDir`
   (`Services\JotPaths.cs:21`) auto-picks the roomiest **non-system** drive and falls back to
   `%LOCALAPPDATA%\Jot` on single-drive PCs — it is **not** hardcoded to `D:`. `D:\Jot` is just what it

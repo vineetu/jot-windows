@@ -41,7 +41,7 @@ public static class JotLog
         catch { baseDir = DefaultBase(); }
 
         string logs = Path.Combine(baseDir, "logs");
-        Directory.CreateDirectory(logs);
+        try { Directory.CreateDirectory(logs); } catch { /* View Log just won't find the file */ }
         return logs;
     }
 

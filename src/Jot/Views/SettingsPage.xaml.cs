@@ -68,7 +68,7 @@ public partial class SettingsPage : Page
         string appData = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
         TryDeleteFile(System.IO.Path.Combine(appData, "prompts.json"));
-        TryDeleteFile(System.IO.Path.Combine(appData, "aikey.dat"));
+        TryDeleteFile(System.IO.Path.Combine(Services.JotPaths.DataDir(s), "aikey.dat")); // now under the data folder
         TryDeleteFile(System.IO.Path.Combine(appData, "settings.json")); // last: back to first-run defaults
         Restart();
     }

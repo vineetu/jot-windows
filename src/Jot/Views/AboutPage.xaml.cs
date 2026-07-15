@@ -19,6 +19,15 @@ public partial class AboutPage : Page
     private void OnSendFeedback(object sender, RoutedEventArgs e)
         => OpenUrl("mailto:jottranscribe@gmail.com?subject=Jot%20for%20Windows%20feedback");
 
+    // Troubleshooting: relaunch the app cleanly (a fresh process, then shut this one down).
+    private void OnRestart(object sender, RoutedEventArgs e)
+    {
+        string? exe = Environment.ProcessPath;
+        if (exe is not null)
+            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
+        System.Windows.Application.Current.Shutdown();
+    }
+
     private void OnViewLog(object sender, RoutedEventArgs e)
     {
         string log = Jot.Services.JotLog.LogFilePath;
