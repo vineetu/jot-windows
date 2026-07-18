@@ -42,7 +42,8 @@ public sealed class PillController
     {
         string? stop = HotkeyChord.TryParse(_settings.Current.ToggleRecordingHotkey, out HotkeyChord t)
             ? t.ToDisplayString() : null;
-        string? cancel = HotkeyChord.TryParse(_settings.Current.CancelRecordingHotkey, out HotkeyChord c)
+        // Stop is fixed to Esc (see RecorderController.StopRecordingChord) — hint it consistently.
+        string? cancel = HotkeyChord.TryParse(Jot.Recording.RecorderController.StopRecordingChord, out HotkeyChord c)
             ? c.ToDisplayString() : null;
         return (stop, cancel);
     }

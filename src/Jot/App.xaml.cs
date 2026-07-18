@@ -204,6 +204,16 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Dev affordance: `--suppresshooktest` proves the SUPPRESSING hook (Recording.LowLevelHotkeys)
+        // consumes a bound bare special key (Apps) so its native context menu can't fire, then releases
+        // it when unbound. The fix for "Toggle bound to the Apps key opened right-click menus
+        // everywhere." Result → %TEMP%\jot-suppresshooktest.txt.
+        if (e.Args.Contains("--suppresshooktest"))
+        {
+            RunSuppressHookTest();
+            return;
+        }
+
         // Dev affordance: `--notepadselftest` drives REAL notepad.exe (a genuinely separate process —
         // not a self-owned window) to find out why Alt+/ reports "no text selected" in real use even
         // though --rewriteselftest passes against an in-process target. Result →
@@ -211,6 +221,18 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--notepadselftest"))
         {
             RunNotepadSelfTest();
+            Shutdown();
+            return;
+        }
+
+        // Dev affordance: `--uiacapturetest` verifies the NEW production selection path
+        // (UiaSelectionReader.TryReadSelection — UI Automation, no keystroke, no clipboard) against
+        // REAL notepad.exe: select text, then read it exactly as the Rewrite hotkey now does. This is
+        // the "verify before claiming" check for the UIA-first rewrite fix. Result →
+        // %TEMP%\jot-uiacapturetest.txt.
+        if (e.Args.Contains("--uiacapturetest"))
+        {
+            RunUiaCaptureTest();
             Shutdown();
             return;
         }
@@ -526,6 +548,107 @@ public partial class App : System.Windows.Application
         finally
         {
             if (hookHandle != IntPtr.Zero) UnhookWindowsHookEx(hookHandle);
+            target?.Dispose();
+        }
+        Shutdown();
+    }
+
+    /// <summary>
+    /// Verifies the SUPPRESSING hotkey hook (<see cref="Recording.LowLevelHotkeys"/>) used for bare
+    /// special keys like Apps/"menu". Proves that when the Apps key is bound: (1) the bound action fires,
+    /// and (2) the key is CONSUMED — a focused target window on its own thread never sees it, so its
+    /// native behaviour (the right-click context menu) can't fire. Then unbinds and confirms the key
+    /// flows normally again. This is the fix for "binding Toggle to the Apps key popped context menus
+    /// everywhere." → %TEMP%\jot-suppresshooktest.txt.
+    /// </summary>
+    private void RunSuppressHookTest()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-suppresshooktest.txt");
+        var log = new System.Text.StringBuilder();
+        // Tested with F1, not Apps: F1 goes through the IDENTICAL suppression path (both are in
+        // IsSuppressableBareKey → _actions map → the hook returns 1), and the passive-hook test already
+        // proved a focused target reliably RECEIVES F1 when not suppressed — whereas the Apps key
+        // interferes with WPF's PreviewKeyDown counter, making it a useless "target saw it" signal. So
+        // F1 gives a conclusive baseline→suppressed→restored sequence that proves the mechanism the Apps
+        // key relies on. A separate [apps] line confirms the Apps action fires + is hook-suppressed too.
+        const uint VK_F1 = 0x70, VK_APPS = 0x5D;
+        RewriteTestTarget? target = null;
+        Recording.LowLevelHotkeys? hook = null;
+        try
+        {
+            SystemParametersInfo(0x2001, 0, IntPtr.Zero, 0); // defeat foreground lock (headless self-test only)
+
+            int targetSawF1 = 0, hookFiredF1 = 0, hookFiredApps = 0;
+            target = new RewriteTestTarget("");
+            target.CountKeyDown(System.Windows.Input.Key.F1, () => Interlocked.Increment(ref targetSawF1));
+            target.CountKeyDown(System.Windows.Input.Key.Apps, () => { /* counted elsewhere; Apps is unreliable */ });
+
+            Delivery.TextInjector.FocusWindow(target.Hwnd);
+            Pump(300);
+
+            hook = new Recording.LowLevelHotkeys(Dispatcher);
+
+            // Warm-up loop: the target window (created on its own thread) drops the first few synthetic
+            // keystrokes while keyboard focus settles (observed: it took ~3 presses before delivery stuck).
+            // Retry F1 until the target actually receives one, so the measured baseline below is reliable
+            // rather than racing focus. Bounded so a genuine "never delivered" still surfaces as a fail.
+            for (int i = 0; i < 8 && targetSawF1 == 0; i++)
+            {
+                Delivery.TextInjector.FocusWindow(target.Hwnd);
+                Delivery.TextInjector.SendVirtualKeyPress((ushort)VK_F1);
+                Pump(300);
+            }
+            log.AppendLine($"[warmup] presses until first delivery, targetSawF1={targetSawF1} (warm={targetSawF1 > 0})");
+            targetSawF1 = 0; // discard the warm-up
+
+            // --- Baseline: NO hook. The focused target must see F1 (proves the detector works). ---
+            int sawBaseline = targetSawF1;
+            Delivery.TextInjector.SendVirtualKeyPress((ushort)VK_F1);
+            Pump(400);
+            bool baselineFlows = targetSawF1 > sawBaseline;
+            log.AppendLine($"[baseline no-hook] targetSawF1={targetSawF1 - sawBaseline} (delivered={baselineFlows})");
+
+            // --- Bound: F1 should fire our action AND be swallowed (target sees nothing new). ---
+            hook.SetBindings([(VK_F1, () => Interlocked.Increment(ref hookFiredF1))]);
+            Delivery.TextInjector.FocusWindow(target.Hwnd);
+            Pump(150);
+            int sawBeforeBound = targetSawF1;
+            Delivery.TextInjector.SendVirtualKeyPress((ushort)VK_F1);
+            Pump(400);
+            bool actionFired = hookFiredF1 > 0;
+            bool targetBlocked = targetSawF1 == sawBeforeBound;
+            log.AppendLine($"[bound F1] hookFired={hookFiredF1} (actionFired={actionFired})  " +
+                $"targetSawF1={targetSawF1 - sawBeforeBound} (suppressed={targetBlocked})");
+
+            // --- Unbound: the hook releases F1; normal delivery must resume (target sees it again). ---
+            hook.SetBindings([]);
+            Delivery.TextInjector.FocusWindow(target.Hwnd);
+            Pump(150);
+            int sawBeforeUnbound = targetSawF1;
+            Delivery.TextInjector.SendVirtualKeyPress((ushort)VK_F1);
+            Pump(400);
+            bool flowsWhenUnbound = targetSawF1 > sawBeforeUnbound;
+            log.AppendLine($"[unbound F1] targetSawF1={targetSawF1 - sawBeforeUnbound} (normalDeliveryRestored={flowsWhenUnbound})");
+
+            // --- Apps (the user's actual key): confirm the bound action fires + the hook consumes it. ---
+            hook.SetBindings([(VK_APPS, () => Interlocked.Increment(ref hookFiredApps))]);
+            Delivery.TextInjector.FocusWindow(target.Hwnd);
+            Pump(150);
+            Delivery.TextInjector.SendVirtualKeyPress((ushort)VK_APPS);
+            Pump(400);
+            log.AppendLine($"[bound Apps] hookFired={hookFiredApps} (actionFired={hookFiredApps > 0}; " +
+                "consumed via the same return-1 path as F1 above)");
+
+            bool pass = baselineFlows && actionFired && targetBlocked && flowsWhenUnbound && hookFiredApps > 0;
+            System.IO.File.WriteAllText(outPath, $"{(pass ? "PASS" : "FAIL")}\n{log}");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n{log}");
+        }
+        finally
+        {
+            hook?.Dispose();
             target?.Dispose();
         }
         Shutdown();
@@ -874,6 +997,102 @@ public partial class App : System.Windows.Application
             // owner), not just the one we ended up tracking — avoid leaving test junk running.
             try { foreach (var p in System.Diagnostics.Process.GetProcessesByName("Notepad")) { try { p.Kill(); } catch { } } }
             catch { /* best effort — avoid a save-changes prompt hanging around */ }
+            try { System.IO.File.Delete(tmpFile); } catch { /* best effort */ }
+        }
+    }
+
+    /// <summary>
+    /// Verifies the NEW UIA-first selection capture against REAL notepad.exe by driving the exact
+    /// production method <see cref="Delivery.UiaSelectionReader.TryReadSelection"/> — no synthetic
+    /// Ctrl+C, no clipboard, no modifier games. Reuses the Notepad launch/focus scaffolding proven out
+    /// by <see cref="RunNotepadSelfTest"/>. Also confirms it still works with Alt physically held (the
+    /// old failure mode) — UIA sends no keys, so a held Alt is irrelevant. → %TEMP%\jot-uiacapturetest.txt.
+    /// </summary>
+    private void RunUiaCaptureTest()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-uiacapturetest.txt");
+        var log = new System.Text.StringBuilder();
+        const string marker = "JOT_UIA_CAPTURE_MARKER_5521 rewrite this sentence please";
+        string tmpFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"jot-uiacapturetest-{Guid.NewGuid():N}.txt");
+        System.IO.File.WriteAllText(tmpFile, marker);
+        try
+        {
+            SystemParametersInfo(0x2001, 0, IntPtr.Zero, 0); // defeat foreground lock (headless self-test only)
+            foreach (var stale in System.Diagnostics.Process.GetProcessesByName("Notepad"))
+            { try { stale.Kill(); } catch { } }
+            Pump(500);
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe", $"\"{tmpFile}\"")
+            { UseShellExecute = true });
+            IntPtr hwnd = IntPtr.Zero;
+            var launchTimer = System.Diagnostics.Stopwatch.StartNew();
+            while (launchTimer.ElapsedMilliseconds < 8000)
+            {
+                foreach (var p in System.Diagnostics.Process.GetProcessesByName("Notepad"))
+                { p.Refresh(); if (p.MainWindowHandle != IntPtr.Zero) { hwnd = p.MainWindowHandle; break; } }
+                if (hwnd != IntPtr.Zero) break;
+                Pump(150);
+            }
+            log.AppendLine($"notepadHwnd={hwnd} (waited {launchTimer.ElapsedMilliseconds}ms)");
+            if (hwnd == IntPtr.Zero) throw new InvalidOperationException("Notepad never produced a main window.");
+
+            Delivery.TextInjector.FocusWindow(hwnd);
+            Pump(500);
+            Delivery.TextInjector.FocusWindow(hwnd);
+
+            var tabWait = System.Diagnostics.Stopwatch.StartNew();
+            bool tabSelected = false;
+            while (tabWait.ElapsedMilliseconds < 5000)
+            { tabSelected = SelectTabByName(hwnd, System.IO.Path.GetFileName(tmpFile)); if (tabSelected) break; Pump(250); }
+            log.AppendLine($"tabSelected={tabSelected}");
+            bool docFocused = FocusUiaDocument(hwnd);
+            log.AppendLine($"documentFocused={docFocused}");
+            Pump(200);
+
+            Delivery.TextInjector.SendKeyChord(0x1D, Delivery.TextInjector.SCAN_A); // Ctrl+A, select all
+            Pump(300);
+            log.AppendLine($"docTextAfterSelectAll=[{ReadUiaDocumentText(hwnd)}]");
+
+            // --- The real production read: UI Automation, on its own MTA thread, no keystroke. ---
+            var sw1 = System.Diagnostics.Stopwatch.StartNew();
+            string? got1 = Delivery.UiaSelectionReader.TryReadSelection();
+            sw1.Stop();
+            bool ok1 = (got1 ?? "").Trim() == marker;
+            log.AppendLine($"[1] UiaSelectionReader.TryReadSelection(): ms={sw1.ElapsedMilliseconds} " +
+                $"len={(got1 ?? "").Length} correct={ok1} text=[{got1}]");
+
+            // --- Same read, but with Alt PHYSICALLY held the whole time — the exact condition that broke
+            //     synthetic Ctrl+C. UIA sends no keys, so this should be identical to [1]. ---
+            Delivery.TextInjector.FocusWindow(hwnd);
+            Pump(150);
+            Delivery.TextInjector.SendKeyChord(0x1D, Delivery.TextInjector.SCAN_A);
+            Pump(250);
+            Delivery.TextInjector.SendScanKeyDown(Delivery.TextInjector.SCAN_ALT); // Alt DOWN, not released
+            string? got2; long ms2;
+            try
+            {
+                Pump(50);
+                var sw2 = System.Diagnostics.Stopwatch.StartNew();
+                got2 = Delivery.UiaSelectionReader.TryReadSelection();
+                sw2.Stop();
+                ms2 = sw2.ElapsedMilliseconds;
+            }
+            finally { Delivery.TextInjector.SendScanKeyUp(Delivery.TextInjector.SCAN_ALT); } // ALWAYS release
+            bool ok2 = (got2 ?? "").Trim() == marker;
+            log.AppendLine($"[2] TryReadSelection() with Alt HELD the whole call: ms={ms2} " +
+                $"len={(got2 ?? "").Length} correct={ok2} text=[{got2}]");
+
+            bool pass = ok1 && ok2;
+            System.IO.File.WriteAllText(outPath, $"{(pass ? "PASS" : "FAIL")}\n{log}");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n{log}");
+        }
+        finally
+        {
+            try { foreach (var p in System.Diagnostics.Process.GetProcessesByName("Notepad")) { try { p.Kill(); } catch { } } }
+            catch { /* best effort */ }
             try { System.IO.File.Delete(tmpFile); } catch { /* best effort */ }
         }
     }
@@ -1800,9 +2019,28 @@ public partial class App : System.Windows.Application
     /// <summary>Loads the embedded app icon (WPF resource) at the requested size — used by the tray.</summary>
     private static Drawing.Icon LoadAppIcon(Drawing.Size size)
     {
-        var uri = new Uri("pack://application:,,,/Assets/jot.ico");
-        using System.IO.Stream stream = System.Windows.Application.GetResourceStream(uri)!.Stream;
-        return new Drawing.Icon(stream, size);
+        // Defensive: a null/failed icon load must never crash startup (it took down the whole app once
+        // when a packaging change dropped the embedded pack resource). Fall back to the icon baked into
+        // Jot.exe, then to a stock system icon, so the tray always gets *some* icon.
+        try
+        {
+            var uri = new Uri("pack://application:,,,/Assets/jot.ico");
+            System.Windows.Resources.StreamResourceInfo? info = System.Windows.Application.GetResourceStream(uri);
+            if (info?.Stream is { } stream)
+            {
+                using (stream) return new Drawing.Icon(stream, size);
+            }
+        }
+        catch (Exception ex) { JotLog.Warn($"LoadAppIcon: embedded icon failed, using fallback ({ex.Message})"); }
+
+        try
+        {
+            string exe = Environment.ProcessPath ?? System.Reflection.Assembly.GetEntryAssembly()!.Location;
+            if (Drawing.Icon.ExtractAssociatedIcon(exe) is { } fromExe) return fromExe;
+        }
+        catch { /* fall through to the system icon */ }
+
+        return Drawing.SystemIcons.Application;
     }
 
     private void SetupTray()

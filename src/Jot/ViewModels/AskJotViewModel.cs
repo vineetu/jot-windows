@@ -75,7 +75,7 @@ public sealed partial class AskJotViewModel : ObservableObject
             var config = new AiConfig(s.AiProvider,
                 string.IsNullOrWhiteSpace(s.AiBaseUrl) ? null : s.AiBaseUrl,
                 string.IsNullOrWhiteSpace(s.AiModel) ? null : s.AiModel,
-                _credentials.ApiKey);
+                _credentials.GetKey(s.AiProvider));
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             string reply = (await _ai.AskAsync(Grounding, text, config, cts.Token)).Trim();
             Messages.Add(new ChatMessage(reply.Length > 0 ? reply : Answer(text), IsUser: false));

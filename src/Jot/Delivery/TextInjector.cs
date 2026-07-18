@@ -31,6 +31,20 @@ public static class TextInjector
     /// transcript can be delivered back to the app the user was in, even if focus drifts.</summary>
     public static IntPtr CaptureForegroundWindow() => GetForegroundWindow();
 
+    /// <summary>A short "'Title' [pid N]" description of a window, for diagnostics logging.</summary>
+    public static string DescribeWindow(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return "none";
+        var sb = new System.Text.StringBuilder(256);
+        int len = GetWindowText(hWnd, sb, sb.Capacity);
+        GetWindowThreadProcessId(hWnd, out uint pid);
+        string title = len > 0 ? sb.ToString() : "(no title)";
+        return $"'{title}' [pid {pid}]";
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
     /// <param name="restoreTo">Window to refocus before pasting (the app dictation began in), or
     /// <see cref="IntPtr.Zero"/> to paste into whatever currently has focus.</param>
     /// <param name="keepInClipboard">When true, leave the transcript on the clipboard instead of
@@ -93,6 +107,10 @@ public static class TextInjector
     /// </summary>
     public static string CaptureSelection(int pollBudgetMs = 600)
     {
+        // Diagnostics: this path fails silently ("Select some text first") whenever it returns empty,
+        // and the cause has been guessed wrong repeatedly. Log every stage so a single real hands-on
+        // test tells us WHY it's empty (modifier still held? Ctrl+C not honored? nothing selected?).
+        bool modsDownAtEntry = AnyModifierDown();
         string? saved = null;
         try { if (Clipboard.ContainsText()) saved = Clipboard.GetText(); } catch { /* clipboard busy */ }
 
@@ -105,7 +123,8 @@ public static class TextInjector
         // WM_HOTKEY fires the instant the combo completes — before the user has necessarily released
         // either key — this is the normal case for a fast tap, not an edge case. Actively wait for the
         // REAL hardware state to clear instead of just hoping 40ms was enough.
-        WaitForRealModifiersReleased();
+        long modWaitMs = WaitForRealModifiersReleased();
+        bool modsStillDown = AnyModifierDown(); // true here = we timed out with a key physically held
         SendKeyChord(SCAN_CONTROL, SCAN_C);
 
         // Poll for the copy to land instead of a single fixed wait: slow apps (browsers, Electron,
@@ -113,17 +132,28 @@ public static class TextInjector
         // clipboard and wrongly reports "nothing selected." Retry until text appears or we time out.
         // pollBudgetMs is overridable so a dev self-test can tell a real timeout apart from a real failure.
         string captured = "";
-        for (int waited = 0; waited < pollBudgetMs; waited += 30)
+        int polled = 0;
+        for (; polled < pollBudgetMs; polled += 30)
         {
             Thread.Sleep(30);
             try { if (Clipboard.ContainsText()) { captured = Clipboard.GetText(); if (captured.Length > 0) break; } }
             catch { /* clipboard busy — retry */ }
         }
 
+        Jot.Services.JotLog.Info(
+            $"rewrite-capture: modsAtEntry={modsDownAtEntry} modWaitMs={modWaitMs} modsStillDown={modsStillDown} " +
+            $"savedClip={(saved is null ? "none" : saved.Length + "ch")} pollMs={polled} capturedLen={captured.Length}");
+
         // Restore the user's clipboard.
         if (saved is not null) SetClipboardText(saved); else TryClear();
         return captured;
     }
+
+    /// <summary>True if Alt, Ctrl, or Shift is physically down right now (real hardware state).</summary>
+    private static bool AnyModifierDown() =>
+        (GetAsyncKeyState(VK_MENU) & 0x8000) != 0
+        || (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+        || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
 
     private static void SetClipboardText(string text)
     {
@@ -176,10 +206,7 @@ public static class TextInjector
         var sw = System.Diagnostics.Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
-            bool anyDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0
-                || (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
-                || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            if (!anyDown) return sw.ElapsedMilliseconds;
+            if (!AnyModifierDown()) return sw.ElapsedMilliseconds;
             Thread.Sleep(10);
         }
         return sw.ElapsedMilliseconds;

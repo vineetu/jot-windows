@@ -17,6 +17,7 @@ namespace Jot.Recording;
 public sealed class HotkeyManager : IDisposable
 {
     private readonly ISettingsStore _settings;
+    private readonly LowLevelHotkeys _lowLevel;
 
     private GlobalHotkey? _toggle;
     private GlobalHotkey? _pasteLast;
@@ -31,7 +32,11 @@ public sealed class HotkeyManager : IDisposable
     public event Action? Rewrite;
     public event Action? RewriteWithVoice;
 
-    public HotkeyManager(ISettingsStore settings) => _settings = settings;
+    public HotkeyManager(ISettingsStore settings)
+    {
+        _settings = settings;
+        _lowLevel = new LowLevelHotkeys(System.Windows.Application.Current.Dispatcher);
+    }
 
     /// <summary>(Re)registers all hotkeys from current settings. Safe to call repeatedly.</summary>
     public void Rebuild()
@@ -39,18 +44,34 @@ public sealed class HotkeyManager : IDisposable
         DisposeHotkeys();
         JotSettings s = _settings.Current;
 
-        _toggle = Register(s.ToggleRecordingHotkey, "Toggle recording", 1, () => ToggleRecording?.Invoke());
-        _pasteLast = Register(s.PasteLastHotkey, "Paste last transcript", 2, () => PasteLast?.Invoke());
-        _rewrite = Register(s.RewriteHotkey, "Rewrite", 3, () => Rewrite?.Invoke());
-        _rewriteWithVoice = Register(s.RewriteWithVoiceHotkey, "Rewrite with voice", 4, () => RewriteWithVoice?.Invoke());
+        // Bare special keys (Apps, F-keys, locks) go through the suppressing low-level hook so their
+        // native behaviour (e.g. the Apps key's context menu) can't leak; everything else uses
+        // RegisterHotKey. Collect the bare-key binds first, then hand them to the hook in one shot.
+        var bareBinds = new List<(uint vk, Action action)>();
+
+        _toggle = Register(s.ToggleRecordingHotkey, "Toggle recording", 1, () => ToggleRecording?.Invoke(), bareBinds);
+        _pasteLast = Register(s.PasteLastHotkey, "Paste last transcript", 2, () => PasteLast?.Invoke(), bareBinds);
+        _rewrite = Register(s.RewriteHotkey, "Rewrite", 3, () => Rewrite?.Invoke(), bareBinds);
+        _rewriteWithVoice = Register(s.RewriteWithVoiceHotkey, "Rewrite with voice", 4, () => RewriteWithVoice?.Invoke(), bareBinds);
+
+        _lowLevel.SetBindings(bareBinds);
     }
 
-    private GlobalHotkey? Register(string? chordText, string label, int id, Action onPressed)
+    /// <summary>Registers one chord. Bare special keys are routed to the suppressing low-level hook
+    /// (added to <paramref name="bareBinds"/>, returns null); other chords use RegisterHotKey.</summary>
+    private GlobalHotkey? Register(string? chordText, string label, int id, Action onPressed,
+        List<(uint vk, Action action)> bareBinds)
     {
         if (!HotkeyChord.TryParse(chordText, out HotkeyChord chord))
         {
             if (!string.IsNullOrWhiteSpace(chordText))
                 RegistrationFailed?.Invoke(label, $"“{chordText}” isn't a valid shortcut.");
+            return null;
+        }
+
+        if (LowLevelHotkeys.IsSuppressableBareKey(chord))
+        {
+            bareBinds.Add((chord.VirtualKey, onPressed));
             return null;
         }
 
@@ -73,7 +94,12 @@ public sealed class HotkeyManager : IDisposable
         _pasteLast?.Dispose(); _pasteLast = null;
         _rewrite?.Dispose(); _rewrite = null;
         _rewriteWithVoice?.Dispose(); _rewriteWithVoice = null;
+        _lowLevel.SetBindings([]); // drop any bare-key bindings + uninstall the hook if now empty
     }
 
-    public void Dispose() => DisposeHotkeys();
+    public void Dispose()
+    {
+        DisposeHotkeys();
+        _lowLevel.Dispose();
+    }
 }

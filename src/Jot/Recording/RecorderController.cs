@@ -214,7 +214,7 @@ public sealed class RecorderController : IDisposable
             var config = new AiConfig(s.AiProvider,
                 string.IsNullOrWhiteSpace(s.AiBaseUrl) ? null : s.AiBaseUrl,
                 string.IsNullOrWhiteSpace(s.AiModel) ? null : s.AiModel,
-                _credentials.ApiKey);
+                _credentials.GetKey(s.AiProvider));
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             string cleaned = await _ai.CleanupAsync(text, config, cts.Token);
             return string.IsNullOrWhiteSpace(cleaned) ? text : cleaned.Trim();
@@ -225,14 +225,19 @@ public sealed class RecorderController : IDisposable
         }
     }
 
-    // ---- stop hotkey (Esc by default), live only while recording — stops AND saves ----------------
+    // ---- stop hotkey (fixed to Esc), live only while recording — stops AND saves ------------------
+
+    /// <summary>The stop-&amp;-save shortcut is deliberately fixed to Esc and not user-editable: a
+    /// rebind field can never capture Esc (it cancels the capture), and Esc is the natural "stop" key.
+    /// Kept as a constant so the Shortcuts page, the pill hint, and this arming logic can't drift.</summary>
+    public const string StopRecordingChord = "Escape";
 
     private void ArmStopHotkey()
     {
         DisarmStopHotkey();
-        if (!HotkeyChord.TryParse(_settings.Current.CancelRecordingHotkey, out HotkeyChord chord))
+        if (!HotkeyChord.TryParse(StopRecordingChord, out HotkeyChord chord))
         {
-            Log($"stop-hotkey: could not parse '{_settings.Current.CancelRecordingHotkey}'");
+            Log($"stop-hotkey: could not parse '{StopRecordingChord}'");
             return;
         }
         try

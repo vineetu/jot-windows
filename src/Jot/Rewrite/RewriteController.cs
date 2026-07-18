@@ -70,7 +70,21 @@ public sealed class RewriteController
     public bool CaptureContext()
     {
         _origin = TextInjector.CaptureForegroundWindow();
+        Services.JotLog.Info($"rewrite: begin capture, foreground='{TextInjector.DescribeWindow(_origin)}'");
+
+        // 1) UI Automation first: reads the selection directly with NO keystroke and NO clipboard, so it
+        //    can't be broken by a still-held Alt or clipboard timing. Handles Notepad/Word/native edits.
+        string uia = (UiaSelectionReader.TryReadSelection() ?? "").Trim();
+        if (uia.Length > 0)
+        {
+            _selection = uia;
+            Services.JotLog.Info($"rewrite: captured via UIA, len={_selection.Length}");
+            return true;
+        }
+
+        // 2) Fallback: synthetic Ctrl+C → clipboard, for apps UIA can't read (Chromium/Electron/Java).
         _selection = TextInjector.CaptureSelection().Trim();
+        Services.JotLog.Info($"rewrite: captured via clipboard fallback, len={_selection.Length}");
         return _selection.Length > 0;
     }
 
@@ -94,7 +108,7 @@ public sealed class RewriteController
             var config = new AiConfig(s.AiProvider,
                 string.IsNullOrWhiteSpace(s.AiBaseUrl) ? null : s.AiBaseUrl,
                 string.IsNullOrWhiteSpace(s.AiModel) ? null : s.AiModel,
-                _credentials.ApiKey);
+                _credentials.GetKey(s.AiProvider));
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             string result = (await _ai.RewriteAsync(_selection, instruction, config, cts.Token)).Trim();

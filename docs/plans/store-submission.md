@@ -1,5 +1,25 @@
 # Microsoft Store submission — prep checklist
 
+## 2026-07-17 UPDATE — first submission REJECTED; MSIX path confirmed
+
+The user submitted the Velopack `Jot-win-Setup.exe` as an **"EXE or MSI app"** ("Jot Transcribe",
+Partner Center ID `5654b512-39e3-4b47-bae0-3c97b8a3dd7d`). **Rejected 2026-07-15 under policy
+10.2.9**: the EXE and its PE files are unsigned; EXE/MSI submissions require a CA-trusted code-signing
+cert. Microsoft's own suggested fix: resubmit as **MSIX** (Store signs it automatically — no cert).
+
+Consequences / next steps:
+1. The EXE-type registration **cannot be converted** to MSIX. The user must (in Partner Center):
+   cancel any pending review → delete the "Jot Transcribe" EXE product (frees the name) → create a
+   NEW product of type **MSIX or PWA app** → reserve "Jot Transcribe" → Product management →
+   **Product identity** → copy Package/Identity/Name, Package/Identity/Publisher (CN=GUID), and
+   Publisher display name into `src/Jot/Package.appxmanifest` (currently placeholders `jot` /
+   `CN=vinee`). NOTE: the EXE-type app has no Product identity page — that page only exists on
+   MSIX-type registrations (this confused the user; expected).
+2. Then: build MSIX with real identity, install + launch the packaged build locally (the never-yet-
+   verified step), fix whatever breaks, upload to the new app's Packages page, submit.
+3. Microphone capability was added to the manifest 2026-07-17 (`<DeviceCapability Name="microphone"/>`).
+
+
 **Related docs:** `../features.md` = feature status; `fixit-worklist.md` = broader todo;
 **this doc** = what's needed specifically to list Jot on the Microsoft Store. Scope here is
 **code-side prep only** — creating the actual Partner Center account, obtaining a

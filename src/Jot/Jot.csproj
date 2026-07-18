@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -11,17 +11,24 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Jot</AssemblyName>
     <RootNamespace>Jot</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <ApplicationIcon>Assets\jot.ico</ApplicationIcon>
     <!-- ONNX Runtime ships native (win-x64) libraries; pin the platform so they are restored/copied. -->
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- Enables targets that generate package layout, required for running with winapp run or msix packaging -->
+    <EnableMsixTooling>true</EnableMsixTooling>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- WASAPI microphone capture + resampling to 16 kHz mono -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
+    <!-- WinApp CLI integration: enables 'dotnet run' support for packaged apps and MSIX packaging.
+         NOT Microsoft.WindowsAppSDK — Jot is plain WPF (no WinUI3/app-lifecycle APIs used), and that
+         package transitively ships its own onnxruntime.dll that collides with the one already used for
+         STT (Microsoft.ML.OnnxRuntime.DirectML) — APPX1101 duplicate-payload-path build error. -->
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.4.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
     <!-- Auto-updating installer (Setup.exe) + delta updates from GitHub Releases -->
@@ -40,6 +47,14 @@
     <!-- FFmpeg (decodes any audio/video format for file import) is no longer bundled — it's ~138 MB
          and only needed by the optional file-import feature. Jot.Import.FfmpegInstaller downloads it
          on first use from a standalone GitHub release, decoupled from the app's own version tags. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- jot.ico is excluded here because it's already embedded as a <Resource> above (line 46). Listing
+         the same file as both Resource and Content drops the embedded copy, so the pack URI
+         (pack://application:,,,/Assets/jot.ico) resolves to null and the tray/window icon load crashes
+         startup. Keep the app icon Resource-only; the rest of Assets\ is MSIX tile/store artwork. -->
+    <Content Include="Assets\**\*" Exclude="Assets\jot.ico" />
   </ItemGroup>
 
 </Project>

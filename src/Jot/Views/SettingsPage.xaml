@@ -16,10 +16,18 @@
         <StackPanel MaxWidth="820">
             <TextBlock Text="Settings" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
+            <!-- Search: filters the rows below by title, description, or section name as you type
+                 (OnSearchChanged in the code-behind). Matching advanced rows are revealed even when
+                 "Show advanced features" is off. -->
+            <ui:TextBox x:Name="SearchBox" Margin="0,4,0,4"
+                        PlaceholderText="Search settings"
+                        Icon="{ui:SymbolIcon Search24}"
+                        TextChanged="OnSearchChanged" />
+
             <!-- BASIC: by default Settings shows only the everyday, actionable choices — Appearance,
-                 Microphone, Language — plus the Advanced Features toggle. Everything else is gated on
+                 Microphone, Language, AI — plus the Advanced Features toggle. Everything else is gated on
                  that toggle below, so the page isn't a wall of options for a first-time user. -->
-            <TextBlock Text="General" Style="{StaticResource SectionHeader}" Margin="2,8,0,8" />
+            <TextBlock Text="General" Style="{StaticResource SectionHeader}" Tag="section" Margin="2,8,0,8" />
 
             <ctl:SettingRow Title="Appearance" Description="Match Windows, or force light or dark.">
                 <ComboBox MinWidth="150" ItemsSource="{Binding ThemeModes}"
@@ -34,13 +42,87 @@
                 <ComboBox MinWidth="150" ItemsSource="{Binding Languages}"
                           SelectedItem="{Binding Language, Mode=TwoWay}" />
             </ctl:SettingRow>
+            <!-- AI: bring-your-own provider for optional transcript cleanup & rewrite. Shown in the
+                 basic section (no "advanced" gate); only the model/base-URL overrides stay advanced. -->
+            <TextBlock Text="AI" Style="{StaticResource SectionHeader}" Tag="section" />
+            <ui:InfoBar x:Name="AiInfoBar" IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,0,0,8"
+                        Title="Bring your own provider"
+                        Message="Choose a provider below for optional transcript cleanup and rewrite. Ollama runs fully on-device; the rest need an API key." />
+
+            <ctl:SettingRow Title="Provider" Description="Used for optional cleanup and rewrite. Sensible defaults are chosen for you; Ollama runs locally.">
+                <ComboBox MinWidth="150" ItemsSource="{Binding Providers}"
+                          SelectedItem="{Binding AiProvider, Mode=TwoWay}" />
+            </ctl:SettingRow>
+            <StackPanel Visibility="{Binding AiConfigured, Converter={StaticResource BoolToVis}}">
+                <ctl:SettingRow Title="API key" Description="Saved securely on this PC (Windows DPAPI), separately per provider, and reused after every restart."
+                                Visibility="{Binding NeedsApiKey, Converter={StaticResource BoolToVis}}">
+                    <!-- Masked by default; the eye button toggles a plain-text view. Uses the NATIVE
+                         PasswordBox (not ui:PasswordBox — that control does not render programmatic
+                         Password sets, which broke prefill-on-launch and clearing on provider switch).
+                         Both boxes are synced to the VM in code-behind; the eye button's icon is set
+                         there too (compile-checked SymbolRegular enum). None of these can take x:Name
+                         (SettingRow namescope), so each is captured via its Loaded event. -->
+                    <StackPanel MinWidth="340">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <PasswordBox Grid.Column="0" FontFamily="{StaticResource JotMonoFont}" FontSize="12"
+                                         VerticalContentAlignment="Center"
+                                         Loaded="OnKeyMaskedLoaded" PasswordChanged="OnKeyMaskedChanged" />
+                            <ui:TextBox Grid.Column="0" FontFamily="{StaticResource JotMonoFont}" FontSize="12"
+                                        Visibility="Collapsed" PlaceholderText="Paste your API key"
+                                        Loaded="OnKeyPlainLoaded" TextChanged="OnKeyPlainChanged" />
+                            <ui:Button Grid.Column="1" Margin="6,0,0,0" Padding="8,6"
+                                       ToolTip="Show key" Loaded="OnKeyEyeLoaded" Click="OnToggleKeyReveal" />
+                        </Grid>
+                        <ui:HyperlinkButton Margin="0,4,0,0" Padding="0" FontSize="12"
+                                            Content="Get your API key ↗" NavigateUri="{Binding ApiKeyUrl}"
+                                            Visibility="{Binding HasApiKeyUrl, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </ctl:SettingRow>
+                <!-- Non-advanced: pick a model from the curated per-provider list. Advanced mode swaps
+                     this for a free-text override box below. -->
+                <ctl:SettingRow Title="Model" Description="Pick the model to use for this provider."
+                                Visibility="{Binding ShowModelPicker, Converter={StaticResource BoolToVis}}">
+                    <ComboBox MinWidth="220" FontFamily="{StaticResource JotMonoFont}"
+                              ItemsSource="{Binding AiModels}"
+                              SelectedItem="{Binding AiModel, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <!-- Advanced overrides (base URL + model) mirror the Mac app's advanced pane. -->
+                <StackPanel Visibility="{Binding ShowAiOverrides, Converter={StaticResource BoolToVis}}">
+                    <ctl:SettingRow Title="Model" Description="Override the default model.">
+                        <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultModelHint}"
+                                    Text="{Binding AiModel, UpdateSourceTrigger=PropertyChanged}" />
+                    </ctl:SettingRow>
+                    <ctl:SettingRow Title="Base URL" Description="Override the provider's default endpoint.">
+                        <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultBaseUrlHint}"
+                                    Text="{Binding AiBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                    </ctl:SettingRow>
+                </StackPanel>
+                <ctl:SettingRow Title="Clean up transcript with AI"
+                                Description="Remove filler words and fix punctuation after each dictation.">
+                    <ui:ToggleSwitch IsChecked="{Binding CleanupEnabled, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Test connection">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding TestConnectionResult}" VerticalAlignment="Center" Margin="0,0,10,0"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" MaxWidth="280"
+                                   TextWrapping="Wrap" />
+                        <ui:Button Content="Test" Command="{Binding TestConnectionCommand}" />
+                    </StackPanel>
+                </ctl:SettingRow>
+            </StackPanel>
+
             <ctl:SettingRow Title="Show advanced features"
                             Description="Reveal power-user settings: save location, speech model, processing, paste behavior, sound, and reset.">
                 <ui:ToggleSwitch IsChecked="{Binding AdvancedFeatures, Mode=TwoWay}" />
             </ctl:SettingRow>
 
-            <!-- ADVANCED: everything below is revealed only when "Show advanced features" is on. -->
-            <StackPanel Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">
+            <!-- ADVANCED: everything below is revealed only when "Show advanced features" is on.
+                 Named so search can force it open when a query matches an advanced row. -->
+            <StackPanel x:Name="AdvancedPanel" Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">
 
                 <ctl:SettingRow Title="Launch at login" Description="Start Jot in the tray when you sign in.">
                     <ui:ToggleSwitch IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}" />
@@ -72,7 +154,7 @@
                 </ctl:SettingRow>
 
                 <!-- TRANSCRIPTION -->
-                <TextBlock Text="Transcription" Style="{StaticResource SectionHeader}" />
+                <TextBlock Text="Transcription" Style="{StaticResource SectionHeader}" Tag="section" />
 
                 <ctl:SettingRow Title="Model" Description="On-device speech model (Nemotron 3.5, multilingual — runs locally, nothing leaves your PC).">
                     <StackPanel MinWidth="280">
@@ -109,64 +191,8 @@
                     <ui:ToggleSwitch IsChecked="{Binding KeepInClipboard, Mode=TwoWay}" />
                 </ctl:SettingRow>
 
-                <!-- AI — HIDDEN: cleanup/rewrite/Ask Jot aren't usable yet, so the whole AI section is
-                     turned off until the features actually work. Un-collapse this StackPanel to restore.
-                     See docs/plans/fixit-worklist.md (A4/A5 + AI cleanup unverified). -->
-                <StackPanel Visibility="Collapsed">
-                <TextBlock Text="AI" Style="{StaticResource SectionHeader}" />
-                <ui:InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,0,0,8"
-                            Title="Bring your own provider"
-                            Message="Choose a provider below for optional transcript cleanup and rewrite. Ollama runs fully on-device; the rest need an API key." />
-
-                <ctl:SettingRow Title="Provider" Description="Used for optional cleanup and rewrite. Sensible defaults are chosen for you; Ollama runs locally.">
-                    <ComboBox MinWidth="150" ItemsSource="{Binding Providers}"
-                              SelectedItem="{Binding AiProvider, Mode=TwoWay}" />
-                </ctl:SettingRow>
-                <StackPanel Visibility="{Binding AiConfigured, Converter={StaticResource BoolToVis}}">
-                    <ctl:SettingRow Title="API key" Description="Saved securely on this PC (Windows DPAPI) and reused after every restart."
-                                    Visibility="{Binding NeedsApiKey, Converter={StaticResource BoolToVis}}">
-                        <StackPanel MinWidth="260">
-                            <ui:PasswordBox PasswordChanged="OnApiKeyChanged" />
-                            <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                       Text="A key is already saved. Type a new one to replace it."
-                                       Visibility="{Binding HasSavedKey, Converter={StaticResource BoolToVis}}" />
-                        </StackPanel>
-                    </ctl:SettingRow>
-                    <!-- Default model, shown read-only unless the user turns on advanced overrides. -->
-                    <ctl:SettingRow Title="Model" Description="The default model for this provider."
-                                    Visibility="{Binding ShowAiModelReadonly, Converter={StaticResource BoolToVis}}">
-                        <TextBlock Text="{Binding EffectiveAiModel}" VerticalAlignment="Center"
-                                   FontFamily="{StaticResource JotMonoFont}" FontSize="12" />
-                    </ctl:SettingRow>
-                    <!-- Advanced overrides (base URL + model) mirror the Mac app's advanced pane. -->
-                    <StackPanel Visibility="{Binding ShowAiOverrides, Converter={StaticResource BoolToVis}}">
-                        <ctl:SettingRow Title="Model" Description="Override the default model.">
-                            <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultModelHint}"
-                                        Text="{Binding AiModel, UpdateSourceTrigger=PropertyChanged}" />
-                        </ctl:SettingRow>
-                        <ctl:SettingRow Title="Base URL" Description="Override the provider's default endpoint.">
-                            <ui:TextBox MinWidth="260" PlaceholderText="{Binding DefaultBaseUrlHint}"
-                                        Text="{Binding AiBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
-                        </ctl:SettingRow>
-                    </StackPanel>
-                    <ctl:SettingRow Title="Clean up transcript with AI"
-                                    Description="Remove filler words and fix punctuation after each dictation.">
-                        <ui:ToggleSwitch IsChecked="{Binding CleanupEnabled, Mode=TwoWay}" />
-                    </ctl:SettingRow>
-                    <ctl:SettingRow Title="Test connection">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding TestConnectionResult}" VerticalAlignment="Center" Margin="0,0,10,0"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" MaxWidth="280"
-                                       TextWrapping="Wrap" />
-                            <ui:Button Content="Test" Command="{Binding TestConnectionCommand}" />
-                        </StackPanel>
-                    </ctl:SettingRow>
-                </StackPanel>
-                </StackPanel>
-                <!-- /AI hidden -->
-
                 <!-- SOUND -->
-                <TextBlock Text="Sound" Style="{StaticResource SectionHeader}" />
+                <TextBlock Text="Sound" Style="{StaticResource SectionHeader}" Tag="section" />
                 <ctl:SettingRow Title="Recording start">
                     <ui:ToggleSwitch IsChecked="{Binding SoundStart, Mode=TwoWay}" />
                 </ctl:SettingRow>

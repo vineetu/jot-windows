@@ -100,24 +100,44 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool AiConfigured => AiProvider != "None";
     public bool NeedsApiKey => AiConfigured && AiDefaults.NeedsKey(AiProvider);
-    /// <summary>True when an encrypted key is already stored — the PasswordBox is blank on load (WPF
-    /// can't pre-fill it for security), so surface that the key is saved rather than looking unset.</summary>
-    public bool HasSavedKey => !string.IsNullOrEmpty(_credentials.ApiKey);
-    public bool ShowAiOverrides => AiConfigured && AdvancedFeatures;          // base URL + model overrides
-    public bool ShowAiModelReadonly => AiConfigured && !AdvancedFeatures;      // just show the default
+    /// <summary>True when an encrypted key is already stored for the selected provider.</summary>
+    public bool HasSavedKey => !string.IsNullOrEmpty(_credentials.GetKey(AiProvider));
+    public bool ShowAiOverrides => AiConfigured && AdvancedFeatures;          // free-text base URL + model overrides
+    public bool ShowModelPicker => AiConfigured && !AdvancedFeatures;         // curated model dropdown
     public string EffectiveAiModel => string.IsNullOrWhiteSpace(AiModel) ? AiDefaults.Model(AiProvider) : AiModel;
     public string DefaultModelHint => AiDefaults.Model(AiProvider);
     public string DefaultBaseUrlHint => AiDefaults.BaseUrl(AiProvider);
+
+    /// <summary>The curated model IDs shown in the non-advanced dropdown for the current provider.
+    /// The dropdown binds its SelectedItem straight to <see cref="AiModel"/>.</summary>
+    public ObservableCollection<string> AiModels { get; } = new();
+
+    /// <summary>Deep link to the provider's API-key page, surfaced as a small link under the key box.</summary>
+    public string ApiKeyUrl => AiDefaults.ApiKeyUrl(AiProvider);
+    public bool HasApiKeyUrl => !string.IsNullOrEmpty(ApiKeyUrl);
+
+    /// <summary>Rebuild the model list for the current provider, then make sure a valid item is
+    /// selected — clearing the ItemsSource blanks the ComboBox, so we re-assign the model (to the
+    /// provider default when the current one isn't offered) AFTER the items are back in place.</summary>
+    private void RefreshAiModels()
+    {
+        AiModels.Clear();
+        foreach (string m in AiDefaults.Models(AiProvider)) AiModels.Add(m);
+        if (AiModels.Count > 0 && !AiModels.Contains(AiModel))
+            AiModel = AiModels[0];
+    }
 
     private void RaiseAiComputed()
     {
         OnPropertyChanged(nameof(AiConfigured));
         OnPropertyChanged(nameof(NeedsApiKey));
         OnPropertyChanged(nameof(ShowAiOverrides));
-        OnPropertyChanged(nameof(ShowAiModelReadonly));
+        OnPropertyChanged(nameof(ShowModelPicker));
         OnPropertyChanged(nameof(EffectiveAiModel));
         OnPropertyChanged(nameof(DefaultModelHint));
         OnPropertyChanged(nameof(DefaultBaseUrlHint));
+        OnPropertyChanged(nameof(ApiKeyUrl));
+        OnPropertyChanged(nameof(HasApiKeyUrl));
     }
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
@@ -154,7 +174,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _aiProvider = S.AiProvider;
         _aiBaseUrl = S.AiBaseUrl ?? "";
         _aiModel = S.AiModel ?? "";
-        _aiApiKey = credentials.ApiKey ?? "";
+        _aiApiKey = credentials.GetKey(S.AiProvider) ?? ""; // the key saved for the current provider
         _cleanupEnabled = S.CleanupEnabled;
         _soundStart = S.SoundStart;
         _soundStop = S.SoundStop;
@@ -164,6 +184,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         LoadDevices();
         RefreshModelStatus();
+        RefreshAiModels();
     }
 
     /// <summary>Applies the stored language to the engine. Called at startup and on change.</summary>
@@ -224,9 +245,23 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnSoundSuccessChanged(bool value) { S.SoundSuccess = value; Save(); }
     partial void OnSoundErrorChanged(bool value) { S.SoundError = value; Save(); }
     partial void OnAiBaseUrlChanged(string value) { S.AiBaseUrl = value; Save(); }
-    partial void OnAiModelChanged(string value) { S.AiModel = value; Save(); OnPropertyChanged(nameof(EffectiveAiModel)); }
-    // Persisted encrypted (DPAPI) by AiCredentials and reloaded on the next launch — survives restarts.
-    partial void OnAiApiKeyChanged(string value) { _credentials.ApiKey = value; OnPropertyChanged(nameof(HasSavedKey)); }
+    partial void OnAiModelChanged(string value)
+    {
+        S.AiModel = value; Save();
+        OnPropertyChanged(nameof(EffectiveAiModel));
+    }
+    // True while OnAiProviderChanged is loading the stored key into AiApiKey — that assignment must
+    // NOT round-trip back into the credential store (switching providers is a read-only operation).
+    private bool _loadingKeyFromStore;
+
+    // Persisted encrypted (DPAPI) by AiCredentials, keyed by the current provider, and reloaded on the
+    // next launch — survives restarts and keeps each provider's key separate. Only genuine edits
+    // (typing/clearing in the box) reach the store.
+    partial void OnAiApiKeyChanged(string value)
+    {
+        if (!_loadingKeyFromStore) _credentials.SetKey(AiProvider, value);
+        OnPropertyChanged(nameof(HasSavedKey));
+    }
 
     // Shortcuts: persist, then Save() raises ISettingsStore.Changed, which App uses to re-register.
     partial void OnToggleRecordingHotkeyChanged(string value) { S.ToggleRecordingHotkey = value; Save(); }
@@ -239,7 +274,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         S.AiProvider = value;
         Save();
+        // Show the key stored for THIS provider — each provider keeps its own. Guarded so the load
+        // doesn't echo back into the store as a (pointless, potentially destructive) write.
+        _loadingKeyFromStore = true;
+        try { AiApiKey = _credentials.GetKey(value) ?? ""; }
+        finally { _loadingKeyFromStore = false; }
+        // Rebuild the model dropdown for the new provider; RefreshAiModels resets the selection to
+        // that provider's default when the previous model isn't in the new list.
+        RefreshAiModels();
         RaiseAiComputed();
+        OnPropertyChanged(nameof(HasSavedKey));
         TestConnectionResult = "";
     }
 

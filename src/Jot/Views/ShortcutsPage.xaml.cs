@@ -5,10 +5,11 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jot.Views;
 
 /// <summary>
-/// Read-only view of Jot's keyboard shortcuts, promoted to its own left-nav page. Rebinding is
-/// intentionally not offered yet — click-to-capture doesn't work reliably on Windows 11
-/// (tracked in docs/plans/fixit-worklist.md, A5). Binds to the shared <see cref="SettingsViewModel"/>
-/// so the displayed chords reflect whatever is currently configured.
+/// Jot's keyboard-shortcuts page, promoted to its own left-nav entry. Every row is an editable
+/// <see cref="Jot.Controls.HotkeyBox"/> (click-to-capture): recording (toggle / stop &amp; save) plus the
+/// AI &amp; text shortcuts (rewrite, rewrite-with-voice, paste-last). Binds to the shared
+/// <see cref="SettingsViewModel"/>, whose chord setters persist and let App re-register on the
+/// settings-changed signal. Physical-keyboard round-trip still wants a hands-on pass (fixit A5).
 /// </summary>
 public partial class ShortcutsPage : Page
 {
