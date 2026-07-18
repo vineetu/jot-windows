@@ -22,3 +22,6 @@ assets/models/
 !src/Jot/Models/
 
 publish/
+
+# Velopack pack output (published to GitHub Releases, not tracked)
+/Releases/
