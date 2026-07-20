@@ -48,7 +48,6 @@ public sealed class JsonRecordingStore : IRecordingStore
         Items.SelectMany(i => i.Tags).Distinct(StringComparer.OrdinalIgnoreCase)
              .OrderBy(t => t, StringComparer.OrdinalIgnoreCase).ToList();
 
-    // ---- persistence ----
 
     private void Load()
     {
@@ -120,7 +119,7 @@ public sealed class JsonRecordingStore : IRecordingStore
         catch { /* best-effort; a failed write shouldn't crash the UI */ }
     }
 
-    // ---- mapping (a flat DTO avoids serializing the item's computed/observable plumbing) ----
+    // mapping (a flat DTO avoids serializing the item's computed/observable plumbing)
 
     private static RecordingDto ToDto(RecordingItem i) => new(
         i.Id, i.Kind, i.CreatedAt, i.DurationSeconds, i.WavPath, i.ModelLabel, i.Title, i.Transcript,

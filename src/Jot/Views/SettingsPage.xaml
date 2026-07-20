@@ -10,23 +10,20 @@
         </Style>
     </Page.Resources>
 
-    <!-- MaxHeight is bound in code-behind to the hosting NavigationView: WPF-UI measures pages with
-         infinite height, so without a cap the ScrollViewer never scrolls and lower sections are lost. -->
+    <!-- Height/scrolling handled centrally by the shell (NavContentHost), so no per-page height cap. -->
     <ScrollViewer x:Name="RootScroll" VerticalScrollBarVisibility="Auto" Padding="{StaticResource PagePadding}">
         <StackPanel MaxWidth="820">
             <TextBlock Text="Settings" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
-            <!-- Search: filters the rows below by title, description, or section name as you type
-                 (OnSearchChanged in the code-behind). Matching advanced rows are revealed even when
-                 "Show advanced features" is off. -->
+            <!-- Filters rows by title/description/section name (OnSearchChanged); matching advanced
+                 rows are revealed even when "Show advanced features" is off. -->
             <ui:TextBox x:Name="SearchBox" Margin="0,4,0,4"
                         PlaceholderText="Search settings"
                         Icon="{ui:SymbolIcon Search24}"
                         TextChanged="OnSearchChanged" />
 
-            <!-- BASIC: by default Settings shows only the everyday, actionable choices — Appearance,
-                 Microphone, Language, AI — plus the Advanced Features toggle. Everything else is gated on
-                 that toggle below, so the page isn't a wall of options for a first-time user. -->
+            <!-- BASIC: everyday choices only; everything else is gated on the Advanced Features toggle
+                 below, so the page isn't a wall of options for a first-time user. -->
             <TextBlock Text="General" Style="{StaticResource SectionHeader}" Tag="section" Margin="2,8,0,8" />
 
             <ctl:SettingRow Title="Appearance" Description="Match Windows, or force light or dark.">
@@ -42,26 +39,24 @@
                 <ComboBox MinWidth="150" ItemsSource="{Binding Languages}"
                           SelectedItem="{Binding Language, Mode=TwoWay}" />
             </ctl:SettingRow>
-            <!-- AI: bring-your-own provider for optional transcript cleanup & rewrite. Shown in the
-                 basic section (no "advanced" gate); only the model/base-URL overrides stay advanced. -->
+            <!-- AI: bring-your-own provider for optional rewrite, shown in the basic section;
+                 only the model/base-URL overrides stay advanced. -->
             <TextBlock Text="AI" Style="{StaticResource SectionHeader}" Tag="section" />
             <ui:InfoBar x:Name="AiInfoBar" IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,0,0,8"
-                        Title="Bring your own provider"
-                        Message="Choose a provider below for optional transcript cleanup and rewrite. Ollama runs fully on-device; the rest need an API key." />
+                        Title="{Binding AiInfoTitle}"
+                        Message="{Binding AiInfoMessage}" />
 
-            <ctl:SettingRow Title="Provider" Description="Used for optional cleanup and rewrite. Sensible defaults are chosen for you; Ollama runs locally.">
+            <ctl:SettingRow Title="Provider" Description="Used for optional AI rewrite. Sensible defaults are chosen for you; Ollama runs locally.">
                 <ComboBox MinWidth="150" ItemsSource="{Binding Providers}"
                           SelectedItem="{Binding AiProvider, Mode=TwoWay}" />
             </ctl:SettingRow>
             <StackPanel Visibility="{Binding AiConfigured, Converter={StaticResource BoolToVis}}">
                 <ctl:SettingRow Title="API key" Description="Saved securely on this PC (Windows DPAPI), separately per provider, and reused after every restart."
                                 Visibility="{Binding NeedsApiKey, Converter={StaticResource BoolToVis}}">
-                    <!-- Masked by default; the eye button toggles a plain-text view. Uses the NATIVE
-                         PasswordBox (not ui:PasswordBox — that control does not render programmatic
-                         Password sets, which broke prefill-on-launch and clearing on provider switch).
-                         Both boxes are synced to the VM in code-behind; the eye button's icon is set
-                         there too (compile-checked SymbolRegular enum). None of these can take x:Name
-                         (SettingRow namescope), so each is captured via its Loaded event. -->
+                    <!-- Uses the NATIVE PasswordBox (not ui:PasswordBox — that control doesn't render
+                         programmatic Password sets, breaking prefill-on-launch and clear-on-provider-switch).
+                         None can take x:Name (SettingRow namescope), so each is captured via its Loaded
+                         event and synced to the VM in code-behind. -->
                     <StackPanel MinWidth="340">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -82,6 +77,42 @@
                                             Visibility="{Binding HasApiKeyUrl, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </ctl:SettingRow>
+
+                <!-- PFB (Sony AI Gateway): JWT sign-in via the gimme-ai-creds CLI instead of a pasted
+                     key. The gateway is reachable only on the Sony network/VPN — see PfbAuth.cs. -->
+                <StackPanel Visibility="{Binding IsPfbProvider, Converter={StaticResource BoolToVis}}">
+                    <!-- CLI missing → offer to install the one-time sign-in helper. -->
+                    <ctl:SettingRow Title="Sign-in helper"
+                                    Description="PFB sign-in needs the gimme-ai-creds helper. Install it once, then sign in."
+                                    Visibility="{Binding PfbCliMissing, Converter={StaticResource BoolToVis}}">
+                        <ui:Button Content="Install sign-in helper"
+                                   Command="{Binding InstallPfbHelperCommand}"
+                                   IsEnabled="{Binding PfbNotBusy}" />
+                    </ctl:SettingRow>
+                    <!-- Signed out (CLI present) → sign-in button (opens a browser for Okta). -->
+                    <ctl:SettingRow Title="Account"
+                                    Description="Sign in with your Sony/Okta account. A browser opens for login; the session lasts ~24 hours."
+                                    Visibility="{Binding ShowPfbSignIn, Converter={StaticResource BoolToVis}}">
+                        <ui:Button Content="Sign in to PFB" Appearance="Primary"
+                                   Command="{Binding SignInPfbCommand}"
+                                   IsEnabled="{Binding PfbNotBusy}" />
+                    </ctl:SettingRow>
+                    <!-- Signed in → subject + expiry + disconnect. -->
+                    <ctl:SettingRow Title="Account"
+                                    Visibility="{Binding ShowPfbSignedIn, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding PfbSessionText}" VerticalAlignment="Center" Margin="0,0,10,0"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <ui:Button Content="Disconnect" Command="{Binding DisconnectPfbCommand}"
+                                       IsEnabled="{Binding PfbNotBusy}" />
+                        </StackPanel>
+                    </ctl:SettingRow>
+                    <!-- Status line (sign-in progress / result). Empty by default → renders nothing. -->
+                    <TextBlock Text="{Binding PfbStatus}" Margin="2,0,0,8" TextWrapping="Wrap" MaxWidth="520"
+                               HorizontalAlignment="Left"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+
                 <!-- Non-advanced: pick a model from the curated per-provider list. Advanced mode swaps
                      this for a free-text override box below. -->
                 <ctl:SettingRow Title="Model" Description="Pick the model to use for this provider."
@@ -101,10 +132,6 @@
                                     Text="{Binding AiBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
                     </ctl:SettingRow>
                 </StackPanel>
-                <ctl:SettingRow Title="Clean up transcript with AI"
-                                Description="Remove filler words and fix punctuation after each dictation.">
-                    <ui:ToggleSwitch IsChecked="{Binding CleanupEnabled, Mode=TwoWay}" />
-                </ctl:SettingRow>
                 <ctl:SettingRow Title="Test connection">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="{Binding TestConnectionResult}" VerticalAlignment="Center" Margin="0,0,10,0"
@@ -153,7 +180,6 @@
                     </StackPanel>
                 </ctl:SettingRow>
 
-                <!-- TRANSCRIPTION -->
                 <TextBlock Text="Transcription" Style="{StaticResource SectionHeader}" Tag="section" />
 
                 <ctl:SettingRow Title="Model" Description="On-device speech model (Nemotron 3.5, multilingual — runs locally, nothing leaves your PC).">
@@ -191,7 +217,6 @@
                     <ui:ToggleSwitch IsChecked="{Binding KeepInClipboard, Mode=TwoWay}" />
                 </ctl:SettingRow>
 
-                <!-- SOUND -->
                 <TextBlock Text="Sound" Style="{StaticResource SectionHeader}" Tag="section" />
                 <ctl:SettingRow Title="Recording start">
                     <ui:ToggleSwitch IsChecked="{Binding SoundStart, Mode=TwoWay}" />
@@ -213,8 +238,7 @@
                 </ctl:SettingRow>
 
                 <!-- VOCABULARY (advanced) — HIDDEN until real: custom terms are in-memory only, never
-                     persisted or fed to the decoder. Restore by binding Visibility to AdvancedFeatures
-                     again once implemented. See docs/plans/fixit-worklist.md (B1). -->
+                     persisted or fed to the decoder. Rebind Visibility to AdvancedFeatures once implemented. -->
                 <StackPanel Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal" Margin="2,22,0,8">
                         <TextBlock Text="Vocabulary" Style="{DynamicResource SubtitleTextBlockStyle}" />
@@ -267,7 +291,6 @@
                 </StackPanel>
 
             </StackPanel>
-            <!-- /ADVANCED -->
 
             <Border Height="24" />
         </StackPanel>

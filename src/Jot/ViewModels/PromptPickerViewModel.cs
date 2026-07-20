@@ -8,10 +8,8 @@ using Jot.Services;
 namespace Jot.ViewModels;
 
 /// <summary>
-/// Backs the rewrite prompt-picker overlay — a keyboard-first command palette shown at rewrite time.
-/// A flat, searchable view over the shared <see cref="PromptCatalog"/> where pinned prompts sort
-/// first, then most-recently-used, then alphabetical. Picking a prompt raises <see cref="Picked"/>
-/// (the real build kicks off the rewrite with that instruction); this phase is UI-only.
+/// Backs the rewrite prompt-picker overlay. Searchable view over the shared <see cref="PromptCatalog"/>,
+/// sorted pinned → most-recently-used → alphabetical. Picking a prompt raises <see cref="Picked"/>.
 /// </summary>
 public sealed partial class PromptPickerViewModel : ObservableObject
 {
@@ -21,8 +19,7 @@ public sealed partial class PromptPickerViewModel : ObservableObject
 
     [ObservableProperty] private string _searchText = "";
 
-    /// <summary>Raised when the user commits a prompt (Enter / click). The overlay closes and, in the
-    /// real build, the rewrite runs with <see cref="PromptItem.Body"/> as the instruction.</summary>
+    /// <summary>Raised when the user commits a prompt; the rewrite runs with <see cref="PromptItem.Body"/> as the instruction.</summary>
     public event Action<PromptItem>? Picked;
 
     public PromptPickerViewModel(PromptCatalog catalog)

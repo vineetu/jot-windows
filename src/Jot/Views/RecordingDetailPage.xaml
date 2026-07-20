@@ -9,7 +9,6 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Top bar -->
         <Grid Grid.Row="0" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -64,7 +63,6 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
             <StackPanel MaxWidth="760" HorizontalAlignment="Stretch">
 
-                <!-- Pending banner -->
                 <ui:Card Margin="0,0,0,14" Visibility="{Binding Item.IsPending, Converter={StaticResource BoolToVis}}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -81,7 +79,6 @@
                     </Grid>
                 </ui:Card>
 
-                <!-- Rewrite session: Instruction / Original / Rewritten -->
                 <StackPanel Visibility="{Binding IsRewrite, Converter={StaticResource BoolToVis}}">
                     <TextBlock Text="INSTRUCTION" Style="{DynamicResource CaptionTextBlockStyle}"
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="2,0,0,4" />
@@ -109,10 +106,8 @@
                     </ui:Card>
                 </StackPanel>
 
-                <!-- Dictation body -->
                 <StackPanel Visibility="{Binding IsDictation, Converter={StaticResource BoolToVis}}">
 
-                    <!-- Playback bar -->
                     <ui:Card Margin="0,0,0,14" Visibility="{Binding CanPlay, Converter={StaticResource BoolToVis}}">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -146,7 +141,6 @@
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                                Visibility="{Binding CanPlay, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
 
-                    <!-- Tags -->
                     <WrapPanel Margin="0,0,0,14">
                         <ItemsControl ItemsSource="{Binding Item.Tags}">
                             <ItemsControl.ItemsPanel>
@@ -175,8 +169,7 @@
                         </ui:TextBox>
                     </WrapPanel>
 
-                    <!-- Find & Replace bar (worklist A2), opened from the … menu or Ctrl+F. Operates on
-                         Item.Transcript; the store auto-persists the change. -->
+                    <!-- Find & Replace bar. Operates on Item.Transcript; the store auto-persists the change. -->
                     <Border Margin="0,0,0,14" Padding="12" CornerRadius="6"
                             Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1"
@@ -211,9 +204,9 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Transcript: read vs edit. A read-only, borderless, transparent TextBox reads like
-                         body text but supports drag-select + Ctrl+C (a plain TextBlock can't).
-                         Style="{x:Null}" opts out of WPF-UI's input-box styling so it doesn't look like a field. -->
+                    <!-- Read-only borderless transparent TextBox: reads like body text but supports
+                         drag-select + Ctrl+C (a TextBlock can't). Style="{x:Null}" opts out of WPF-UI's
+                         input-box styling so it doesn't look like a field. -->
                     <TextBox Text="{Binding Item.Transcript, Mode=OneWay}" Style="{x:Null}"
                              IsReadOnly="True" IsReadOnlyCaretVisible="False" BorderThickness="0"
                              Background="Transparent" Padding="0" TextWrapping="Wrap" FontSize="16"
@@ -230,7 +223,6 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <!-- Speaker turns -->
                     <StackPanel Margin="0,16,0,0"
                                 Visibility="{Binding HasSpeakers, Converter={StaticResource BoolToVis}}">
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">

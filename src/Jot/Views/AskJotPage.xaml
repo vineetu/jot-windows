@@ -10,7 +10,6 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
         <Grid Grid.Row="0" Margin="0,0,0,12">
             <StackPanel>
                 <TextBlock Text="Ask Jot" Style="{DynamicResource TitleTextBlockStyle}" />
@@ -21,10 +20,8 @@
                        Content="New chat" Icon="{ui:SymbolIcon Add24}" Command="{Binding NewChatCommand}" />
         </Grid>
 
-        <!-- Conversation -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <Grid>
-                <!-- Empty state with starters -->
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440"
                             Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
                     <ui:SymbolIcon Symbol="ChatSparkle24" FontSize="36" HorizontalAlignment="Center"
@@ -43,7 +40,6 @@
                     </ItemsControl>
                 </StackPanel>
 
-                <!-- Messages -->
                 <ItemsControl ItemsSource="{Binding Messages}"
                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
                     <ItemsControl.ItemTemplate>
@@ -69,7 +65,6 @@
             </Grid>
         </ScrollViewer>
 
-        <!-- Input -->
         <Grid Grid.Row="2" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />

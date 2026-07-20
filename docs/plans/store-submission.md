@@ -1,5 +1,42 @@
 # Microsoft Store submission — prep checklist
 
+## 2026-07-18 UPDATE — MSIX BUILT, REGISTERED, LAUNCHED (packaging step done)
+
+The blocked "needs the human" items are cleared and the never-attempted packaging step is
+now **done and verified**:
+
+- **Real identity wired** into `src/Jot/Package.appxmanifest` (was placeholders `jot`/`CN=vinee`):
+  - `Name="Vineetsriram.JotTranscribe"`  `Publisher="CN=1269BFA0-02DC-4524-8A77-55C4EE9EADD4"`
+  - `PublisherDisplayName="Vineet sriram"`  `DisplayName="Jot Transcribe"` (the reserved
+    Store name — MUST match exactly; the tile `VisualElements DisplayName` stays "Jot").
+  - New MSIX-type product created in Partner Center; the old rejected EXE product's flow is dead.
+- **csproj asset-copy bug fixed:** `<Content Include="Assets\**\*">` had no
+  `CopyToOutputDirectory`, so StoreLogo/tiles never reached the publish output → the manifest's
+  logo references would have been dangling. Added `CopyToOutputDirectory="PreserveNewest"`.
+- **MSIX build route decided + scripted:** the MSBuild `GenerateAppxPackageOnBuild` target does
+  NOT fire for this plain-WPF project (Appx targets aren't imported; the WinApp NuGet only
+  provides `dotnet run` support + the SDK binaries, not Store packaging). So the build is a
+  manual **`dotnet publish` → resolve manifest tokens → `makeappx pack`** pipeline, captured in
+  **`build-msix.ps1`** at the repo root (`.\build-msix.ps1` builds the .msix; add `-Register`
+  to also register the loose layout for local testing). makeappx/signtool come from the
+  `microsoft.windows.sdk.buildtools` NuGet (cache on `D:\caches\nuget-packages`).
+- **Deliverable:** `AppxPackages\JotTranscribe_1.0.0.0_x64.msix` — **98.6 MB, UNSIGNED**
+  (upload as-is; Store signs it). The ~630 MB Parakeet model is NOT in the package (downloaded
+  on first run to real `%LOCALAPPDATA%\Jot\models`), which keeps the package small.
+- **VERIFIED locally (Developer Mode on, no elevation needed):**
+  - Loose layout registers cleanly → `Vineetsriram.JotTranscribe_1.0.0.0_x64__xhkaqb0regjwm`.
+    The `xhkaqb0regjwm` hash matches the Partner Center PFN → Publisher CN is correct.
+  - Packaged app **launches under package identity**, main window shows (`MainWindowTitle=Jot`),
+    ~1.5 GB working set = int8 model warmed up → **native ONNX Runtime + DirectML load fine
+    under MSIX**, and the real `%LOCALAPPDATA%\Jot` model path is NOT virtualized (model found
+    + loaded). Zero crash.log. This clears every "known unknown" the old packaging section listed.
+- **STILL NOT VERIFIED (needs the human, real mic):** actual dictation hotkey→speak→paste inside
+  the packaged app. The package is registered right now — test it, then upload + list.
+
+Remaining to ship: (1) test real dictation in the registered package; (2) upload the .msix to the
+MSIX product's Packages page in Partner Center; (3) fill the listing (description, screenshots,
+IARC age rating, privacy URL below, data-collection + mic-capability justification); (4) Submit.
+
 ## 2026-07-17 UPDATE — first submission REJECTED; MSIX path confirmed
 
 The user submitted the Velopack `Jot-win-Setup.exe` as an **"EXE or MSI app"** ("Jot Transcribe",

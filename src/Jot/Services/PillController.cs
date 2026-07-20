@@ -164,7 +164,6 @@ public sealed class PillController
         ScheduleHide(3000);
     }
 
-    // ---------------- timers ----------------
 
     private void StartElapsed()
     {

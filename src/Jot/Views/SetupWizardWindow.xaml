@@ -18,22 +18,21 @@
 
         <ui:TitleBar Grid.Row="0" ShowMaximize="False" ShowMinimize="False" Title="Set up Jot" />
 
-        <!-- Header -->
         <StackPanel Grid.Row="1" Margin="40,8,40,0">
             <TextBlock Text="{Binding StepTitle}" Style="{DynamicResource TitleTextBlockStyle}" TextWrapping="Wrap" />
             <TextBlock Text="{Binding StepSubtitle}" Margin="0,6,0,0" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
         </StackPanel>
 
-        <!-- Step body -->
         <Grid Grid.Row="2" Margin="40,24,40,0">
             <!-- 0 Welcome -->
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
                         Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=0}">
-                <Border Width="96" Height="96" CornerRadius="48" HorizontalAlignment="Center"
-                        Background="{DynamicResource AccentFillColorDefaultBrush}">
-                    <ui:SymbolIcon Symbol="Mic24" FontSize="44" Foreground="White" />
-                </Border>
+                <Ellipse Width="96" Height="96" HorizontalAlignment="Center">
+                    <Ellipse.Fill>
+                        <ImageBrush ImageSource="pack://application:,,,/Assets/jot-logo.png" Stretch="UniformToFill" />
+                    </Ellipse.Fill>
+                </Ellipse>
                 <TextBlock Text="Nothing you say leaves your PC." Margin="0,20,0,0" HorizontalAlignment="Center"
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             </StackPanel>
@@ -77,7 +76,7 @@
                 <Border Padding="24,14" CornerRadius="10" HorizontalAlignment="Center"
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}">
-                    <TextBlock Text="Alt  +  Space" FontFamily="{StaticResource JotMonoFont}" FontSize="22" />
+                    <TextBlock Text="{Binding HotkeyLabel}" FontFamily="{StaticResource JotMonoFont}" FontSize="22" />
                 </Border>
                 <TextBlock Text="Press it anywhere to start, and again to stop." Margin="0,16,0,0"
                            HorizontalAlignment="Center"
@@ -105,7 +104,6 @@
             </StackPanel>
         </Grid>
 
-        <!-- Footer -->
         <Grid Grid.Row="3" Margin="40,20,40,28">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />

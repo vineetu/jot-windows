@@ -9,9 +9,8 @@ namespace Jot.Recording;
 public sealed record RecordingResult(float[] Samples, int SampleRate, string WavPath, TimeSpan Duration);
 
 /// <summary>
-/// Captures the default microphone via WASAPI and produces 16 kHz mono Float32 —
-/// the input format Parakeet expects (matches the Mac app's AVAudioConverter target).
-/// Capture happens at the device's native format; downmix + resample run on Stop.
+/// Captures the default mic via WASAPI and produces 16 kHz mono Float32 (the format Parakeet expects).
+/// Capture runs at the device's native format; downmix + resample happen on Stop.
 /// </summary>
 public sealed class AudioRecorder : IDisposable
 {
@@ -26,14 +25,13 @@ public sealed class AudioRecorder : IDisposable
     public bool IsRecording => _capture is not null;
 
     /// <summary>
-    /// Fired on the capture thread ~30×/s while recording with a display-scaled RMS level
-    /// (0 = silence, ~1 = loud). Drives the status pill's reactive waveform; the pill marshals
-    /// each value onto the Dispatcher. Silent when not recording.
+    /// Fired on the capture thread ~30×/s while recording with a display-scaled RMS level (0 = silence,
+    /// ~1 = loud); the pill marshals each onto the Dispatcher. Silent when not recording.
     /// </summary>
     public event Action<float>? LevelChanged;
 
-    /// <summary>Starts capture. When <paramref name="deviceId"/> is a valid WASAPI endpoint id the
-    /// selected microphone is used; otherwise the system default device.</summary>
+    /// <summary>Starts capture on <paramref name="deviceId"/> if it's a valid WASAPI endpoint,
+    /// else the system default device.</summary>
     public void Start(string? deviceId = null)
     {
         if (IsRecording) return;
@@ -69,9 +67,8 @@ public sealed class AudioRecorder : IDisposable
     }
 
     /// <summary>
-    /// Returns everything captured so far as 16 kHz mono Float32, without stopping the recording.
-    /// Used by live captioning to re-decode a trailing window while the user is still speaking.
-    /// Returns null when not recording, or an empty array when nothing has been captured yet.
+    /// Everything captured so far as 16 kHz mono Float32, without stopping capture — fed to live
+    /// captioning while the user is still speaking. Null when not recording; empty when nothing captured.
     /// </summary>
     public float[]? SnapshotSamples()
     {
@@ -80,7 +77,7 @@ public sealed class AudioRecorder : IDisposable
         lock (_bufferLock)
         {
             if (_buffer is null || _sourceFormat is null) return null;
-            raw = _buffer.ToArray(); // copy the bytes written so far
+            raw = _buffer.ToArray();
             fmt = _sourceFormat;
         }
 
@@ -149,7 +146,6 @@ public sealed class AudioRecorder : IDisposable
         _buffer.Position = 0;
         var raw = new RawSourceWaveStream(_buffer, _sourceFormat);
 
-        // device format -> float samples -> mono -> 16 kHz
         ISampleProvider mono = ToMono(raw.ToSampleProvider());
         ISampleProvider resampled = mono.WaveFormat.SampleRate == TargetSampleRate
             ? mono

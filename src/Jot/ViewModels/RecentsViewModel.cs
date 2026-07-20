@@ -12,28 +12,34 @@ using Jot.Views;
 namespace Jot.ViewModels;
 
 /// <summary>
-/// Drives the Recents landing + library list: the record button, a live grouped/filtered view over
-/// the store (date buckets + search + tag chips), the empty state, and per-row actions. Singleton so
-/// search/filter state survives navigation away and back.
+/// Drives the Recents landing + library list: record button, grouped/filtered store view (date
+/// buckets + search + tag chips), empty state, per-row actions. Singleton so search/filter state
+/// survives navigation away and back.
 /// </summary>
 public sealed partial class RecentsViewModel : ObservableObject
 {
     private readonly IRecordingStore _store;
     private readonly RecorderController _recorder;
     private readonly INavigator _navigator;
+    private readonly ISettingsStore _settings;
 
     public ICollectionView Items { get; }
     public ObservableCollection<string> Tags { get; } = new();
 
     [ObservableProperty] private string _searchText = "";
     [ObservableProperty] private string? _selectedTag;
-    [ObservableProperty] private string _hotkeyLabel = "Alt + Space";
+    // Live toggle-shortcut label for the record-button hint — never a hardcoded chord.
+    [ObservableProperty] private string _hotkeyLabel = "";
 
-    public RecentsViewModel(IRecordingStore store, RecorderController recorder, INavigator navigator)
+    public RecentsViewModel(IRecordingStore store, RecorderController recorder, INavigator navigator, ISettingsStore settings)
     {
         _store = store;
         _recorder = recorder;
         _navigator = navigator;
+        _settings = settings;
+
+        HotkeyLabel = HotkeyChord.Display(_settings.Current.ToggleRecordingHotkey);
+        _settings.Changed += (_, _) => HotkeyLabel = HotkeyChord.Display(_settings.Current.ToggleRecordingHotkey);
 
         var cvs = new CollectionViewSource { Source = store.Items };
         cvs.GroupDescriptions.Add(new PropertyGroupDescription(nameof(RecordingItem.DateGroup)));

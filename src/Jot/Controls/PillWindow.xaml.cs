@@ -36,7 +36,7 @@ public partial class PillWindow : Window
         Capsule.MouseLeftButtonUp += OnCapsuleUp;
     }
 
-    // ---------------- public API (all called on the UI thread) ----------------
+    // public API (all called on the UI thread)
 
     public void PushLevel(double level) => Wave.PushLevel(level);
 
@@ -208,7 +208,6 @@ public partial class PillWindow : Window
         ShowPill();
     }
 
-    // ---------------- show / hide / position ----------------
 
     private void ShowPill()
     {
@@ -243,7 +242,6 @@ public partial class PillWindow : Window
         Top = workBottom - ActualHeight - 24;
     }
 
-    // ---------------- drag vs. click ----------------
 
     private void OnCapsuleDown(object sender, MouseButtonEventArgs e)
     {
@@ -312,7 +310,6 @@ public partial class PillWindow : Window
 
     private void OnStopClick(object sender, RoutedEventArgs e) => _onStop?.Invoke();
 
-    // ---------------- helpers ----------------
 
     // Composes the recording hint. Both keys now STOP AND SAVE (Esc no longer discards — see worklist
     // D8), so they collapse into one "<stop> or <esc> to stop" line; either half is dropped if null,
@@ -340,7 +337,7 @@ public partial class PillWindow : Window
         return text.Length > 60 ? text[..57] + "…" : text;
     }
 
-    // ---------------- Win32: no-activate tool window + monitor work area ----------------
+    // Win32: no-activate tool window + monitor work area
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {

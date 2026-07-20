@@ -13,15 +13,8 @@ public enum ComputeBackend
 }
 
 /// <summary>
-/// The single place ONNX Runtime <see cref="InferenceSession"/>s are created. Today it uses the
-/// in-box CPU and DirectML execution providers shipped by <c>Microsoft.ML.OnnxRuntime.DirectML</c>.
-///
-/// This is the deliberate seam for the planned migration to <b>Windows ML</b>
-/// (<c>Microsoft.Windows.AI.MachineLearning</c>): to add Copilot+ NPU coverage (Qualcomm QNN /
-/// Intel OpenVINO / AMD VitisAI) we only change the body of <see cref="Create"/> to register the
-/// certified EP catalog and pick a device via <c>GetEpDevices()</c>/<c>SetEpSelectionPolicy</c>.
-/// Callers (<see cref="ParakeetTranscriber"/>) are unaffected because they still receive a plain
-/// <see cref="InferenceSession"/>.
+/// The single seam for creating ONNX Runtime <see cref="InferenceSession"/>s (CPU + DirectML EPs),
+/// isolated so a future Windows ML / NPU backend only changes <see cref="Create"/>.
 /// </summary>
 public sealed class OnnxSessionFactory
 {

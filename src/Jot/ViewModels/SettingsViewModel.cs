@@ -18,7 +18,7 @@ public sealed record AudioInputDevice(string Id, string Name);
 /// Backs the single Settings page. Wraps <see cref="JotSettings"/> — each property persists on change
 /// and applies live side effects (theme switch, launch-at-login registry, language → engine, hotkey
 /// rebind via the settings-changed signal picked up in App). Model download is backed by the real
-/// Nemotron installer; AI test/cleanup go through <see cref="IAiClient"/>.
+/// Nemotron installer; AI test/rewrite go through <see cref="IAiClient"/>.
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject
 {
@@ -29,6 +29,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ITranscriber _transcriber;
     private readonly IAiClient _ai;
     private readonly AiCredentials _credentials;
+    private readonly PfbAuth _pfb;
     private readonly ISoundService _sound;
     private JotSettings S => _store.Current;
 
@@ -36,8 +37,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private const string RunValue = "Jot";
 
     public Array ThemeModes { get; } = Enum.GetValues(typeof(AppThemeMode));
-    // Languages supported by the Nemotron 3.5 multilingual engine (transcription-ready + broad-coverage
-    // tiers). English is the default and the most accurate; smaller languages improve over time.
+    // Languages supported by the Nemotron 3.5 multilingual engine. English is the default and most accurate.
     public string[] Languages { get; } =
     [
         "English", "Arabic", "Bulgarian", "Chinese", "Croatian", "Czech", "Danish", "Dutch",
@@ -46,7 +46,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         "Portuguese", "Romanian", "Russian", "Slovak", "Slovenian", "Spanish", "Swedish",
         "Turkish", "Ukrainian", "Vietnamese",
     ];
-    public string[] Providers { get; } = ["None", "OpenAI", "Anthropic", "Gemini", "Ollama"];
+    // Provider list is build-flavor dependent: public/Store gets bring-your-own cloud, Sony gets only PFB.
+    public string[] Providers { get; } = BuildFlavor.AiProviders;
+
+    /// <summary>Flavor-appropriate copy for the AI section's intro banner.</summary>
+    public string AiInfoTitle => BuildFlavor.AiInfoTitle;
+    public string AiInfoMessage => BuildFlavor.AiInfoMessage;
     public string[] RetentionOptions { get; } = ["Forever", "7 days", "30 days", "90 days"];
     public string[] TranscriptionDevices { get; } = ["CPU", "GPU (DirectML)"];
 
@@ -70,7 +75,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     // Shortcuts (editable chord strings). Persisted; App re-registers on the settings-changed signal.
     [ObservableProperty] private string _toggleRecordingHotkey = "Alt+Space";
     [ObservableProperty] private string _cancelRecordingHotkey = "Escape";
-    [ObservableProperty] private string _pasteLastHotkey = "Alt+OemComma";
+    [ObservableProperty] private string _pasteLastHotkey = "Ctrl+Alt+P";
     [ObservableProperty] private string _rewriteHotkey = "Alt+OemQuestion";
     [ObservableProperty] private string _rewriteWithVoiceHotkey = "Alt+OemPeriod";
 
@@ -88,7 +93,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _aiBaseUrl = "";
     [ObservableProperty] private string _aiModel = "";
     [ObservableProperty] private string _aiApiKey = ""; // persisted encrypted via AiCredentials (DPAPI); seeded from it at startup
-    [ObservableProperty] private bool _cleanupEnabled;
     [ObservableProperty] private string _testConnectionResult = "";
     [ObservableProperty] private bool _isTestingConnection;
 
@@ -116,9 +120,55 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string ApiKeyUrl => AiDefaults.ApiKeyUrl(AiProvider);
     public bool HasApiKeyUrl => !string.IsNullOrEmpty(ApiKeyUrl);
 
-    /// <summary>Rebuild the model list for the current provider, then make sure a valid item is
-    /// selected — clearing the ItemsSource blanks the ComboBox, so we re-assign the model (to the
-    /// provider default when the current one isn't offered) AFTER the items are back in place.</summary>
+    // PFB replaces the API-key box with a JWT sign-in flow (see PfbAuth). RaiseAiComputed()/RefreshPfb()
+    // re-raise these computed properties on change.
+
+    public bool IsPfbProvider => AiProvider.Equals(PfbAuth.Provider, StringComparison.OrdinalIgnoreCase);
+    /// <summary>CLI present; otherwise the UI shows an install card instead of sign-in.</summary>
+    public bool PfbCliInstalled => PfbAuth.CliInstalled;
+    public bool PfbCliMissing => IsPfbProvider && !PfbCliInstalled;
+    /// <summary>A valid (unexpired) PFB session exists.</summary>
+    public bool PfbSignedIn => _pfb.IsSignedIn;
+    /// <summary>Show the Sign-in button: PFB selected, CLI present, not currently signed in.</summary>
+    public bool ShowPfbSignIn => IsPfbProvider && PfbCliInstalled && !PfbSignedIn;
+    /// <summary>Show the signed-in row (subject + expiry + Disconnect).</summary>
+    public bool ShowPfbSignedIn => IsPfbProvider && PfbSignedIn;
+
+    [ObservableProperty] private bool _isPfbBusy;
+    [ObservableProperty] private string _pfbStatus = "";
+
+    /// <summary>Inverse of <see cref="IsPfbBusy"/> — bound to button IsEnabled (no converter needed).</summary>
+    public bool PfbNotBusy => !IsPfbBusy;
+    partial void OnIsPfbBusyChanged(bool value) => OnPropertyChanged(nameof(PfbNotBusy));
+
+    /// <summary>"Signed in as … · expires in Xh Ym", or a prompt to sign in.</summary>
+    public string PfbSessionText
+    {
+        get
+        {
+            PfbSession? s = _pfb.Current;
+            if (s is null) return "Not signed in.";
+            string who = string.IsNullOrEmpty(s.Subject) ? "Signed in" : $"Signed in as {s.Subject}";
+            TimeSpan r = s.Remaining;
+            string left = r.TotalHours >= 1 ? $"{(int)r.TotalHours}h {r.Minutes}m" : $"{r.Minutes}m";
+            return $"{who} · expires in {left}";
+        }
+    }
+
+    private void RefreshPfb()
+    {
+        OnPropertyChanged(nameof(IsPfbProvider));
+        OnPropertyChanged(nameof(PfbCliInstalled));
+        OnPropertyChanged(nameof(PfbCliMissing));
+        OnPropertyChanged(nameof(PfbSignedIn));
+        OnPropertyChanged(nameof(ShowPfbSignIn));
+        OnPropertyChanged(nameof(ShowPfbSignedIn));
+        OnPropertyChanged(nameof(PfbSessionText));
+    }
+
+    /// <summary>Rebuild the model list for the current provider and re-select a valid item. Clearing
+    /// the ItemsSource blanks the ComboBox, so the model is re-assigned (to the provider default when
+    /// the current one isn't offered) AFTER the items are back in place.</summary>
     private void RefreshAiModels()
     {
         AiModels.Clear();
@@ -138,11 +188,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(DefaultBaseUrlHint));
         OnPropertyChanged(nameof(ApiKeyUrl));
         OnPropertyChanged(nameof(HasApiKeyUrl));
+        RefreshPfb();
     }
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
         NemotronModel model, NemotronModelInstaller installer,
-        ITranscriber transcriber, IAiClient ai, AiCredentials credentials, ISoundService sound)
+        ITranscriber transcriber, IAiClient ai, AiCredentials credentials, PfbAuth pfb, ISoundService sound)
     {
         _store = store;
         _theme = theme;
@@ -151,6 +202,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _transcriber = transcriber;
         _ai = ai;
         _credentials = credentials;
+        _pfb = pfb;
         _sound = sound;
 
         // Seed backing fields directly so wiring the UI doesn't trigger a save storm.
@@ -171,11 +223,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         _pasteLastHotkey = S.PasteLastHotkey;
         _rewriteHotkey = S.RewriteHotkey;
         _rewriteWithVoiceHotkey = S.RewriteWithVoiceHotkey;
-        _aiProvider = S.AiProvider;
+        // A provider persisted under a different flavor (or a tampered settings.json) may not exist
+        // in this build's list — fall back to None so the dropdown always has a valid selection.
+        _aiProvider = Providers.Contains(S.AiProvider, StringComparer.OrdinalIgnoreCase) ? S.AiProvider : "None";
         _aiBaseUrl = S.AiBaseUrl ?? "";
         _aiModel = S.AiModel ?? "";
-        _aiApiKey = credentials.GetKey(S.AiProvider) ?? ""; // the key saved for the current provider
-        _cleanupEnabled = S.CleanupEnabled;
+        _aiApiKey = credentials.GetKey(_aiProvider) ?? ""; // the key saved for the current provider
         _soundStart = S.SoundStart;
         _soundStop = S.SoundStop;
         _soundCancel = S.SoundCancel;
@@ -221,7 +274,6 @@ public sealed partial class SettingsViewModel : ObservableObject
                          ?? InputDevices.FirstOrDefault();
     }
 
-    // ---- persistence hooks ----
 
     partial void OnThemeModeChanged(AppThemeMode value) { _theme.SetMode(value); } // SetMode persists
     partial void OnAdvancedFeaturesChanged(bool value) { S.AdvancedFeatures = value; Save(); RaiseAiComputed(); }
@@ -238,7 +290,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnAutoPasteChanged(bool value) { S.AutoPaste = value; Save(); }
     partial void OnAutoEnterChanged(bool value) { S.AutoEnter = value; Save(); }
     partial void OnKeepInClipboardChanged(bool value) { S.KeepInClipboard = value; Save(); }
-    partial void OnCleanupEnabledChanged(bool value) { S.CleanupEnabled = value; Save(); }
     partial void OnSoundStartChanged(bool value) { S.SoundStart = value; Save(); }
     partial void OnSoundStopChanged(bool value) { S.SoundStop = value; Save(); }
     partial void OnSoundCancelChanged(bool value) { S.SoundCancel = value; Save(); }
@@ -254,12 +305,40 @@ public sealed partial class SettingsViewModel : ObservableObject
     // NOT round-trip back into the credential store (switching providers is a read-only operation).
     private bool _loadingKeyFromStore;
 
-    // Persisted encrypted (DPAPI) by AiCredentials, keyed by the current provider, and reloaded on the
-    // next launch — survives restarts and keeps each provider's key separate. Only genuine edits
-    // (typing/clearing in the box) reach the store.
+    // Persisted encrypted (DPAPI) by AiCredentials, keyed by provider, reloaded next launch — each
+    // provider's key stays separate. Only genuine edits (typing in the box) reach the store.
     partial void OnAiApiKeyChanged(string value)
     {
-        if (!_loadingKeyFromStore) _credentials.SetKey(AiProvider, value);
+        // Persist non-empty edits only; never auto-delete a saved key on empty. Empty arrives from too
+        // many non-intentional sources (control re-render, reveal toggle, provider reload, page rebuild),
+        // and a silent wipe of a working key is the worst outcome. Intentional removal goes through ClearApiKey().
+        if (!_loadingKeyFromStore && !string.IsNullOrEmpty(value))
+            _credentials.SetKey(AiProvider, value);
+        OnPropertyChanged(nameof(HasSavedKey));
+    }
+
+    /// <summary>Explicitly forget the saved key for the current provider (the only path that deletes
+    /// it — empty edits no longer do, so an accidental blank can't wipe a working key).</summary>
+    [RelayCommand]
+    private void ClearApiKey()
+    {
+        _credentials.SetKey(AiProvider, "");
+        _loadingKeyFromStore = true;               // clearing the box must not round-trip back as a write
+        try { AiApiKey = ""; }
+        finally { _loadingKeyFromStore = false; }
+        OnPropertyChanged(nameof(HasSavedKey));
+        TestConnectionResult = "";
+    }
+
+    /// <summary>Re-read the saved key for the current provider into the box. Called when Settings opens
+    /// so the box always reflects the store — this singleton VM seeds the key once at construction, which
+    /// can be stale (or not yet synced to the PasswordBox); a provider round-trip did this already, so
+    /// now every open does too.</summary>
+    public void RefreshApiKey()
+    {
+        _loadingKeyFromStore = true;
+        try { AiApiKey = _credentials.GetKey(AiProvider) ?? ""; }
+        finally { _loadingKeyFromStore = false; }
         OnPropertyChanged(nameof(HasSavedKey));
     }
 
@@ -279,8 +358,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _loadingKeyFromStore = true;
         try { AiApiKey = _credentials.GetKey(value) ?? ""; }
         finally { _loadingKeyFromStore = false; }
-        // Rebuild the model dropdown for the new provider; RefreshAiModels resets the selection to
-        // that provider's default when the previous model isn't in the new list.
+        // Rebuild the model dropdown for the new provider (resets selection to its default if needed).
         RefreshAiModels();
         RaiseAiComputed();
         OnPropertyChanged(nameof(HasSavedKey));
@@ -305,7 +383,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     private AiConfig BuildAiConfig() => new(AiProvider,
         string.IsNullOrWhiteSpace(AiBaseUrl) ? null : AiBaseUrl,
         string.IsNullOrWhiteSpace(AiModel) ? null : AiModel,
-        string.IsNullOrWhiteSpace(AiApiKey) ? null : AiApiKey);
+        // Test the SAME key the real AI actions use — the persisted store (GetKey) — falling back to
+        // the just-typed value only when nothing is stored yet, so Test and runtime can't disagree.
+        _credentials.GetKey(AiProvider) is string k && k.Length > 0 ? k
+            : (string.IsNullOrWhiteSpace(AiApiKey) ? null : AiApiKey));
 
     private static void ApplyLaunchAtLogin(bool enabled)
     {
@@ -345,7 +426,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         _ => 7,
     };
 
-    // ---- commands ----
 
     [RelayCommand]
     private void BrowseDataDirectory()
@@ -398,6 +478,59 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+
+    [RelayCommand]
+    private async Task SignInPfb()
+    {
+        if (IsPfbBusy) return;
+        IsPfbBusy = true;
+        PfbStatus = "Signing in… complete the login in your browser.";
+        try
+        {
+            PfbSignInResult result = await _pfb.SignInAsync();
+            PfbStatus = result.Message;
+        }
+        catch (Exception ex)
+        {
+            PfbStatus = "Sign-in error: " + ex.Message;
+        }
+        finally
+        {
+            IsPfbBusy = false;
+            RefreshPfb();
+        }
+    }
+
+    [RelayCommand]
+    private void DisconnectPfb()
+    {
+        _pfb.Disconnect();
+        PfbStatus = "Signed out.";
+        RefreshPfb();
+    }
+
+    [RelayCommand]
+    private async Task InstallPfbHelper()
+    {
+        if (IsPfbBusy) return;
+        IsPfbBusy = true;
+        PfbStatus = "Downloading the sign-in helper…";
+        try
+        {
+            PfbSignInResult result = await _pfb.InstallCliAsync();
+            PfbStatus = result.Message;
+        }
+        catch (Exception ex)
+        {
+            PfbStatus = "Download error: " + ex.Message;
+        }
+        finally
+        {
+            IsPfbBusy = false;
+            RefreshPfb();
+        }
+    }
+
     [RelayCommand]
     private async Task DownloadModel()
     {
@@ -426,7 +559,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         RefreshModelStatus();
     }
 
-    // ---- vocabulary (custom terms) ----
 
     public ObservableCollection<string> VocabularyTerms { get; } = new(["Jot", "Nemotron", "WASAPI"]);
 

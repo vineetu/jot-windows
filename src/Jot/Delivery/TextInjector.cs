@@ -6,12 +6,9 @@ using Application = System.Windows.Application;
 namespace Jot.Delivery;
 
 /// <summary>
-/// Types transcribed text into whatever app currently has focus, using the same
-/// "clipboard sandwich" the Mac app uses: save the user's clipboard, write our
-/// text, send a synthetic paste, then restore the original clipboard.
-///
-/// Must be called on an STA thread (the WPF UI thread qualifies) because
-/// <see cref="Clipboard"/> requires it.
+/// Types transcribed text into the focused app via a "clipboard sandwich": save the user's
+/// clipboard, write our text, send a synthetic paste, then restore the original clipboard.
+/// STA thread required (WPF UI thread qualifies) — <see cref="Clipboard"/> demands it.
 /// </summary>
 public static class TextInjector
 {
@@ -55,39 +52,36 @@ public static class TextInjector
     {
         if (string.IsNullOrEmpty(text)) return;
 
-        // 0. Return focus to the window the user started dictating in, so the paste lands there
-        //    (not on the Jot window they may have glanced at). Never re-target our own window.
+        // Land the paste in the app dictation began in, not the Jot window. Never re-target our own.
         if (restoreTo != IntPtr.Zero && !IsOwnWindow(restoreTo))
         {
             ForceForeground(restoreTo);
             Thread.Sleep(40); // let the focus change settle before synthesising Ctrl+V
         }
 
-        // 1. Save whatever the user had on the clipboard (text only for now) — unless the user
-        //    wants us to leave the transcript there, in which case there's nothing to restore.
+        // Save the user's clipboard to restore later (text only), unless we're keeping the transcript.
         string? saved = null;
         if (!keepInClipboard)
         {
             try { if (Clipboard.ContainsText()) saved = Clipboard.GetText(); } catch { /* clipboard busy */ }
         }
 
-        // 2. Put our transcript on the clipboard.
         SetClipboardText(text);
 
-        // 3. Synthetic Ctrl+V into the focused app (release any held hotkey modifier first).
-        ReleaseModifiers();
+        ReleaseModifiers();               // synthetic key-up for any held hotkey modifier…
+        WaitForRealModifiersReleased();   // …then wait for the PHYSICAL keys to clear (paste-last is Ctrl+Alt+P):
+                                          // a synthetic up can't override a finger still on Ctrl+Alt, which would
+                                          // turn the paste into Ctrl+Alt+V. Returns ~immediately when nothing is held.
         SendCtrlV();
 
-        // 4. Optionally submit (Enter) — useful for chat boxes and search fields. Give the paste a
-        //    moment to land first so we don't submit an empty field.
+        // Delay before Enter so we don't submit before the paste lands.
         if (pressEnter)
         {
             Thread.Sleep(60);
             SendEnter();
         }
 
-        // 5. Restore the original clipboard after the paste has landed (unless keeping our text).
-        //    A short delay avoids racing the target app's paste handler.
+        // Restore after the paste lands; the delay avoids racing the target's paste handler.
         if (!keepInClipboard)
         {
             Task.Delay(150).ContinueWith(_ =>
@@ -107,9 +101,8 @@ public static class TextInjector
     /// </summary>
     public static string CaptureSelection(int pollBudgetMs = 600)
     {
-        // Diagnostics: this path fails silently ("Select some text first") whenever it returns empty,
-        // and the cause has been guessed wrong repeatedly. Log every stage so a single real hands-on
-        // test tells us WHY it's empty (modifier still held? Ctrl+C not honored? nothing selected?).
+        // This path fails silently ("Select some text first") on empty; log every stage so one hands-on
+        // test shows WHY (modifier still held? Ctrl+C not honored? nothing selected?).
         bool modsDownAtEntry = AnyModifierDown();
         string? saved = null;
         try { if (Clipboard.ContainsText()) saved = Clipboard.GetText(); } catch { /* clipboard busy */ }
@@ -117,12 +110,10 @@ public static class TextInjector
         // Clear first so we can distinguish "nothing was copied" from "the same text was already there".
         TryClear();
         ReleaseModifiers(); // synthetic key-up for the hotkey's modifier (e.g. Alt) — necessary but NOT
-        // sufficient: a synthetic up doesn't override a modifier the user's finger is still physically
-        // holding down (confirmed empirically — with real Alt held, a synthetic release + Ctrl+C reads
-        // as Ctrl+Alt+C to the target app, which isn't bound to Copy, so nothing gets captured). Since
-        // WM_HOTKEY fires the instant the combo completes — before the user has necessarily released
-        // either key — this is the normal case for a fast tap, not an edge case. Actively wait for the
-        // REAL hardware state to clear instead of just hoping 40ms was enough.
+        // sufficient: a synthetic up can't override a modifier the user's finger still physically holds
+        // (confirmed: with real Alt held, synthetic release + Ctrl+C reads as Ctrl+Alt+C, unbound to
+        // Copy, so nothing is captured). WM_HOTKEY fires the instant the combo completes — before
+        // release — so this is the normal fast-tap case. Actively wait for REAL hardware state to clear.
         long modWaitMs = WaitForRealModifiersReleased();
         bool modsStillDown = AnyModifierDown(); // true here = we timed out with a key physically held
         SendKeyChord(SCAN_CONTROL, SCAN_C);
@@ -170,11 +161,9 @@ public static class TextInjector
     }
 
     // Ctrl+V by SCAN CODE, not virtual-key: some apps (terminals, games, Electron surfaces) only
-    // honour scan-coded synthetic input. Ctrl held down around a V press-and-release.
+    // honour scan-coded synthetic input.
     private static void SendCtrlV() => SendKeyChord(SCAN_CONTROL, SCAN_V);
 
-    /// <summary>Presses the given scan codes together (in order), then releases them in reverse — e.g.
-    /// <c>SendKeyChord(SCAN_CONTROL, SCAN_A)</c> for Ctrl+A. Shared by the paste path and dev self-tests.</summary>
     /// <summary>Injects key-ups for Alt/Ctrl/Shift so a still-held global-hotkey modifier (e.g. the Alt
     /// of "Alt+/") doesn't corrupt the synthetic Ctrl+C/Ctrl+V we're about to send.</summary>
     private static void ReleaseModifiers()
@@ -269,7 +258,6 @@ public static class TextInjector
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    // Enter by scan code, matching SendCtrlV's approach.
     private static void SendEnter()
     {
         var inputs = new[]

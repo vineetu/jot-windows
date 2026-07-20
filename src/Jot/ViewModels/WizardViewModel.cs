@@ -8,9 +8,9 @@ using NAudio.CoreAudioApi;
 namespace Jot.ViewModels;
 
 /// <summary>
-/// Drives the first-run setup wizard. Six steps: Welcome, Permissions (mic privacy), Language,
-/// Microphone, Shortcut, Done. Skippable and re-runnable. Completing it marks first-run done and
-/// flips Advanced features on (matching the Mac app), then requests the window close.
+/// Drives the first-run setup wizard (Welcome → Permissions → Language → Microphone → Shortcut →
+/// Save location → Done). Skippable and re-runnable. Completing it marks first-run done and flips
+/// Advanced features on (matching the Mac app), then requests the window close.
 /// </summary>
 public sealed partial class WizardViewModel : ObservableObject
 {
@@ -83,10 +83,13 @@ public sealed partial class WizardViewModel : ObservableObject
         1 => "Jot needs permission to use your microphone. Windows has no separate input-monitoring or accessibility prompt.",
         2 => "Jot downloads the right on-device model for the language you pick. Model names stay out of your way.",
         3 => "Pick the input device to record from. The meter below confirms Jot can hear you.",
-        4 => "Press Alt + Space anywhere to start and stop dictation. You can change this later in Settings.",
+        4 => $"Press {HotkeyLabel} anywhere to start and stop dictation. You can change this later in Settings.",
         5 => "Your recordings and transcripts are saved here. The default keeps them off your system drive to save space — change it if you like.",
-        _ => "You can re-run this anytime from Settings. Press Alt + Space to try your first dictation.",
+        _ => $"You can re-run this anytime from Settings. Press {HotkeyLabel} to try your first dictation.",
     };
+
+    /// <summary>Toggle shortcut as a display label, so wizard copy never hardcodes the chord.</summary>
+    public string HotkeyLabel => Jot.Recording.HotkeyChord.Display(_store.Current.ToggleRecordingHotkey);
 
     public bool IsFirstStep => StepIndex == 0;
     public bool IsLastStep => StepIndex == StepCount - 1;

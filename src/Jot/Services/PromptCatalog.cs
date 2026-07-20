@@ -55,7 +55,6 @@ public sealed class PromptCatalog
 
     public IEnumerable<string> Categories => Prompts.Select(p => p.Category).Distinct();
 
-    // ---- mutations (persisted) ----
 
     public PromptItem AddUserPrompt(string title, string body)
     {
@@ -105,7 +104,6 @@ public sealed class PromptCatalog
         Save();
     }
 
-    // ---- persistence ----
 
     private static string Key(PromptItem p) => p.IsBuiltIn ? $"b:{p.Category}/{p.Title}" : $"u:{p.Id}";
 

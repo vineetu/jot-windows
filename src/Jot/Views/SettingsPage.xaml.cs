@@ -26,19 +26,16 @@ public partial class SettingsPage : Page
             if (ev.PropertyName == nameof(SettingsViewModel.AiApiKey)) SyncKeyBox(vm);
         };
 
-        // WPF-UI's NavigationView measures hosted pages with infinite height, so a page-level
-        // ScrollViewer never scrolls. Cap it to the NavigationView's (bounded) height so it does.
-        Loaded += (_, _) =>
-        {
-            DependencyObject? d = this;
-            while (d is not null and not Wpf.Ui.Controls.NavigationView)
-                d = VisualTreeHelper.GetParent(d);
-            if (d is FrameworkElement host)
-                RootScroll.SetBinding(HeightProperty, new Binding(nameof(ActualHeight)) { Source = host });
-        };
+        // Each time Settings opens, re-read the saved key from the store and push it into the box, so it
+        // shows even when the singleton VM was seeded stale or the box missed the first sync (bug: key
+        // was blank until a provider round-trip). Loaded fires on every navigation to the page.
+        Loaded += (_, _) => { vm.RefreshApiKey(); SyncKeyBox(vm); };
+
+        // Page height/scrolling is handled centrally by the shell (MainWindow applies FillHeight on
+        // navigation), so no per-page scroll plumbing here.
     }
 
-    // ---- API key box (masked native PasswordBox + revealed TextBox + eye toggle) -----------------
+    // API key box (masked native PasswordBox + revealed TextBox + eye toggle)
     // These live inside SettingRow's own namescope, so they can't take an x:Name — each is captured
     // from its Loaded event. The native PasswordBox is used because Wpf.Ui.Controls.PasswordBox does
     // not render programmatic Password sets (broke prefill-on-launch and clear-on-provider-switch).
@@ -114,7 +111,6 @@ public partial class SettingsPage : Page
         finally { _syncingKey = false; }
     }
 
-    // ---- Settings search --------------------------------------------------------------------
     // Filters the rows in-place: non-matching rows collapse, matching ones show, and a section
     // header is hidden when nothing under it matches. Advanced rows are searchable even when the
     // "Show advanced features" panel is collapsed, so a query can surface anything on the page.

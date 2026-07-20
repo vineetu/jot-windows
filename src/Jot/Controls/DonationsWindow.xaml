@@ -19,10 +19,18 @@
         <ui:TitleBar Grid.Row="0" Title="Donate to charity" />
 
         <StackPanel Grid.Row="1" Margin="20,10,20,6">
-            <TextBlock Text="Jot is free. 100% of donations go to charity via Every.org — we don't take a cut."
-                       TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-            <TextBlock x:Name="SummaryText" Margin="0,10,0,0" FontWeight="SemiBold"
-                       Style="{DynamicResource SubtitleTextBlockStyle}" />
+            <TextBlock x:Name="TimeSavedText" Style="{DynamicResource SubtitleTextBlockStyle}" FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="If it's helped, consider passing some of that forward — to people who don't have basic necessities." />
+            <!-- The "100% via Every.org" pledge and the running total share one line and the body font,
+                 so the header reads as two type styles (headline + body), not four. -->
+            <TextBlock x:Name="CharityLine" Margin="0,6,0,0" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="100% of donations go to charity via Every.org." />
+            <ui:TextBox x:Name="SearchBox" Margin="0,12,0,0" PlaceholderText="Search charities"
+                        Icon="{ui:SymbolIcon Search24}" TextChanged="OnSearchChanged" Visibility="Collapsed" />
         </StackPanel>
 
         <ScrollViewer Grid.Row="2" Margin="10,0" VerticalScrollBarVisibility="Auto">
@@ -38,18 +46,41 @@
                             <ui:Card Margin="8,6">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                    <!-- Charity logo from the summary's logo_url, with a heart fallback behind it
+                                         (shows through when the URL is missing or fails to load). -->
+                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="8" Margin="0,0,12,0"
+                                            VerticalAlignment="Center" ClipToBounds="True"
+                                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                        <Grid>
+                                            <ui:SymbolIcon Symbol="Heart24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                                            <Image Source="{Binding LogoUrl}" Stretch="UniformToFill"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                   Visibility="{Binding HasLogo, Converter={StaticResource BoolToVis}}" />
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding Description}" TextWrapping="Wrap" FontSize="12"
                                                    Margin="0,2,0,0"
                                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{Binding AmountDisplay}" FontSize="12" Margin="0,4,0,0"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                                   Visibility="{Binding HasAmount, Converter={StaticResource BoolToVis}}" />
                                     </StackPanel>
-                                    <ui:Button Grid.Column="1" Content="Donate" Appearance="Primary"
-                                               VerticalAlignment="Center" Tag="{Binding FundraiserUrl}"
-                                               Click="OnDonateCharity" />
+                                    <!-- One-tap preset amounts open every.org's pre-filled donate page
+                                         (www.every.org/<slug>/donate?amount=N), matching the Mac. -->
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <ui:Button Content="$2" Appearance="Primary" MinWidth="44" Margin="0,0,6,0"
+                                                   Tag="2" Click="OnDonateAmount" ToolTip="Donate $2 via Every.org" />
+                                        <ui:Button Content="$10" Appearance="Primary" MinWidth="44"
+                                                   Tag="10" Click="OnDonateAmount" ToolTip="Donate $10 via Every.org" />
+                                    </StackPanel>
                                 </Grid>
                             </ui:Card>
                         </DataTemplate>

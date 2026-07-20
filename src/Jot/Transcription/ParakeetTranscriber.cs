@@ -105,7 +105,7 @@ public sealed class ParakeetTranscriber : ITranscriber, IDisposable
         }
     }
 
-    // ---- Stage 1: waveform -> log-mel features -------------------------------------------------
+    // Stage 1: waveform -> log-mel features
 
     private (float[] features, int[] dims, long length) RunPreprocessor(float[] samples)
     {
@@ -124,7 +124,7 @@ public sealed class ParakeetTranscriber : ITranscriber, IDisposable
         return (features.Buffer.ToArray(), features.Dimensions.ToArray(), lengths.Buffer.Span[0]);
     }
 
-    // ---- Stage 2: features -> encoder frames ---------------------------------------------------
+    // Stage 2: features -> encoder frames
 
     private (float[] encoded, int[] dims, int length) RunEncoder(float[] features, int[] featureDims, long featureLen)
     {
@@ -143,7 +143,7 @@ public sealed class ParakeetTranscriber : ITranscriber, IDisposable
         return (encoded.Buffer.ToArray(), encoded.Dimensions.ToArray(), (int)encodedLen.Buffer.Span[0]);
     }
 
-    // ---- Stage 3: greedy TDT decode ------------------------------------------------------------
+    // Stage 3: greedy TDT decode
 
     private List<int> DecodeGreedy(float[] encoded, int[] dims, int encodedLen, CancellationToken ct)
     {
@@ -227,7 +227,7 @@ public sealed class ParakeetTranscriber : ITranscriber, IDisposable
         return (tokenLogits, durationLogits, nextState1, nextState2);
     }
 
-    // ---- Stage 4: tokens -> text ---------------------------------------------------------------
+    // Stage 4: tokens -> text
 
     private string Detokenize(List<int> tokenIds)
     {
@@ -238,7 +238,6 @@ public sealed class ParakeetTranscriber : ITranscriber, IDisposable
         return DecodeSpacePattern.Replace(builder.ToString(), m => m.Groups[1].Success ? " " : "");
     }
 
-    // ---- Loading & helpers ---------------------------------------------------------------------
 
     private void EnsureLoaded()
     {

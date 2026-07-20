@@ -24,8 +24,6 @@ public sealed class RecorderController : IDisposable
     private readonly ISettingsStore _settings;
     private readonly IRecordingStore _store;
     private readonly ISoundService _sound;
-    private readonly IAiClient _ai;
-    private readonly AiCredentials _credentials;
     private readonly UsageStats _stats;
     private readonly LiveTranscription? _live;   // null if the engine can't stream
     private bool _liveActive;                     // is this recording being live-streamed?
@@ -33,16 +31,13 @@ public sealed class RecorderController : IDisposable
     private GlobalHotkey? _stopHotkey;            // Esc, armed only while recording — stops AND saves
 
     public RecorderController(AudioRecorder recorder, ITranscriber transcriber,
-        ISettingsStore settings, IRecordingStore store, ISoundService sound,
-        IAiClient ai, AiCredentials credentials, UsageStats stats)
+        ISettingsStore settings, IRecordingStore store, ISoundService sound, UsageStats stats)
     {
         _recorder = recorder;
         _transcriber = transcriber;
         _settings = settings;
         _store = store;
         _sound = sound;
-        _ai = ai;
-        _credentials = credentials;
         _stats = stats;
         if (transcriber is IStreamingTranscriber streaming)
         {
@@ -175,7 +170,6 @@ public sealed class RecorderController : IDisposable
             }
             else
             {
-                text = await MaybeCleanupAsync(text);
                 _store.Add(BuildRecording(result, text));
                 _stats.RecordDictation(text, result.Duration.TotalSeconds); // on-device usage counters (D2)
                 Log($"SAVED: \"{TitleFrom(text)}\" ({text.Length} chars); library items={_store.Items.Count}");
@@ -202,30 +196,6 @@ public sealed class RecorderController : IDisposable
             SetState(RecorderState.Idle);
         }
     }
-
-    // Optional AI cleanup (filler removal / punctuation) when a provider is configured and enabled.
-    // Never blocks delivery for long or loses text: on any failure CleanupAsync returns the original.
-    private async Task<string> MaybeCleanupAsync(string text)
-    {
-        JotSettings s = _settings.Current;
-        if (!s.CleanupEnabled || s.AiProvider == "None") return text;
-        try
-        {
-            var config = new AiConfig(s.AiProvider,
-                string.IsNullOrWhiteSpace(s.AiBaseUrl) ? null : s.AiBaseUrl,
-                string.IsNullOrWhiteSpace(s.AiModel) ? null : s.AiModel,
-                _credentials.GetKey(s.AiProvider));
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            string cleaned = await _ai.CleanupAsync(text, config, cts.Token);
-            return string.IsNullOrWhiteSpace(cleaned) ? text : cleaned.Trim();
-        }
-        catch
-        {
-            return text; // cleanup is best-effort; deliver the raw transcript rather than nothing
-        }
-    }
-
-    // ---- stop hotkey (fixed to Esc), live only while recording — stops AND saves ------------------
 
     /// <summary>The stop-&amp;-save shortcut is deliberately fixed to Esc and not user-editable: a
     /// rebind field can never capture Esc (it cancels the capture), and Esc is the natural "stop" key.
@@ -288,8 +258,7 @@ public sealed class RecorderController : IDisposable
 
     private static void LogSuppressed(Exception ex) => JotLog.Error("suppressed during recording", ex);
 
-    // A plain-text dictation trace so a failed "save" is never a black box: each stage of every
-    // recording goes to the shared activity log (JotLog) under the user's data folder.
+    // Dictation trace so a failed save is never a black box: each stage goes to the shared JotLog.
     private static void Log(string message) => JotLog.Info(message);
 
     public void Dispose()

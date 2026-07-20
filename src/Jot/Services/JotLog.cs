@@ -3,7 +3,7 @@ using System.IO;
 namespace Jot.Services;
 
 /// <summary>
-/// Jot's single activity/diagnostics log. Everything — startup, dictation stages, cleanup, errors,
+/// Jot's single activity/diagnostics log. Everything — startup, dictation stages, errors,
 /// crashes — funnels here so "View log" shows one real, chronological record instead of just a crash
 /// dump (worklist D4). The file lives under the user's chosen data folder (<c>&lt;DataDir&gt;\logs\jot.log</c>),
 /// so nothing scatters into %LOCALAPPDATA% regardless of where the user points their data (worklist D5).

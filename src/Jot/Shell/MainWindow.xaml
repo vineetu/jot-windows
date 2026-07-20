@@ -16,8 +16,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- The custom TitleBar (caption buttons + Snap Layouts) sits above the NavigationView and
-             extends the Mica surface into the caption. Back button hidden per product decision. -->
+        <!-- Back button hidden per product decision. -->
         <ui:NavigationView x:Name="RootNavigation"
                            Grid.Row="1"
                            PaneDisplayMode="Left"

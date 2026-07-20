@@ -49,4 +49,16 @@ public sealed class DonationCharity
     [JsonPropertyName("logo_url")] public string? LogoUrl { get; set; }
     [JsonPropertyName("count")] public int Count { get; set; }
     [JsonPropertyName("total_raised_usd")] public double TotalRaisedUsd { get; set; }
+
+    // Display helpers for the donations popup.
+    [JsonIgnore] public bool HasLogo => !string.IsNullOrWhiteSpace(LogoUrl);
+    [JsonIgnore] public bool HasAmount => TotalRaisedUsd > 0;
+
+    /// <summary>"$40 raised · 3 donations" for this charity, or "" if nothing raised yet. Invariant
+    /// culture so a non-US locale doesn't mangle the "$" amount.</summary>
+    [JsonIgnore]
+    public string AmountDisplay => TotalRaisedUsd > 0
+        ? $"${TotalRaisedUsd.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} raised · " +
+          $"{Count} {(Count == 1 ? "donation" : "donations")}"
+        : "";
 }

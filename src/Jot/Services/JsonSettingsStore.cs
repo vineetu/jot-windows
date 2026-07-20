@@ -46,7 +46,6 @@ public sealed class JsonSettingsStore : ISettingsStore
 
     public void Reset()
     {
-        // Copy every default value from a fresh JotSettings onto the live instance, then persist.
         var defaults = new JotSettings();
         foreach (var p in typeof(JotSettings).GetProperties())
             if (p is { CanRead: true, CanWrite: true })

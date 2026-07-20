@@ -4,15 +4,8 @@ namespace Jot.Recording;
 
 /// <summary>
 /// Owns every global hotkey and keeps them in sync with <see cref="JotSettings"/>. Chords are stored
-/// as human strings in settings and (re)registered here, so rebinding in Settings takes effect
-/// immediately — <see cref="Rebuild"/> tears down the old registrations and re-reads the chords.
-/// Rewrite / paste-last / rewrite-with-voice were disabled 2026-07-14 (worklist A4) on the belief that
-/// selection capture (synthetic Ctrl+C) was fundamentally unreliable on Windows 11. Re-enabled the same
-/// day after `--rewriteselftest` proved the real <see cref="Rewrite.RewriteController"/> pipeline
-/// (capture → AI rewrite → paste-back) passes end-to-end against a target with its own message pump —
-/// the earlier "broken" verdict was very likely a same-thread self-test artifact, not a real Windows 11
-/// limitation (see fixit-worklist AI Rewrite section). Still wants a hands-on test against a real
-/// foreign app (Notepad/browser/Office) for full confidence; reopen A4 if that fails.
+/// as human strings in settings and (re)registered here, so rebinding takes effect immediately —
+/// <see cref="Rebuild"/> tears down the old registrations and re-reads the chords.
 /// </summary>
 public sealed class HotkeyManager : IDisposable
 {

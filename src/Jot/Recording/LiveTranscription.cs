@@ -3,11 +3,9 @@ using Jot.Transcription;
 namespace Jot.Recording;
 
 /// <summary>
-/// Drives live transcription while the user dictates, using the transcriber's NATIVE streaming: one
-/// session stays open and each newly-captured slice of audio is fed to it exactly once (the model
-/// carries its own context via its cache), so partials grow as you speak and — crucially — the final
-/// transcript is essentially ready the instant you stop. Replaces the old re-decode-a-trailing-window
-/// hack, which existed only because the previous model (Parakeet v2) couldn't stream.
+/// Drives live transcription via the transcriber's native streaming: one session stays open and each
+/// newly-captured slice is fed exactly once (the model carries context in its cache), so partials grow
+/// as you speak and the final transcript is ready the instant you stop.
 /// </summary>
 public sealed class LiveTranscription
 {
@@ -47,7 +45,6 @@ public sealed class LiveTranscription
         }
     }
 
-    // Feed whatever audio has arrived since the last feed, and surface the growing transcript.
     private void FeedNew()
     {
         float[]? all = _recorder.SnapshotSamples();
@@ -58,8 +55,8 @@ public sealed class LiveTranscription
         if (partial.Length > 0) PartialReady?.Invoke(partial);
     }
 
-    /// <summary>Stops the live loop, feeds the final slice, and returns the authoritative transcript.
-    /// Call while the recorder is STILL capturing (before Stop) so the last audio is included.</summary>
+    /// <summary>Returns the final transcript. Call while the recorder is STILL capturing (before Stop)
+    /// so the last audio is included.</summary>
     public async Task<string> FinishAsync()
     {
         if (_session is null) return string.Empty;

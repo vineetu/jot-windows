@@ -5,7 +5,7 @@
       xmlns:models="clr-namespace:Jot.Models"
       xmlns:ctl="clr-namespace:Jot.Controls"
       Title="Recents">
-    <Grid Margin="{StaticResource PagePadding}" ctl:NavContentHost.FillHeight="True">
+    <Grid Margin="{StaticResource PagePadding}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -13,8 +13,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Header: record button + title on the left (flexes; the hint wraps), upload drop zone
-             fixed-width on the right so it can never bleed off the edge. -->
+        <!-- Drop zone is fixed-width so it can never bleed off the edge as the title flexes. -->
         <Grid Grid.Row="0" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -67,13 +66,11 @@
             </Border>
         </Grid>
 
-        <!-- Search -->
         <ui:TextBox Grid.Row="1" x:Name="SearchBox" Margin="0,0,0,10"
                     PlaceholderText="Search transcripts, titles, and tags"
                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                     Icon="{ui:SymbolIcon Search24}" />
 
-        <!-- Tag filter chips -->
         <ItemsControl Grid.Row="2" ItemsSource="{Binding Tags}" Margin="0,0,0,12"
                       Visibility="{Binding Tags.Count, Converter={StaticResource BoolToVis}}">
             <ItemsControl.ItemsPanel>
@@ -90,7 +87,6 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- Library list -->
         <Grid Grid.Row="3">
             <ListView x:Name="List" ItemsSource="{Binding Items}"
                       Background="Transparent" BorderThickness="0"
@@ -183,7 +179,6 @@
                 </ListView.ItemTemplate>
             </ListView>
 
-            <!-- Empty states -->
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="360"
                         Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}">
                 <ui:SymbolIcon Symbol="Mic24" FontSize="36" HorizontalAlignment="Center"

@@ -25,3 +25,6 @@ publish/
 
 # Velopack pack output (published to GitHub Releases, not tracked)
 /Releases/
+
+# MSIX pack output (uploaded to Partner Center, not tracked)
+/AppxPackages/

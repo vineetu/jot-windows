@@ -5,11 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Jot.Views;
 
 /// <summary>
-/// Jot's keyboard-shortcuts page, promoted to its own left-nav entry. Every row is an editable
-/// <see cref="Jot.Controls.HotkeyBox"/> (click-to-capture): recording (toggle / stop &amp; save) plus the
-/// AI &amp; text shortcuts (rewrite, rewrite-with-voice, paste-last). Binds to the shared
-/// <see cref="SettingsViewModel"/>, whose chord setters persist and let App re-register on the
-/// settings-changed signal. Physical-keyboard round-trip still wants a hands-on pass (fixit A5).
+/// Keyboard-shortcuts page (own left-nav entry). Each row is an editable click-to-capture
+/// <see cref="Jot.Controls.HotkeyBox"/>. Binds to the shared <see cref="SettingsViewModel"/>, whose
+/// chord setters persist and let App re-register on the settings-changed signal.
 /// </summary>
 public partial class ShortcutsPage : Page
 {

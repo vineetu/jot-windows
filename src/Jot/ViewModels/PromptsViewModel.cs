@@ -8,8 +8,8 @@ using Jot.Services;
 namespace Jot.ViewModels;
 
 /// <summary>
-/// Backs the Prompts catalog page: a searchable, category-grouped view over <see cref="PromptCatalog"/>
-/// with pin/default toggles and simple "My prompts" authoring. Shared catalog with the rewrite picker.
+/// Backs the Prompts catalog page: searchable, category-grouped view over <see cref="PromptCatalog"/>
+/// (shared with the rewrite picker) with pin/default toggles and "My prompts" authoring.
 /// </summary>
 public sealed partial class PromptsViewModel : ObservableObject
 {

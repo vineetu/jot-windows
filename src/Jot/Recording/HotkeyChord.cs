@@ -72,6 +72,12 @@ public readonly record struct HotkeyChord(GlobalHotkey.Modifiers Modifiers, Key 
         return string.Join("+", sb);
     }
 
+    /// <summary>Single source of truth for turning a stored chord string into a human label
+    /// ("Alt+Space" → "Alt + Space"). Returns the raw text if unparseable, "" for none, so no
+    /// caller ever hardcodes a shortcut string in UI.</summary>
+    public static string Display(string? chordText) =>
+        TryParse(chordText, out HotkeyChord c) ? c.ToDisplayString() : (chordText?.Trim() ?? "");
+
     /// <summary>A friendlier label for display ("Alt + Space"): pretty key name, spaced separators.</summary>
     public string ToDisplayString()
     {

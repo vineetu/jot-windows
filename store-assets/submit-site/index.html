@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Jot Transcribe — Store Submission</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#ffffff; --fg:#1a1a1a; --muted:#5f636d; --border:#e4e6ea; --card:#f6f7f9;
+    --accent:#2a5bd7; --ok:#1a7f45; --warn:#8a6d2b;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0f1013; --fg:#eceef2; --muted:#9aa0ab; --border:#26282e; --card:#17191d;
+           --accent:#8aa0ff; --ok:#5cd08a; --warn:#e4c877; }
+  }
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--bg); color:var(--fg);
+        font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+        -webkit-text-size-adjust:100%; }
+  .wrap{ max-width:720px; margin:0 auto; padding:22px 16px 80px; }
+  h1{ font-size:24px; margin:.1em 0 .3em; }
+  .sub{ color:var(--muted); margin:0 0 18px; }
+  h2{ font-size:18px; margin:30px 0 8px; padding-top:16px; border-top:1px solid var(--border); }
+  h2 .n{ display:inline-flex; align-items:center; justify-content:center; min-width:26px; height:26px;
+         background:var(--accent); color:#fff; border-radius:50%; font-size:14px; margin-right:8px; padding:0 4px;}
+  h3{ font-size:14px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin:16px 0 4px; }
+  p{ margin:8px 0; } ol,ul{ padding-left:20px; } li{ margin:5px 0; }
+  code{ background:var(--card); padding:.1em .4em; border-radius:5px; font-size:.85em;
+        font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin:10px 0; }
+  .field{ position:relative; margin:8px 0 4px; }
+  .field pre{ background:var(--card); border:1px solid var(--border); border-radius:12px;
+        padding:12px 84px 12px 14px; margin:0; white-space:pre-wrap; word-wrap:break-word;
+        font:15px/1.5 inherit; }
+  .copy{ position:absolute; top:8px; right:8px; background:var(--accent); color:#fff;
+         border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+  .copy:active{ transform:scale(.96); } .copy.done{ background:var(--ok); }
+  table{ border-collapse:collapse; width:100%; margin:8px 0; font-size:14px; }
+  th,td{ border:1px solid var(--border); padding:7px 10px; text-align:left; }
+  th{ background:var(--card); }
+  .ok{ color:var(--ok); font-weight:600; } .warn{ color:var(--warn); }
+  .foot{ margin-top:34px; padding-top:14px; border-top:1px solid var(--border); color:var(--muted); font-size:12.5px; }
+  a{ color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Jot Transcribe — Store Submission</h1>
+  <p class="sub">Your checklist for Partner Center. Do the actual work on your PC (the package + screenshots live there),
+     but tap-to-copy every value from here. Everything below is final and correct.</p>
+
+  <div class="card">📦 <strong>Package to upload</strong> (on your PC):<br>
+     <code>C:\Users\vinee\projects\jot-windows\AppxPackages\JotTranscribe_1.0.0.0_x64.msix</code><br>
+     <strong>Screenshots:</strong> the 5 PNGs in <code>store-assets\listing\</code>.</div>
+
+  <h2><span class="n">🤖</span> Prompt for the Claude-for-Chrome extension</h2>
+  <p>Open the Chrome extension on the Partner Center submission page and paste this. It fills the text
+     fields; <strong>you</strong> still do the file uploads and the final Submit (it's told to stop before those).</p>
+  <div class="field"><button class="copy">Copy</button><pre>You are helping me fill out a NEW Microsoft Store submission in Partner Center for my app "Jot Transcribe". The browser is on the app's submission page. Fill in the form fields, following these rules strictly.
+
+RULES:
+- DO NOT upload any files. Skip every package-upload and screenshot-upload step — I will do those myself. If you reach one, tell me and move on.
+- DO NOT click "Submit", "Submit to the Store", "Publish", or any final submission button. When the text fields are filled, STOP and tell me so I can review and submit myself.
+- Do the sections one at a time and tell me what you changed after each.
+- If a field is unclear, already filled, or you can't find it, ASK me instead of guessing.
+- Paste text values exactly as given.
+
+PRICING AND AVAILABILITY
+- Price: Free
+- Markets: All markets
+- Visibility: Public
+
+PROPERTIES
+- Category: Productivity
+- Privacy policy URL: https://sites.simple-host.app/jot-transcribe/jot-windows-privacy/
+- Website (if there's a field): https://github.com/vineetu/jot-windows
+
+AGE RATINGS (IARC) — answer "No" to every one:
+Violence/fear: No | Sexual content/nudity: No | Profanity/crude humor: No | Drugs/alcohol/tobacco: No | Gambling: No | Users can communicate with other users: No | Shares user's location: No | In-app purchases: No | Unrestricted internet access: No
+
+STORE LISTING (English)
+- Product name: Jot Transcribe
+- Short title / subtitle: On-device dictation for Windows
+- Short description:
+Press a hotkey, speak, and your words are typed at the cursor — in any app. Jot transcribes 100% on your PC, so your voice never leaves your device. Fast, private, and free. No account, no cloud, no telemetry.
+- Description:
+Jot is the fastest way to turn speech into text on Windows — and it runs entirely on your own PC.
+
+Press one hotkey, start talking, and Jot types what you said right where your cursor is — in your editor, browser, chat app, email, anywhere. When you release the key, the text is already pasted. No window to switch to, no "upload and wait."
+
+Everything happens on-device. Your audio is transcribed locally by a modern speech model and is never uploaded, streamed, or stored in the cloud. There's no account to create and no telemetry. After a one-time model download on first run, Jot works fully offline.
+
+WHY JOT
+• Type at the speed of speech — dictate into any app, hands on the keyboard.
+• Truly private — transcription runs on your PC; your voice never leaves the device.
+• Instant — GPU-accelerated (DirectML) with a CPU fallback that's still real-time.
+• A live caption pill shows a waveform and your words as you speak, so you always know it's listening.
+• Free, with no account and no ads.
+
+REWRITE &amp; CLEAN UP (OPTIONAL)
+• A keyboard-first "Rewrite with…" palette turns dictated text into a cleaner version — make it shorter, fix spelling &amp; grammar, convert to bullet points, improve the writing, and more.
+• Optional transcript clean-up removes filler words and fixes punctuation.
+• These optional AI features are bring-your-own-provider: connect Ollama to run fully on-device, or add your own OpenAI, Anthropic, or Google Gemini API key. Core dictation never needs any of this.
+
+MORE
+• Transcribe existing audio or video files — just drop them in.
+• Searchable history of everything you've dictated, kept locally.
+• Native Windows 11 design: Fluent UI, Mica, light/dark, system tray, global hotkeys.
+• Works with many spoken languages (English is the most accurate).
+
+Jot is designed around a simple idea: dictation should be instant, private, and out of your way. Install it, pick a hotkey, and start talking.
+- What's new in this version: First release of Jot for Windows.
+- Product features (one per line):
+Press a hotkey, speak, and text is typed at your cursor in any app
+100% on-device transcription — your voice never leaves your PC
+Works offline after a one-time model download
+GPU-accelerated (DirectML) with a real-time CPU fallback
+Live caption pill with waveform while you speak
+"Rewrite with…" palette: shorten, fix grammar, bulletize, and more
+Optional AI clean-up and rewrite (bring your own key, or run Ollama locally)
+Transcribe your own audio and video files
+Local, searchable dictation history
+Free — no account, no ads, no telemetry
+- Search terms: dictation, speech to text, voice typing, transcription, offline stt, voice to text, private
+- Screenshots: I will upload these myself — skip this step.
+
+DATA COLLECTION
+- Answer that the app does NOT collect data (no telemetry/analytics).
+
+MICROPHONE JUSTIFICATION (if prompted):
+Jot uses the microphone to capture your speech, which is transcribed to text entirely on your device. Audio is processed locally and is never uploaded, streamed, or stored anywhere.
+
+When all the text fields are filled, STOP and tell me what's left (the file uploads and the final Submit) so I can finish those myself.</pre></div>
+
+  <h2><span class="n">0</span> Start</h2>
+  <p>Partner Center → <strong>Apps and games</strong> → <strong>Jot Transcribe</strong> →
+     <strong>Start new submission</strong>.</p>
+
+  <h2><span class="n">1</span> Packages</h2>
+  <p>Drag in <code>JotTranscribe_1.0.0.0_x64.msix</code>. Wait for the green check. Identity is already set to match
+     your account (<code>Vineet sriram</code> / <code>Vineetsriram.JotTranscribe</code>) — if it flags anything, stop and tell me.</p>
+
+  <h2><span class="n">2</span> Pricing &amp; availability</h2>
+  <ul><li>Price: <strong>Free</strong></li><li>Markets: <strong>All markets</strong></li><li>Visibility: <strong>Public</strong></li></ul>
+
+  <h2><span class="n">3</span> Properties</h2>
+  <h3>Category</h3><div class="field"><button class="copy">Copy</button><pre>Productivity</pre></div>
+  <h3>Privacy policy URL</h3><div class="field"><button class="copy">Copy</button><pre>https://sites.simple-host.app/jot-transcribe/jot-windows-privacy/</pre></div>
+  <h3>Website (optional)</h3><div class="field"><button class="copy">Copy</button><pre>https://github.com/vineetu/jot-windows</pre></div>
+
+  <h2><span class="n">4</span> Age ratings (IARC) — answer exactly</h2>
+  <table>
+    <tr><th>Question</th><th>Answer</th></tr>
+    <tr><td>Violence / fear</td><td><strong>No</strong></td></tr>
+    <tr><td>Sexual content / nudity</td><td><strong>No</strong></td></tr>
+    <tr><td>Profanity / crude humor</td><td><strong>No</strong></td></tr>
+    <tr><td>Drugs / alcohol / tobacco</td><td><strong>No</strong></td></tr>
+    <tr><td>Gambling</td><td><strong>No</strong></td></tr>
+    <tr><td>Users can communicate with other users</td><td><strong>No</strong></td></tr>
+    <tr><td>Shares user's location with others</td><td><strong>No</strong></td></tr>
+    <tr><td>In-app purchases</td><td><strong>No</strong></td></tr>
+    <tr><td>Unrestricted internet access (browser)</td><td><strong>No</strong></td></tr>
+  </table>
+  <p class="ok">→ Result: rated for everyone (ESRB Everyone / PEGI 3).</p>
+
+  <h2><span class="n">5</span> Store listing</h2>
+  <h3>Product name</h3><div class="field"><button class="copy">Copy</button><pre>Jot Transcribe</pre></div>
+  <h3>Short title / subtitle</h3><div class="field"><button class="copy">Copy</button><pre>On-device dictation for Windows</pre></div>
+  <h3>Short description</h3><div class="field"><button class="copy">Copy</button><pre>Press a hotkey, speak, and your words are typed at the cursor — in any app. Jot transcribes 100% on your PC, so your voice never leaves your device. Fast, private, and free. No account, no cloud, no telemetry.</pre></div>
+  <h3>Description</h3><div class="field"><button class="copy">Copy</button><pre>Jot is the fastest way to turn speech into text on Windows — and it runs entirely on your own PC.
+
+Press one hotkey, start talking, and Jot types what you said right where your cursor is — in your editor, browser, chat app, email, anywhere. When you release the key, the text is already pasted. No window to switch to, no "upload and wait."
+
+Everything happens on-device. Your audio is transcribed locally by a modern speech model and is never uploaded, streamed, or stored in the cloud. There's no account to create and no telemetry. After a one-time model download on first run, Jot works fully offline.
+
+WHY JOT
+• Type at the speed of speech — dictate into any app, hands on the keyboard.
+• Truly private — transcription runs on your PC; your voice never leaves the device.
+• Instant — GPU-accelerated (DirectML) with a CPU fallback that's still real-time.
+• A live caption pill shows a waveform and your words as you speak, so you always know it's listening.
+• Free, with no account and no ads.
+
+REWRITE & CLEAN UP (OPTIONAL)
+• A keyboard-first "Rewrite with…" palette turns dictated text into a cleaner version — make it shorter, fix spelling & grammar, convert to bullet points, improve the writing, and more.
+• Optional transcript clean-up removes filler words and fixes punctuation.
+• These optional AI features are bring-your-own-provider: connect Ollama to run fully on-device, or add your own OpenAI, Anthropic, or Google Gemini API key. Core dictation never needs any of this.
+
+MORE
+• Transcribe existing audio or video files — just drop them in.
+• Searchable history of everything you've dictated, kept locally.
+• Native Windows 11 design: Fluent UI, Mica, light/dark, system tray, global hotkeys.
+• Works with many spoken languages (English is the most accurate).
+
+Jot is designed around a simple idea: dictation should be instant, private, and out of your way. Install it, pick a hotkey, and start talking.</pre></div>
+  <h3>What's new in this version</h3><div class="field"><button class="copy">Copy</button><pre>First release of Jot for Windows.</pre></div>
+  <h3>Product features (one per line)</h3><div class="field"><button class="copy">Copy</button><pre>Press a hotkey, speak, and text is typed at your cursor in any app
+100% on-device transcription — your voice never leaves your PC
+Works offline after a one-time model download
+GPU-accelerated (DirectML) with a real-time CPU fallback
+Live caption pill with waveform while you speak
+"Rewrite with…" palette: shorten, fix grammar, bulletize, and more
+Optional AI clean-up and rewrite (bring your own key, or run Ollama locally)
+Transcribe your own audio and video files
+Local, searchable dictation history
+Free — no account, no ads, no telemetry</pre></div>
+  <h3>Search terms</h3><div class="field"><button class="copy">Copy</button><pre>dictation, speech to text, voice typing, transcription, offline stt, voice to text, private</pre></div>
+
+  <h3>Screenshots — upload in this order, with these captions</h3>
+  <table>
+    <tr><th>#</th><th>File</th><th>Caption</th></tr>
+    <tr><td>1</td><td><code>01-main.png</code></td><td>Press a hotkey, speak, and it's typed at your cursor.</td></tr>
+    <tr><td>2</td><td><code>02-pill.png</code></td><td>A live pill shows it's listening — waveform and words as you talk.</td></tr>
+    <tr><td>3</td><td><code>03-rewrite.png</code></td><td>Rewrite dictated text: shorten, fix grammar, bulletize — from the keyboard.</td></tr>
+    <tr><td>4</td><td><code>05-ai.png</code></td><td>Bring your own AI provider, or run Ollama fully on-device.</td></tr>
+    <tr><td>5</td><td><code>04-settings.png</code></td><td>Simple, native Windows settings. Private by default.</td></tr>
+  </table>
+
+  <h2><span class="n">6</span> Data collection</h2>
+  <p>Answer: <strong>the app does NOT collect data</strong> (no telemetry). If there's a notes field, the optional
+     bring-your-own-AI feature sends only the text you choose to rewrite to the provider you configure — disclosed in the privacy policy.</p>
+
+  <h2><span class="n">7</span> Microphone justification (if prompted)</h2>
+  <div class="field"><button class="copy">Copy</button><pre>Jot uses the microphone to capture your speech, which is transcribed to text entirely on your device. Audio is processed locally and is never uploaded, streamed, or stored anywhere.</pre></div>
+
+  <h2><span class="n">8</span> Submit</h2>
+  <p>Review the summary → <strong>Submit to the Store</strong>. Certification usually takes a few hours to a day.
+     If anything turns red, screenshot it and send it to me.</p>
+
+  <div class="card">💡 Before you hit Submit: open the installed Jot and do a quick <strong>dictation test</strong>
+     (hotkey → speak → confirm it pastes) — the one end-to-end check worth doing first.</div>
+
+  <div class="foot">Jot Transcribe · Microsoft Store submission checklist.</div>
+</div>
+
+<script>
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var text = btn.parentNode.querySelector('pre').innerText;
+      navigator.clipboard.writeText(text).then(function(){
+        var old = btn.textContent; btn.textContent = 'Copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1500);
+      });
+    });
+  });
+</script>
+</body>
+</html>

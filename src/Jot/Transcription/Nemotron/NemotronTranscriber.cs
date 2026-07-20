@@ -93,7 +93,7 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
         catch { /* best effort */ }
     }
 
-    // ---- a live streaming utterance ------------------------------------------------------------
+    // a live streaming utterance
 
     /// <summary>
     /// One in-flight utterance. Holds the persistent encoder cache + decoder LSTM state and the tokens
@@ -190,7 +190,7 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
         }
     }
 
-    // ---- encoder: one cache-aware chunk (updates the caches in place) --------------------------
+    // encoder: one cache-aware chunk (updates the caches in place)
 
     private (float[] enc, int encLen) RunEncoder(
         float[] window, int validFrames, float[] cacheChannel, float[] cacheTime, ref long cacheLen)
@@ -223,7 +223,7 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
         return (enc, encLen);
     }
 
-    // ---- decoder: LSTM prediction network step -------------------------------------------------
+    // decoder: LSTM prediction network step
 
     private float[] RunDecoder(int token, float[] hIn, float[] cIn, out float[] hOut, out float[] cOut)
     {
@@ -247,7 +247,7 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
         return g;
     }
 
-    // ---- joint: logits for one (encoder frame, prediction vector) ------------------------------
+    // joint: logits for one (encoder frame, prediction vector)
 
     private float[] RunJoint(float[] encFrame, float[] g)
     {
@@ -264,7 +264,7 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
         return AsDense<float>(r, "joint_output").Buffer.ToArray();            // [1,1,1,13088] -> 13088
     }
 
-    // ---- detok ---------------------------------------------------------------------------------
+    // detok
 
     private string Detokenize(IReadOnlyList<int> tokens)
     {
@@ -279,7 +279,6 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
         return Regex.Replace(sb.ToString(), " {2,}", " ").Trim();
     }
 
-    // ---- loading & helpers ---------------------------------------------------------------------
 
     private void EnsureLoaded()
     {

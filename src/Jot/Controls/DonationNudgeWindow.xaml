@@ -1,0 +1,34 @@
+<ui:FluentWindow x:Class="Jot.Controls.DonationNudgeWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Support Jot"
+                 Width="460" SizeToContent="Height" ResizeMode="NoResize"
+                 WindowStartupLocation="CenterScreen" Topmost="True" ShowInTaskbar="False"
+                 ExtendsContentIntoTitleBar="True" WindowBackdropType="Mica" WindowCornerPreference="Round">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Support Jot" />
+
+        <StackPanel Grid.Row="1" Margin="24,8,24,20">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <ui:SymbolIcon Symbol="Heart24" FontSize="22" VerticalAlignment="Center"
+                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                <TextBlock x:Name="HeadlineText" Margin="10,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold"
+                           TextWrapping="Wrap" Style="{DynamicResource SubtitleTextBlockStyle}" />
+            </StackPanel>
+            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="If it's helped, consider passing some of that forward — to people who don't have basic necessities." />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <ui:Button Content="Don't ask again" Appearance="Transparent" Margin="0,0,8,0" Click="OnDontAsk" />
+                <ui:Button Content="Maybe later" Margin="0,0,8,0" Click="OnMaybeLater" />
+                <ui:Button Content="Donate to charity" Appearance="Primary" Icon="{ui:SymbolIcon Heart24}"
+                           Click="OnDonate" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

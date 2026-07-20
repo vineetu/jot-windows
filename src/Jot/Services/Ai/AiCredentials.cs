@@ -9,7 +9,7 @@ namespace Jot.Services.Ai;
 
 /// <summary>
 /// Holds the AI provider API keys, persisted encrypted at rest with Windows DPAPI (per-user, per-
-/// machine) so cleanup/rewrite keep working across restarts. Keys are kept <b>per provider</b> — a
+/// machine) so AI rewrite keeps working across restarts. Keys are kept <b>per provider</b> — a
 /// JSON map of provider name → key. The file lives under the user's chosen data folder
 /// (<c>&lt;DataDir&gt;\aikey.dat</c>).
 ///
@@ -73,14 +73,22 @@ public sealed class AiCredentials
         string path = FilePath;
         try
         {
-            _keys.Clear();
             if (!File.Exists(path))
             {
+                _keys.Clear();
                 _loadedOk = true; // nothing on disk — empty memory faithfully represents it
                 return;
             }
             byte[] plain = ProtectedData.Unprotect(File.ReadAllBytes(path), null, DataProtectionScope.CurrentUser);
             string text = Encoding.UTF8.GetString(plain);
+
+            // Parse into a LOCAL map first; swap into the live store only after the whole read
+            // succeeds. SAFETY INVARIANT #2 (added after keys vanished mid-session): clearing _keys up
+            // front meant a transient read/decrypt/parse failure silently emptied the in-memory store
+            // while the on-disk file was intact — GetKey returned null and AI broke, yet the box
+            // (seeded from an earlier good load) still showed the key, so "Test connection" passed
+            // while real use failed. Swapping only on success keeps a good store through a hiccup.
+            var loaded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             // New format: a JSON map of provider -> key. Legacy format: a single bare key string.
             if (text.TrimStart().StartsWith('{'))
@@ -88,21 +96,25 @@ public sealed class AiCredentials
                 var map = JsonSerializer.Deserialize<Dictionary<string, string>>(text);
                 if (map is not null)
                     foreach (var kv in map)
-                        if (!string.IsNullOrEmpty(kv.Value)) _keys[kv.Key] = kv.Value;
+                        if (!string.IsNullOrEmpty(kv.Value)) loaded[kv.Key] = kv.Value;
             }
             else if (!string.IsNullOrEmpty(text))
             {
                 // Migrate the single legacy key onto whichever provider is configured.
                 string provider = _settings.Current.AiProvider;
                 if (!string.IsNullOrEmpty(provider) && provider != "None")
-                    _keys[provider] = text;
+                    loaded[provider] = text;
             }
+
+            _keys.Clear();
+            foreach (var kv in loaded) _keys[kv.Key] = kv.Value;
             _loadedOk = true;
             JotLog.Info($"aikey: loaded {_keys.Count} key(s) from {path}");
         }
         catch (Exception ex)
         {
-            // File exists but couldn't be read — keep the fuse blown so Save() can't clobber it.
+            // File exists but couldn't be read — keep the fuse blown so Save() can't clobber it, and
+            // LEAVE any previously-loaded keys in memory so a transient hiccup doesn't disable AI.
             _loadedOk = false;
             JotLog.Error($"aikey: LOAD FAILED from {path} — saved keys are preserved on disk", ex);
         }

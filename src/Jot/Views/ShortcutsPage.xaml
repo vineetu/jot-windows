@@ -14,11 +14,9 @@
         <StackPanel MaxWidth="820">
             <TextBlock Text="Shortcuts" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
-            <!-- Only the two shortcuts users actually rebind are editable here: Toggle recording and
-                 Rewrite selection (both click-to-capture HotkeyBox, TwoWay-bound to SettingsViewModel;
-                 App re-registers on the settings-changed signal). Stop & save is fixed to Esc on
-                 purpose — a HotkeyBox can never capture Esc (Esc cancels the capture), and Esc is the
-                 natural "stop" key, so it's shown read-only rather than as a dead editable field. -->
+            <!-- Editable rows are click-to-capture HotkeyBoxes (TwoWay-bound; App re-registers on the
+                 settings-changed signal). Stop & save is fixed to Esc, shown read-only: a HotkeyBox
+                 can never capture Esc (Esc cancels the capture) and Esc is the natural stop key. -->
             <ui:InfoBar IsOpen="True" Severity="Informational" IsClosable="False" Margin="0,12,0,4"
                         Title="Change a shortcut"
                         Message="Click a shortcut, then press the new key combination. Backspace clears it; Esc cancels the capture." />
@@ -29,6 +27,10 @@
             <ctl:SettingRow Title="Rewrite selection"
                             Description="Rewrite the highlighted text with AI, using your default prompt (or pick one).">
                 <ctl:HotkeyBox Chord="{Binding RewriteHotkey, Mode=TwoWay}" />
+            </ctl:SettingRow>
+            <ctl:SettingRow Title="Paste last transcript"
+                            Description="Paste your most recent transcript (AI-rewritten or raw) at the cursor from anywhere.">
+                <ctl:HotkeyBox Chord="{Binding PasteLastHotkey, Mode=TwoWay}" />
             </ctl:SettingRow>
             <ctl:SettingRow Title="Stop &amp; save recording"
                             Description="Ends the current recording and saves it (active only while recording). Fixed to Esc.">

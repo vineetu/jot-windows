@@ -11,13 +11,24 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Jot</AssemblyName>
     <RootNamespace>Jot</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <ApplicationIcon>Assets\jot.ico</ApplicationIcon>
     <!-- ONNX Runtime ships native (win-x64) libraries; pin the platform so they are restored/copied. -->
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <!-- Enables targets that generate package layout, required for running with winapp run or msix packaging -->
     <EnableMsixTooling>true</EnableMsixTooling>
+    <!-- Build flavor. 'Public' (default) = the Microsoft Store build: bring-your-own cloud AI
+         providers, no PFB. 'Sony' = the internal build where PFB is the ONLY online AI (external
+         cloud providers removed, and the Sony gateway hostnames compiled in). Select with
+         `dotnet build -p:Flavor=Sony`. -->
+    <Flavor Condition="'$(Flavor)' == ''">Public</Flavor>
+  </PropertyGroup>
+
+  <!-- Flavor gate: defines the SONY compile symbol used by Services/Ai/PfbGateway.cs, PfbAuth.cs
+       and BuildFlavor.cs to include the Sony-only providers, gateway URLs, and self-test. -->
+  <PropertyGroup Condition="'$(Flavor)' == 'Sony'">
+    <DefineConstants>$(DefineConstants);SONY</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,6 +42,9 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.4.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <!-- Offline QR generation for the "Jot for iPhone" card — pure managed, no native deps, no network
+         (PngByteQRCode → PNG bytes, so no System.Drawing dependency either). -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
     <!-- Auto-updating installer (Setup.exe) + delta updates from GitHub Releases -->
     <PackageReference Include="Velopack" Version="1.2.0" />
     <!-- On-device speech-to-text: Parakeet-TDT ONNX. DirectML package = CPU + DirectML EPs.
@@ -42,8 +56,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- App icon, embedded as a WPF resource so windows + the tray can load it via pack URI -->
+    <!-- App icon + hi-res logo, embedded as WPF resources so windows/tray/About load them via pack URI -->
     <Resource Include="Assets\jot.ico" />
+    <Resource Include="Assets\jot-logo.png" />
     <!-- FFmpeg (decodes any audio/video format for file import) is no longer bundled — it's ~138 MB
          and only needed by the optional file-import feature. Jot.Import.FfmpegInstaller downloads it
          on first use from a standalone GitHub release, decoupled from the app's own version tags. -->
@@ -54,7 +69,7 @@
          the same file as both Resource and Content drops the embedded copy, so the pack URI
          (pack://application:,,,/Assets/jot.ico) resolves to null and the tray/window icon load crashes
          startup. Keep the app icon Resource-only; the rest of Assets\ is MSIX tile/store artwork. -->
-    <Content Include="Assets\**\*" Exclude="Assets\jot.ico" />
+    <Content Include="Assets\**\*" Exclude="Assets\jot.ico;Assets\jot-logo.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -36,7 +36,23 @@ public partial class PromptPickerWindow : Window
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Deactivated += (_, _) => { if (CloseOnDeactivate) Close(); };
+        List.PreviewMouseLeftButtonUp += OnListClick; // click a row to commit, mouse parity with Enter
         ((System.Collections.Specialized.INotifyCollectionChanged)List.Items).CollectionChanged += (_, _) => UpdateCount();
+    }
+
+    /// <summary>Single-click a prompt row to commit it — the mouse equivalent of pressing Enter.</summary>
+    private void OnListClick(object sender, MouseButtonEventArgs e)
+    {
+        // Walk up from whatever was hit to the row container, then commit that row's prompt.
+        DependencyObject? d = e.OriginalSource as DependencyObject;
+        while (d is not null and not System.Windows.Controls.ListViewItem)
+            d = VisualTreeHelper.GetParent(d);
+        if (d is System.Windows.Controls.ListViewItem { DataContext: PromptItem item })
+        {
+            List.SelectedItem = item;
+            _vm.PickCommand.Execute(item);
+            e.Handled = true;
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -49,7 +65,6 @@ public partial class PromptPickerWindow : Window
 
     private void OnPicked(PromptItem item)
     {
-        // Hand the chosen instruction to the rewrite pipeline, then close the overlay.
         Action<PromptItem>? chosen = PromptChosen;
         PromptChosen = null;            // fire once
         CloseOnDeactivate = false;      // closing steals focus back; don't double-fire via Deactivated
@@ -99,7 +114,7 @@ public partial class PromptPickerWindow : Window
         CountText.Text = n == 1 ? "1 prompt" : $"{n} prompts";
     }
 
-    // ---------------- positioning: centered on the active window's monitor ----------------
+    // positioning: centered on the active window's monitor
 
     private void CenterOnActiveMonitor()
     {

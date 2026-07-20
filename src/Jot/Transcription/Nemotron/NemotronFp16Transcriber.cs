@@ -100,7 +100,7 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
         catch { /* best effort */ }
     }
 
-    // ---- a live streaming utterance ------------------------------------------------------------
+    // a live streaming utterance
 
     /// <summary>
     /// One in-flight utterance. Holds the persistent encoder caches (pre_cache + channel/time) and the
@@ -211,7 +211,7 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
         }
     }
 
-    // ---- encoder: one cache-aware chunk (updates the caches in place) --------------------------
+    // encoder: one cache-aware chunk (updates the caches in place)
 
     private (float[] enc, int encLen) RunEncoder(
         float[] audioSignal, int validFrames, float[] langMask,
@@ -250,7 +250,7 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
         return (enc, encLen);
     }
 
-    // ---- decoder: LSTM prediction network step -------------------------------------------------
+    // decoder: LSTM prediction network step
 
     private float[] RunDecoder(int token, float[] hIn, float[] cIn, out float[] hOut, out float[] cOut)
     {
@@ -272,7 +272,7 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
         return g;
     }
 
-    // ---- joint: logits for one (encoder frame, prediction vector) ------------------------------
+    // joint: logits for one (encoder frame, prediction vector)
 
     private float[] RunJoint(float[] encFrame, float[] g)
     {
@@ -289,7 +289,7 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
         return AsDense<float>(r, "logits").Buffer.ToArray();   // [1,1,13088]
     }
 
-    // ---- detok ---------------------------------------------------------------------------------
+    // detok
 
     private string Detokenize(IReadOnlyList<int> tokens)
     {
@@ -305,7 +305,6 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
         return Regex.Replace(sb.ToString(), " {2,}", " ").Trim();
     }
 
-    // ---- loading & helpers ---------------------------------------------------------------------
 
     private void EnsureLoaded()
     {

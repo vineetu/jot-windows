@@ -5,11 +5,10 @@ using System.Windows.Threading;
 namespace Jot.Controls;
 
 /// <summary>
-/// The pill's signature reactive waveform: a single horizontal line that stays flat/straight
-/// when silent and squiggles with live mic amplitude while speaking. It keeps a short history
-/// ring of levels and scrolls it right-to-left; a slowly advancing phase makes the wave "flow"
-/// so it reads as alive. Cheap to draw — one frozen <see cref="StreamGeometry"/> polyline at
-/// ~30 fps, and it only ticks while <see cref="Active"/>.
+/// The pill's reactive waveform: a horizontal line that stays flat when silent and squiggles with live
+/// mic amplitude while speaking. Keeps a short history ring and scrolls it right-to-left, with a slowly
+/// advancing phase so the wave flows. Cheap: one frozen <see cref="StreamGeometry"/> polyline at ~30 fps,
+/// and it only ticks while <see cref="Active"/>.
 /// </summary>
 public sealed class WaveformView : FrameworkElement
 {

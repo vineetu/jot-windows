@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Jot for Windows — PFB Gateway Test</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg:#ffffff; --fg:#1a1a1a; --muted:#616671; --border:#e4e6ea; --card:#f7f8fa;
+    --accent:#3b5bdb; --ok:#1a7f45; --warn:#8a6d2b; --code:#0f1115; --codefg:#e6e6e6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0f1013; --fg:#eceef2; --muted:#9aa0ab; --border:#26282e; --card:#17191d;
+           --accent:#8aa0ff; --ok:#5cd08a; --warn:#e4c877; --code:#0a0b0d; --codefg:#e6e6e6; }
+  }
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--bg); color:var(--fg);
+        font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+        -webkit-text-size-adjust:100%; }
+  .wrap{ max-width:720px; margin:0 auto; padding:22px 16px 72px; }
+  .tag{ display:inline-block; font-size:12px; font-weight:600; letter-spacing:.04em;
+        text-transform:uppercase; color:var(--warn); border:1px solid var(--border);
+        border-radius:999px; padding:3px 10px; margin-bottom:14px; }
+  h1{ font-size:24px; line-height:1.25; margin:.1em 0 .3em; }
+  .sub{ color:var(--muted); margin:0 0 22px; }
+  h2{ font-size:18px; margin:30px 0 6px; padding-top:18px; border-top:1px solid var(--border); }
+  h2 .n{ display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;
+         background:var(--accent); color:#fff; border-radius:50%; font-size:14px; margin-right:8px; vertical-align:2px;}
+  ol,ul{ padding-left:22px; } li{ margin:6px 0; }
+  code{ background:var(--card); padding:.1em .4em; border-radius:5px; font-size:.85em;
+        font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .card{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:12px 0; }
+  .codewrap{ position:relative; margin:12px 0; }
+  pre{ background:var(--code); color:var(--codefg); border-radius:12px; padding:14px 14px; margin:0;
+       overflow-x:auto; font-size:13px; line-height:1.5; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .copy{ position:absolute; top:8px; right:8px; background:rgba(255,255,255,.12); color:#fff;
+         border:none; border-radius:8px; padding:7px 12px; font-size:13px; font-weight:600; cursor:pointer; }
+  .copy:active{ transform:scale(.96); } .copy.done{ background:var(--ok); }
+  .ok{ color:var(--ok); font-weight:600; } .warn{ color:var(--warn); font-weight:600; }
+  table{ border-collapse:collapse; width:100%; margin:10px 0; font-size:14px; }
+  th,td{ border:1px solid var(--border); padding:8px 10px; text-align:left; vertical-align:top; }
+  th{ background:var(--card); }
+  .foot{ margin-top:38px; padding-top:14px; border-top:1px solid var(--border); color:var(--muted); font-size:12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag">Confidential · internal test</span>
+  <h1>Jot for Windows — PFB Gateway Test</h1>
+  <p class="sub">Run this on an <strong>in-network Sony Windows machine</strong> (on the VPN). Takes about 5 minutes.
+     Two ways: the app itself (recommended), or raw commands to isolate a problem.</p>
+
+  <div class="card">✅ <strong>Goal:</strong> confirm sign-in works and a Claude <em>and</em> a GPT model each
+     return a reply. If both do, the Windows build is verified end-to-end.</div>
+
+  <h2><span class="n">A</span> Test inside the Jot app <span style="font-weight:400;color:var(--muted)">(recommended)</span></h2>
+  <ol>
+    <li>Open <strong>Jot</strong> → <strong>Settings</strong> → <strong>AI</strong>.</li>
+    <li>Set <strong>Provider</strong> to <strong>PFB</strong>.</li>
+    <li>If you see <strong>“Install sign-in helper”</strong>, tap it once (or run the command in section B step 1).</li>
+    <li>Tap <strong>“Sign in to PFB”</strong> → complete the <strong>Okta login</strong> in the browser that opens.</li>
+    <li>You should see <span class="ok">Signed in as … · expires in ~24h</span>.</li>
+    <li>Pick a <strong>Model</strong>, then tap <strong>Test connection</strong> → expect
+        <span class="ok">“Connected to PFB successfully.”</span></li>
+    <li><strong>Real check:</strong> select some text in any app, trigger <strong>Rewrite</strong> (e.g. “Make shorter”),
+        and confirm it comes back transformed.</li>
+  </ol>
+  <div class="card">Try it once with a <strong>Claude</strong> model and once with a <strong>GPT-5.6</strong> model
+     (switch in the Model dropdown) — that exercises both request shapes.</div>
+
+  <h2><span class="n">B</span> Raw commands <span style="font-weight:400;color:var(--muted)">(only if the app fails — isolates auth/endpoint)</span></h2>
+  <p>Open <strong>PowerShell</strong> and run these in order.</p>
+
+  <p><strong>1. Install the sign-in helper</strong> (one time)</p>
+  <div class="codewrap"><button class="copy">Copy</button><pre>Invoke-WebRequest -Uri "https://download.ai.studios.playstation.com/ai-gateway-cli/binaries/gimme-ai-creds-windows-amd64.exe" -OutFile "$env:LOCALAPPDATA\gimme-ai-creds.exe"</pre></div>
+
+  <p><strong>2. Sign in &amp; capture the token</strong> (opens Okta in the browser)</p>
+  <div class="codewrap"><button class="copy">Copy</button><pre>$env:TOKEN = (&amp; "$env:LOCALAPPDATA\gimme-ai-creds.exe" --org pfb --quiet --no-clipboard).Trim()
+$env:TOKEN.Substring(0,6)</pre></div>
+  <p>That last line should print <code>eyJ...</code> — a clean JWT. If it’s blank or has extra text, the CLI’s
+     stdout isn’t clean (that’s the one Windows-specific thing to confirm).</p>
+
+  <p><strong>3. GPT-5.6 Luna</strong> — <code>reasoning_effort:"none"</code>, <em>no</em> temperature, <em>no</em> token limit</p>
+  <div class="codewrap"><button class="copy">Copy</button><pre>@'
+{"model":"gpt-5.6-luna","messages":[{"role":"user","content":"Say hello in 5 words."}],"reasoning_effort":"none"}
+'@ | Set-Content "$env:TEMP\pfb-gpt.json" -Encoding ascii
+curl.exe -s -X POST "https://ai-gateway.dspprod.bis.sie.sony.com/pfb/common/v1/chat/completions" -H "Authorization: Bearer $env:TOKEN" -H "Content-Type: application/json" -d "@$env:TEMP\pfb-gpt.json"</pre></div>
+
+  <p><strong>4. Claude Sonnet 5</strong> — <code>temperature</code>, <em>no</em> reasoning_effort, <em>no</em> token limit</p>
+  <div class="codewrap"><button class="copy">Copy</button><pre>@'
+{"model":"global.anthropic.claude-sonnet-5","messages":[{"role":"user","content":"Say hello in 5 words."}],"temperature":0.3}
+'@ | Set-Content "$env:TEMP\pfb-claude.json" -Encoding ascii
+curl.exe -s -X POST "https://ai-gateway.dspprod.bis.sie.sony.com/pfb/common/v1/chat/completions" -H "Authorization: Bearer $env:TOKEN" -H "Content-Type: application/json" -d "@$env:TEMP\pfb-claude.json"</pre></div>
+
+  <p>Both should return a JSON reply containing <code>choices[0].message.content</code> with a short greeting.</p>
+
+  <h2><span class="n">?</span> What the result means</h2>
+  <table>
+    <tr><th>You see</th><th>Meaning</th></tr>
+    <tr><td>A reply with text</td><td class="ok">Working — auth + endpoint + body all correct.</td></tr>
+    <tr><td><strong>400</strong></td><td>Wrong body for that model (a token field, or temperature on GPT). Shouldn’t happen with the commands above.</td></tr>
+    <tr><td><strong>401</strong></td><td>Token missing/expired — sign in again.</td></tr>
+    <tr><td><strong>403</strong></td><td>Your Okta account lacks gateway access — an entitlement/onboarding issue, not a bug.</td></tr>
+    <tr><td><strong>429</strong></td><td>Rate limited — wait and retry.</td></tr>
+    <tr><td><strong>502 / 504</strong></td><td>Upstream hiccup — transient, retry.</td></tr>
+    <tr><td>Step 2 prints blank / junk</td><td class="warn">The Windows CLI stdout isn’t clean — send me exactly what it printed.</td></tr>
+  </table>
+
+  <div class="foot">Jot for Windows · PFB AI Gateway smoke test · reachable only on the Sony network / VPN.</div>
+</div>
+
+<script>
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var text = btn.parentNode.querySelector('pre').innerText;
+      navigator.clipboard.writeText(text).then(function(){
+        var old = btn.textContent; btn.textContent = 'Copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1500);
+      });
+    });
+  });
+</script>
+</body>
+</html>

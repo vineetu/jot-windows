@@ -24,8 +24,8 @@ public partial class RecordingDetailPage : Page
         }
     }
 
-    // The overflow ("…") button previously only responded to right-click (its ContextMenu). Open the
-    // same menu on a normal left-click, anchored under the button, so it behaves like a real menu button.
+    // Open the overflow ("…") button's ContextMenu on left-click too, anchored under it, so it acts
+    // like a real menu button rather than right-click only.
     private void OnMoreClick(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe && fe.ContextMenu is System.Windows.Controls.ContextMenu menu)

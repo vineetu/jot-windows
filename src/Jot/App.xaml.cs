@@ -39,16 +39,11 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        // Velopack must run before anything else: it services the install / update / uninstall hooks the
-        // Setup.exe invokes. When the user removes Jot from "Add or remove programs", the uninstaller runs
-        // us with the uninstall hook and OnBeforeUninstallFastCallback wipes all Jot data. On a normal
-        // launch this returns immediately. (Registration in Add/Remove Programs comes from installing via
-        // the Velopack-built Setup.exe — see docs/plans/fixit-worklist.md B3/uninstall.)
-        //
-        // Skip entirely when running as an MSIX/Store-packaged app: a Store build is installed/updated/
-        // uninstalled by the Store's own mechanism, not Velopack's Setup.exe, so there is no Velopack
-        // install to service and OnBeforeUninstallFastCallback would never legitimately fire anyway. See
-        // docs/plans/store-submission.md.
+        // Velopack must run first: it services the install/update/uninstall hooks Setup.exe invokes —
+        // uninstall runs us with OnBeforeUninstallFastCallback, which wipes all Jot data. Normal launch
+        // returns immediately. Skip for MSIX/Store builds (the Store owns the install lifecycle, so there's
+        // no Velopack install to service and the uninstall hook would never legitimately fire). See
+        // docs/plans/store-submission.md and fixit-worklist.md B3.
         if (!IsRunningAsPackagedApp())
         {
             VelopackApp.Build()
@@ -57,6 +52,9 @@ public partial class App : System.Windows.Application
         }
 
         base.OnStartup(e);
+
+        // App-wide scrolling: one class handler so wheel-over-text works on every page (see PageScrolling).
+        Controls.PageScrolling.Install();
 
         DispatcherUnhandledException += (_, ex) => { LogCrash(ex.Exception); };
         AppDomain.CurrentDomain.UnhandledException += (_, ex) => LogCrash(ex.ExceptionObject as Exception);
@@ -69,8 +67,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--transcribe <wav> [--dml]` runs the real engine headless and writes the
-        // transcript to %TEMP%\jot-transcribe-result.txt. Used for automated end-to-end verification.
+        // `--transcribe <wav> [--dml]` runs the real engine headless → %TEMP%\jot-transcribe-result.txt.
         int transcribeArg = Array.IndexOf(e.Args, "--transcribe");
         if (transcribeArg >= 0 && transcribeArg + 1 < e.Args.Length)
         {
@@ -79,8 +76,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--installmodel <dir>` runs the first-run model download into <dir> headless
-        // and writes the outcome to %TEMP%\jot-install-result.txt.
+        // `--installmodel <dir>` runs the first-run model download into <dir> headless → %TEMP%\jot-install-result.txt.
         int installArg = Array.IndexOf(e.Args, "--installmodel");
         if (installArg >= 0 && installArg + 1 < e.Args.Length)
         {
@@ -89,9 +85,8 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--ffmpegtest <wav>` proves FfmpegInstaller's lazy download (no longer
-        // bundled — see Import/FfmpegInstaller.cs) actually fetches a working ffmpeg.exe and decodes a
-        // non-wav format end-to-end. Result → %TEMP%\jot-ffmpegtest.txt.
+        // `--ffmpegtest <wav>` proves FfmpegInstaller's lazy download fetches a working ffmpeg.exe and
+        // decodes a non-wav format end-to-end → %TEMP%\jot-ffmpegtest.txt.
         int ffmpegTestArg = Array.IndexOf(e.Args, "--ffmpegtest");
         if (ffmpegTestArg >= 0 && ffmpegTestArg + 1 < e.Args.Length)
         {
@@ -100,9 +95,8 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--pasteselftest` exercises the REAL paste path (paste into whatever's
-        // foreground, as in a live dictation) against a freshly-launched Notepad, then verifies via a
-        // clipboard round-trip (select-all + copy). Result → %TEMP%\jot-pasteselftest.txt.
+        // `--pasteselftest` exercises the real paste path against a freshly-launched Notepad, verified
+        // via a clipboard round-trip → %TEMP%\jot-pasteselftest.txt.
         if (e.Args.Contains("--pasteselftest"))
         {
             RunPasteSelfTest();
@@ -110,7 +104,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--librarytest` proves the recordings library persists across restarts.
+        // `--librarytest` proves the recordings library persists across restarts.
         if (e.Args.Contains("--librarytest"))
         {
             RunLibraryTest();
@@ -118,7 +112,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--nemotest <wav> [--dml]` runs the REAL Nemotron engine on CPU or DirectML.
+        // `--nemotest <wav> [--dml]` runs the real Nemotron engine on CPU or DirectML.
         int nemoArg = Array.IndexOf(e.Args, "--nemotest");
         if (nemoArg >= 0 && nemoArg + 1 < e.Args.Length)
         {
@@ -127,8 +121,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--fp16test <wav> [--dml]` runs the REAL Nemotron FP16 (GPU) engine on
-        // DirectML (or CPU) and writes the transcript + timing to %TEMP%\jot-fp16test.txt.
+        // `--fp16test <wav> [--dml]` runs the real Nemotron FP16 engine on DirectML (or CPU) → %TEMP%\jot-fp16test.txt.
         int fp16Arg = Array.IndexOf(e.Args, "--fp16test");
         if (fp16Arg >= 0 && fp16Arg + 1 < e.Args.Length)
         {
@@ -137,8 +130,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--hotkeytest` reports whether a bare Escape (and Alt+Space) can be
-        // registered as a global hotkey on this machine → %TEMP%\jot-hotkeytest.txt.
+        // `--hotkeytest` reports whether each chord can register as a global hotkey → %TEMP%\jot-hotkeytest.txt.
         if (e.Args.Contains("--hotkeytest"))
         {
             string outHk = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-hotkeytest.txt");
@@ -165,28 +157,17 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--hotkeyboxtest` focuses a real HotkeyBox and sends a synthetic Ctrl+J to
-        // prove the click-to-capture → chord path works (worklist A5). Result → %TEMP%\jot-hotkeyboxtest.txt.
+        // `--hotkeyboxtest` proves the HotkeyBox click-to-capture → chord path works (worklist A5)
+        // → %TEMP%\jot-hotkeyboxtest.txt.
         if (e.Args.Contains("--hotkeyboxtest"))
         {
             RunHotkeyBoxTest();
             return;
         }
 
-        // Dev affordance: `--cleanuptest` runs the REAL AiClient.CleanupAsync (including the
-        // faithfulness guard) against local Ollama (gemma4:e4b) on a filler-laden sample transcript.
-        // Result → %TEMP%\jot-cleanuptest.txt. Verifies worklist "AI cleanup — UNVERIFIED".
-        if (e.Args.Contains("--cleanuptest"))
-        {
-            RunCleanupTest();
-            Shutdown();
-            return;
-        }
-
-        // Dev affordance: `--specialkeytest` checks whether NumLock/CapsLock/the Menu(Apps) key/F13/F1
-        // can be registered as bare global hotkeys via RegisterHotKey, and — the interesting question
-        // for toggle keys — whether the OS's own NumLock/CapsLock LED-toggle still happens alongside
-        // the WM_HOTKEY notification. Result → %TEMP%\jot-specialkeytest.txt.
+        // `--specialkeytest` checks whether special keys (NumLock/CapsLock/Apps/F13/F1) can register as
+        // bare hotkeys, and whether the OS's NumLock/CapsLock LED-toggle still fires alongside WM_HOTKEY
+        // → %TEMP%\jot-specialkeytest.txt.
         if (e.Args.Contains("--specialkeytest"))
         {
             RunSpecialKeyTest();
@@ -194,30 +175,26 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--passivehooktest` proves a WH_KEYBOARD_LL hook can detect a keypress
-        // (F1, NumLock) WITHOUT consuming it — unlike RegisterHotKey, the key still reaches a real
-        // focused window and NumLock's LED still toggles normally, while our hook also observes it.
-        // Result → %TEMP%\jot-passivehooktest.txt.
+        // `--passivehooktest` proves a WH_KEYBOARD_LL hook detects a keypress (F1/NumLock) WITHOUT
+        // consuming it — the key still reaches the focused window and NumLock's LED toggles normally
+        // → %TEMP%\jot-passivehooktest.txt.
         if (e.Args.Contains("--passivehooktest"))
         {
             RunPassiveHookTest();
             return;
         }
 
-        // Dev affordance: `--suppresshooktest` proves the SUPPRESSING hook (Recording.LowLevelHotkeys)
-        // consumes a bound bare special key (Apps) so its native context menu can't fire, then releases
-        // it when unbound. The fix for "Toggle bound to the Apps key opened right-click menus
-        // everywhere." Result → %TEMP%\jot-suppresshooktest.txt.
+        // `--suppresshooktest` proves the suppressing hook (Recording.LowLevelHotkeys) consumes a bound
+        // bare special key (Apps) so its context menu can't fire, then releases it when unbound. Fix for
+        // "Toggle bound to the Apps key opened right-click menus everywhere." → %TEMP%\jot-suppresshooktest.txt.
         if (e.Args.Contains("--suppresshooktest"))
         {
             RunSuppressHookTest();
             return;
         }
 
-        // Dev affordance: `--notepadselftest` drives REAL notepad.exe (a genuinely separate process —
-        // not a self-owned window) to find out why Alt+/ reports "no text selected" in real use even
-        // though --rewriteselftest passes against an in-process target. Result →
-        // %TEMP%\jot-notepadselftest.txt.
+        // `--notepadselftest` drives real notepad.exe (a separate process) to find out why Alt+/ reports
+        // "no text selected" in real use though --rewriteselftest passes in-process → %TEMP%\jot-notepadselftest.txt.
         if (e.Args.Contains("--notepadselftest"))
         {
             RunNotepadSelfTest();
@@ -225,11 +202,8 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--uiacapturetest` verifies the NEW production selection path
-        // (UiaSelectionReader.TryReadSelection — UI Automation, no keystroke, no clipboard) against
-        // REAL notepad.exe: select text, then read it exactly as the Rewrite hotkey now does. This is
-        // the "verify before claiming" check for the UIA-first rewrite fix. Result →
-        // %TEMP%\jot-uiacapturetest.txt.
+        // `--uiacapturetest` verifies the production selection path (UiaSelectionReader.TryReadSelection
+        // — UI Automation, no keystroke/clipboard) against real notepad.exe → %TEMP%\jot-uiacapturetest.txt.
         if (e.Args.Contains("--uiacapturetest"))
         {
             RunUiaCaptureTest();
@@ -237,28 +211,38 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--rewriteselftest` exercises the REAL RewriteController pipeline
-        // (synthetic-Ctrl+C selection capture → AiClient.RewriteAsync → paste-back) against a
-        // self-owned textbox, the same pattern --pasteselftest uses for paste alone. Uses local
-        // Ollama (gemma4:e4b) so no API key is required. Result → %TEMP%\jot-rewriteselftest.txt.
+        // `--rewriteselftest` exercises the real RewriteController pipeline (Ctrl+C selection capture →
+        // AiClient.RewriteAsync → paste-back) against a self-owned textbox, via local Ollama
+        // → %TEMP%\jot-rewriteselftest.txt.
         if (e.Args.Contains("--rewriteselftest"))
         {
             RunRewriteSelfTest();
             return;
         }
 
-        // Dev affordance: `--pillscrolltest` verifies the live-caption pill's transcript scroll is
-        // "sticky" — new streamed text should only auto-follow to the bottom when the user was already
-        // there; if they've scrolled up to read something, further text must NOT yank them back down.
-        // Result → %TEMP%\jot-pillscrolltest.txt.
+#if SONY
+        // `--pfbselftest` verifies the two offline-checkable pieces of the PFB integration — per-model
+        // request-body quirks (§5 of the integration guide) and JWT exp/sub parsing — without the Sony
+        // gateway. Sony flavor only. → %TEMP%\jot-pfbselftest.txt.
+        if (e.Args.Contains("--pfbselftest"))
+        {
+            RunPfbSelfTest();
+            Shutdown();
+            return;
+        }
+#endif
+
+        // `--pillscrolltest` verifies the pill's transcript scroll is "sticky" — new text auto-follows to
+        // the bottom only if the user was already there, never yanking them down from a scrolled-up read
+        // → %TEMP%\jot-pillscrolltest.txt.
         if (e.Args.Contains("--pillscrolltest"))
         {
             RunPillScrollTest();
             return;
         }
 
-        // Dev affordance: `--dmldiag` tries to build the Nemotron encoder on DirectML with VERBOSE
-        // logging (ORT prints node placement to stderr) to find the operator DirectML rejects.
+        // `--dmldiag` builds the Nemotron encoder on DirectML with verbose ORT logging to find the
+        // operator DirectML rejects.
         if (e.Args.Contains("--dmldiag"))
         {
             RunDmlDiag();
@@ -266,8 +250,8 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // Dev affordance: `--streamtest <wav> [--dml]` feeds a wav through the LIVE streaming path
-        // (OpenStream + incremental Accept + Finish) — the exact path live dictation uses.
+        // `--streamtest <wav> [--dml]` feeds a wav through the live streaming path (OpenStream +
+        // incremental Accept + Finish) — the exact path live dictation uses.
         int streamArg = Array.IndexOf(e.Args, "--streamtest");
         if (streamArg >= 0 && streamArg + 1 < e.Args.Length)
         {
@@ -306,31 +290,31 @@ public partial class App : System.Windows.Application
         SetupHotkeys();
 
         Notify("Jot is running",
-            "Press Alt+Space to start and stop dictation. Double-click the tray icon to open Jot.",
+            $"Press {ToggleHotkeyLabel()} to start and stop dictation. Double-click the tray icon to open Jot.",
             Forms.ToolTipIcon.Info);
 
-        // Dev affordance: `--show` surfaces the main window immediately (Jot normally boots to tray).
+        // `--show` surfaces the main window immediately (Jot normally boots to tray).
         if (e.Args.Contains("--show") || e.Args.Contains("--detail") || e.Args.Contains("--settings")
             || e.Args.Contains("--shortcuts") || e.Args.Contains("--about"))
             ShowMainWindow();
         if (e.Args.Contains("--settings"))
             Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.SettingsPage)),
                 System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-        // Dev affordance: `--shortcuts` opens the window on the new Shortcuts page for a visual check.
+        // `--shortcuts` opens the window on the Shortcuts page.
         if (e.Args.Contains("--shortcuts"))
             Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.ShortcutsPage)),
                 System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-        // Dev affordance: `--about` opens the window on the About page.
+        // `--about` opens the window on the About page.
         if (e.Args.Contains("--about"))
             Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.AboutPage)),
                 System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-        // Dev affordance: `--pilldemo` drives the pill with a speech-like envelope (no mic needed).
+        // `--pilldemo` drives the pill with a speech-like envelope (no mic needed).
         if (e.Args.Contains("--pilldemo")) RunPillDemo();
-        // Dev affordance: `--pickerdemo` shows the rewrite prompt-picker overlay (stays open for review).
+        // `--pickerdemo` shows the rewrite prompt-picker overlay (stays open for review).
         if (e.Args.Contains("--pickerdemo")) RunPickerDemo();
-        // Dev affordance: `--donatedemo` shows the donate popup (fetches the live donations summary).
+        // `--donatedemo` shows the donate popup (fetches the live donations summary).
         if (e.Args.Contains("--donatedemo")) { new Controls.DonationsWindow().Show(); }
-        // Dev affordance: `--feedbackdemo` shows the feedback composer (does not auto-send).
+        // `--feedbackdemo` shows the feedback composer (does not auto-send).
         if (e.Args.Contains("--feedbackdemo")) { new Controls.FeedbackWindow().Show(); }
         // First-run setup wizard: on a normal (no-arg) launch, or forced with `--wizard`.
         bool firstRun = !Services.GetRequiredService<ISettingsStore>().Current.FirstRunComplete;
@@ -338,9 +322,9 @@ public partial class App : System.Windows.Application
         // A normal / launch-at-login start (no args, already set up) opens the window instead of
         // booting silently to the tray — otherwise users think auto-start didn't work.
         else if (e.Args.Length == 0) ShowMainWindow();
-        // Dev affordance: `--smoketest` constructs every page in turn so XAML-load errors hit crash.log.
+        // `--smoketest` constructs every page in turn so XAML-load errors hit crash.log.
         if (e.Args.Contains("--smoketest")) RunSmokeTest();
-        // Dev affordance: `--detail` opens the first recording's detail view.
+        // `--detail` opens the first recording's detail view.
         if (e.Args.Contains("--detail"))
         {
             var store = Services.GetRequiredService<IRecordingStore>();
@@ -352,12 +336,10 @@ public partial class App : System.Windows.Application
         }
     }
 
-    // Win32 APPMODEL_ERROR_NO_PACKAGE (15700): returned by GetCurrentPackageFullName when the
-    // current process has NO package identity — i.e. a normal unpackaged/Velopack-installed run.
-    // Any other return value (typically ERROR_INSUFFICIENT_BUFFER, 122, since we pass a zero-length
-    // buffer) means the process DOES have package identity — i.e. it's running as an MSIX/Store
-    // package. Deliberately raw P/Invoke (no NuGet/WinRT dependency) to match this file's existing
-    // Win32 interop style. See docs/plans/store-submission.md.
+    // Win32 APPMODEL_ERROR_NO_PACKAGE (15700): GetCurrentPackageFullName returns this when the process
+    // has NO package identity (normal unpackaged/Velopack run). Any other value (typically
+    // ERROR_INSUFFICIENT_BUFFER 122, since we pass a zero-length buffer) means it DOES — i.e. an
+    // MSIX/Store package. Raw P/Invoke to avoid a WinRT dependency. See docs/plans/store-submission.md.
     private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
 
     [System.Runtime.InteropServices.DllImport("kernel32.dll")]
@@ -370,8 +352,8 @@ public partial class App : System.Windows.Application
         return result != APPMODEL_ERROR_NO_PACKAGE;
     }
 
-    // Runs the dispatcher for a spell so queued input (e.g. a synthetic WM_PASTE) is actually
-    // processed — a plain Thread.Sleep would block the message pump and the paste would never land.
+    // Pumps the dispatcher so queued input (e.g. a synthetic WM_PASTE) is processed — a plain
+    // Thread.Sleep would block the message pump and the paste would never land.
     private static void Pump(int ms)
     {
         var frame = new System.Windows.Threading.DispatcherFrame();
@@ -457,10 +439,8 @@ public partial class App : System.Windows.Application
         }
     }
 
-    // ---- WH_KEYBOARD_LL: a passive, non-consuming global keyboard hook — the alternative to
-    // RegisterHotKey's exclusive grab. Used today only by --passivehooktest; see fixit-worklist D12
-    // for the "listen, don't interrupt" design being evaluated for NumLock/CapsLock/ScrollLock/
-    // F-keys/Apps as toggle-recording hotkeys.
+    // WH_KEYBOARD_LL: passive, non-consuming global keyboard hook — the alternative to RegisterHotKey's
+    // exclusive grab. Used only by --passivehooktest; see fixit-worklist D12.
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
@@ -507,7 +487,7 @@ public partial class App : System.Windows.Application
                     if (info.vkCode == 0x70) hookSawF1++;      // VK_F1
                     if (info.vkCode == 0x90) hookSawNumLock++; // VK_NUMLOCK
                 }
-                // ALWAYS pass through — never swallow. This is the entire point of the test.
+                // ALWAYS pass through — never swallow.
                 return CallNextHookEx(hookHandle, nCode, wParam, lParam);
             };
 
@@ -524,13 +504,13 @@ public partial class App : System.Windows.Application
             target.CountKeyDown(System.Windows.Input.Key.F1, () => targetSawF1++);
             Pump(200);
 
-            // --- F1: does it still reach the focused target window while our hook merely observes? ---
+            // F1: does it still reach the focused target window while our hook merely observes?
             Delivery.TextInjector.SendVirtualKeyPress(0x70); // F1
             Pump(300);
             log.AppendLine($"F1: hookSaw={hookSawF1 > 0}  targetWindowAlsoSawIt={targetSawF1 > 0}  " +
                 "(both true = passive listen worked — we detected it AND normal delivery wasn't blocked)");
 
-            // --- NumLock: does the LED still toggle normally while we merely observe (no fighting it)? ---
+            // NumLock: does the LED still toggle normally while we merely observe?
             bool numLockBefore = (GetKeyState(0x90) & 1) != 0;
             Delivery.TextInjector.SendVirtualKeyPress(0x90); // NumLock
             Pump(300);
@@ -553,24 +533,15 @@ public partial class App : System.Windows.Application
         Shutdown();
     }
 
-    /// <summary>
-    /// Verifies the SUPPRESSING hotkey hook (<see cref="Recording.LowLevelHotkeys"/>) used for bare
-    /// special keys like Apps/"menu". Proves that when the Apps key is bound: (1) the bound action fires,
-    /// and (2) the key is CONSUMED — a focused target window on its own thread never sees it, so its
-    /// native behaviour (the right-click context menu) can't fire. Then unbinds and confirms the key
-    /// flows normally again. This is the fix for "binding Toggle to the Apps key popped context menus
-    /// everywhere." → %TEMP%\jot-suppresshooktest.txt.
-    /// </summary>
+    /// <summary>Verifies the suppressing hotkey hook (<see cref="Recording.LowLevelHotkeys"/>) consumes a
+    /// bound bare special key (Apps) so its context menu can't fire, then releases it when unbound.</summary>
     private void RunSuppressHookTest()
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-suppresshooktest.txt");
         var log = new System.Text.StringBuilder();
-        // Tested with F1, not Apps: F1 goes through the IDENTICAL suppression path (both are in
-        // IsSuppressableBareKey → _actions map → the hook returns 1), and the passive-hook test already
-        // proved a focused target reliably RECEIVES F1 when not suppressed — whereas the Apps key
-        // interferes with WPF's PreviewKeyDown counter, making it a useless "target saw it" signal. So
-        // F1 gives a conclusive baseline→suppressed→restored sequence that proves the mechanism the Apps
-        // key relies on. A separate [apps] line confirms the Apps action fires + is hook-suppressed too.
+        // Tested with F1, not Apps: both take the IDENTICAL suppression path (IsSuppressableBareKey →
+        // _actions map → hook returns 1), but the Apps key interferes with WPF's PreviewKeyDown counter,
+        // making "target saw it" useless — F1 gives a conclusive baseline→suppressed→restored sequence.
         const uint VK_F1 = 0x70, VK_APPS = 0x5D;
         RewriteTestTarget? target = null;
         Recording.LowLevelHotkeys? hook = null;
@@ -588,10 +559,9 @@ public partial class App : System.Windows.Application
 
             hook = new Recording.LowLevelHotkeys(Dispatcher);
 
-            // Warm-up loop: the target window (created on its own thread) drops the first few synthetic
-            // keystrokes while keyboard focus settles (observed: it took ~3 presses before delivery stuck).
-            // Retry F1 until the target actually receives one, so the measured baseline below is reliable
-            // rather than racing focus. Bounded so a genuine "never delivered" still surfaces as a fail.
+            // The target window (own thread) drops the first few synthetic keystrokes while focus settles
+            // (~3 presses observed). Retry F1 until one lands so the baseline isn't racing focus; bounded
+            // so a genuine "never delivered" still fails.
             for (int i = 0; i < 8 && targetSawF1 == 0; i++)
             {
                 Delivery.TextInjector.FocusWindow(target.Hwnd);
@@ -601,14 +571,14 @@ public partial class App : System.Windows.Application
             log.AppendLine($"[warmup] presses until first delivery, targetSawF1={targetSawF1} (warm={targetSawF1 > 0})");
             targetSawF1 = 0; // discard the warm-up
 
-            // --- Baseline: NO hook. The focused target must see F1 (proves the detector works). ---
+            // Baseline (no hook): the focused target must see F1.
             int sawBaseline = targetSawF1;
             Delivery.TextInjector.SendVirtualKeyPress((ushort)VK_F1);
             Pump(400);
             bool baselineFlows = targetSawF1 > sawBaseline;
             log.AppendLine($"[baseline no-hook] targetSawF1={targetSawF1 - sawBaseline} (delivered={baselineFlows})");
 
-            // --- Bound: F1 should fire our action AND be swallowed (target sees nothing new). ---
+            // Bound: F1 fires our action AND is swallowed (target sees nothing new).
             hook.SetBindings([(VK_F1, () => Interlocked.Increment(ref hookFiredF1))]);
             Delivery.TextInjector.FocusWindow(target.Hwnd);
             Pump(150);
@@ -620,7 +590,7 @@ public partial class App : System.Windows.Application
             log.AppendLine($"[bound F1] hookFired={hookFiredF1} (actionFired={actionFired})  " +
                 $"targetSawF1={targetSawF1 - sawBeforeBound} (suppressed={targetBlocked})");
 
-            // --- Unbound: the hook releases F1; normal delivery must resume (target sees it again). ---
+            // Unbound: the hook releases F1; normal delivery must resume.
             hook.SetBindings([]);
             Delivery.TextInjector.FocusWindow(target.Hwnd);
             Pump(150);
@@ -630,7 +600,7 @@ public partial class App : System.Windows.Application
             bool flowsWhenUnbound = targetSawF1 > sawBeforeUnbound;
             log.AppendLine($"[unbound F1] targetSawF1={targetSawF1 - sawBeforeUnbound} (normalDeliveryRestored={flowsWhenUnbound})");
 
-            // --- Apps (the user's actual key): confirm the bound action fires + the hook consumes it. ---
+            // Apps (the user's actual key): the bound action fires + the hook consumes it.
             hook.SetBindings([(VK_APPS, () => Interlocked.Increment(ref hookFiredApps))]);
             Delivery.TextInjector.FocusWindow(target.Hwnd);
             Pump(150);
@@ -654,17 +624,10 @@ public partial class App : System.Windows.Application
         Shutdown();
     }
 
-    /// <summary>
-    /// Drives REAL notepad.exe (Windows 11 default: the packaged/MSIX Notepad, a genuinely separate
-    /// process with its own thread and message pump — not an in-process stand-in) to find out why
-    /// Alt+/ reports "no text selected" in actual use. Types a marker string, selects it, then runs
-    /// the exact production <see cref="Delivery.TextInjector.CaptureSelection"/> the Rewrite hotkey
-    /// calls, first with the real 600ms budget (to reproduce the bug) and then, if that comes back
-    /// empty, with a much longer budget and a raw isolated Ctrl+C check — to tell a real timing
-    /// problem apart from Notepad simply never responding to synthetic Ctrl+C at all.
-    /// </summary>
-    /// <summary>Full document text via UI Automation TextPattern — a checkpoint that doesn't touch
-    /// the clipboard at all, so it can pin down exactly when/whether text gets corrupted.</summary>
+    /// <summary>Drives real notepad.exe to diagnose why Alt+/ reports "no text selected" in actual use
+    /// — runs production <see cref="Delivery.TextInjector.CaptureSelection"/> at varying budgets.</summary>
+    /// <summary>Full document text via UI Automation TextPattern — doesn't touch the clipboard, so it
+    /// pins down when/whether text gets corrupted.</summary>
     private static string ReadUiaDocumentText(IntPtr hwnd)
     {
         try
@@ -785,32 +748,25 @@ public partial class App : System.Windows.Application
         var log = new System.Text.StringBuilder();
         const string marker = "JOT_NOTEPAD_SELFTEST_MARKER_8834 the cert thing is due friday";
         System.Diagnostics.Process? proc = null;
-        // Open a PRE-WRITTEN file instead of synthetically typing into Notepad — an earlier version of
-        // this test typed the marker via SendUnicodeText and modern (packaged) Notepad corrupted the
-        // back half into repeated "y"s (autocorrect/predictive-text or a dropped key-up, unclear which
-        // — not investigated further since it's a red herring for what we're actually testing: the
-        // CAPTURE side, not typing). A file sidesteps typing entirely.
+        // Open a PRE-WRITTEN file instead of typing into Notepad — packaged Notepad corrupted synthetic
+        // typing (repeated "y"s), a red herring for what we're testing (the CAPTURE side). A file avoids it.
         string tmpFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"jot-notepadselftest-{Guid.NewGuid():N}.txt");
         System.IO.File.WriteAllText(tmpFile, marker);
         try
         {
             SystemParametersInfo(0x2001, 0, IntPtr.Zero, 0); // defeat the foreground lock (headless self-test only)
 
-            // Windows 11's Notepad is SINGLE-INSTANCE and TABBED: a prior run's leftover tab confused
-            // both the UIA document lookup (FindFirst grabbed a stale background tab, not the active
-            // one) and possibly keyboard focus. Force a genuinely clean slate — exactly one tab — before
-            // launching, or none of this test's readings can be trusted.
+            // Win11 Notepad is single-instance and tabbed: a leftover tab confuses the UIA document
+            // lookup (stale background tab) and focus. Kill all instances for a clean single-tab slate.
             foreach (var stale in System.Diagnostics.Process.GetProcessesByName("Notepad"))
             { try { stale.Kill(); } catch { } }
             Pump(500);
 
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe", $"\"{tmpFile}\"")
             { UseShellExecute = true });
-            // The launched "notepad.exe" is a stub for Windows 11's packaged/MSIX Notepad: it hands off
-            // to a SEPARATE process (also named "Notepad", different PID) that actually owns the
-            // window — the stub's own Process/MainWindowHandle is never populated. Confirmed via
-            // PowerShell before writing this: `Start-Process notepad.exe` produced two "Notepad"
-            // processes, only one with a non-zero MainWindowHandle. Poll by name instead.
+            // The launched "notepad.exe" is a stub for Win11's packaged Notepad: it hands off to a
+            // SEPARATE process (same name, different PID) that owns the window — the stub's own
+            // MainWindowHandle is never populated. Poll by name for the one with a real window.
             IntPtr hwnd = IntPtr.Zero;
             var launchTimer = System.Diagnostics.Stopwatch.StartNew();
             while (launchTimer.ElapsedMilliseconds < 8000)
@@ -831,12 +787,9 @@ public partial class App : System.Windows.Application
             Delivery.TextInjector.FocusWindow(hwnd);
             log.AppendLine($"foregroundAfterFocus={GetForegroundWindow()} (match={GetForegroundWindow() == hwnd})");
 
-            // Notepad persists tabs/session to disk and restores them across launches regardless of
-            // process kill (confirmed: %LOCALAPPDATA%\Packages\...WindowsNotepad...\LocalState\TabState
-            // has one entry per prior test run) — deliberately NOT wiped, since that's the user's real
-            // Notepad history, not test junk. A restored old tab can end up active instead of the one
-            // we just opened, which is what made earlier runs read stale/wrong-tab content. Explicitly
-            // select OUR tab by filename instead of assuming it's already active.
+            // Notepad restores its saved tabs across launches (not wiped — it's the user's real history).
+            // A restored old tab can end up active instead of ours, giving stale reads. Select OUR tab by
+            // filename instead of assuming it's active.
             bool tabSelected = false;
             var tabWait = System.Diagnostics.Stopwatch.StartNew();
             while (tabWait.ElapsedMilliseconds < 5000)
@@ -848,15 +801,14 @@ public partial class App : System.Windows.Application
             log.AppendLine($"tabExplicitlySelected={tabSelected} (waited {tabWait.ElapsedMilliseconds}ms)");
             Pump(300);
 
-            // Selecting the tab (above) brings it to front but does NOT give the actual text-edit
-            // surface keyboard focus — without this, Ctrl+A/Ctrl+C go nowhere. Explicitly focus the
-            // document element itself.
+            // Selecting the tab brings it to front but doesn't give the text surface keyboard focus —
+            // without this, Ctrl+A/Ctrl+C go nowhere. Focus the document element itself.
             bool docFocused = FocusUiaDocument(hwnd);
             log.AppendLine($"documentElementFocused={docFocused}");
             Pump(200);
 
-            // Read the document BEFORE sending any synthetic key at all — pins down whether corruption
-            // (seen in earlier runs) happens on file-open or only after we start sending input.
+            // Read the document before any synthetic key — pins down whether corruption happens on
+            // file-open or only after input.
             log.AppendLine($"[pre] UIA text before any synthetic key=[{ReadUiaDocumentText(hwnd)}]");
             log.AppendLine("[pre] UIA tree dump:");
             log.AppendLine(DumpUiaTree(hwnd));
@@ -866,7 +818,7 @@ public partial class App : System.Windows.Application
             log.AppendLine($"[post-selectall] UIA text after Ctrl+A=[{ReadUiaDocumentText(hwnd)}]");
             log.AppendLine($"foregroundAfterSelect={GetForegroundWindow()} (match={GetForegroundWindow() == hwnd})");
 
-            // --- Step A: reproduce the exact production bug (real 600ms budget, real code path) ---
+            // Step A: reproduce the production bug (real 600ms budget, real code path).
             var swA = System.Diagnostics.Stopwatch.StartNew();
             string capturedA = Delivery.TextInjector.CaptureSelection(pollBudgetMs: 600);
             swA.Stop();
@@ -875,7 +827,7 @@ public partial class App : System.Windows.Application
                 $"gotLength={capturedA.Length} correct={aCorrect} text=[{capturedA}]");
             log.AppendLine($"[post-A] UIA document text=[{ReadUiaDocumentText(hwnd)}]");
 
-            // --- Step B: same call, MUCH longer budget — isolates "too slow" vs "never happens" ---
+            // Step B: same call, much longer budget — isolates "too slow" vs "never happens".
             Delivery.TextInjector.FocusWindow(hwnd);
             Pump(200);
             Delivery.TextInjector.SendKeyChord(0x1D, Delivery.TextInjector.SCAN_A); // re-select (capture consumed/cleared clipboard)
@@ -889,8 +841,8 @@ public partial class App : System.Windows.Application
                 $"gotLength={capturedB.Length} correct={bCorrect} text=[{capturedB}]");
             log.AppendLine($"[post-B] UIA document text=[{ReadUiaDocumentText(hwnd)}]");
 
-            // --- Step C: bypass Jot's clear/modifier-release dance entirely — bare Ctrl+C, generous wait,
-            // read the clipboard directly. Isolates whether synthetic Ctrl+C reaches Notepad AT ALL. ---
+            // Step C: bare Ctrl+C, generous wait, read clipboard directly — isolates whether synthetic
+            // Ctrl+C reaches Notepad at all.
             Delivery.TextInjector.FocusWindow(hwnd);
             Pump(200);
             Delivery.TextInjector.SendKeyChord(0x1D, Delivery.TextInjector.SCAN_A);
@@ -909,10 +861,8 @@ public partial class App : System.Windows.Application
             log.AppendLine($"[post-C] UIA document text=[{ReadUiaDocumentText(hwnd)}]");
             log.AppendLine($"foregroundAtEnd={GetForegroundWindow()} (match={GetForegroundWindow() == hwnd})");
 
-            // --- Step D: bypass the clipboard/Ctrl+C mechanism ENTIRELY — inspect the real selection
-            // state via UI Automation's TextPattern. Answers: can UIA read the selected text directly,
-            // sidestepping clipboard/copy reliability altogether (the "proper fix" the worklist already
-            // flagged as the alternative to synthetic Ctrl+C)? ---
+            // Step D: bypass clipboard/Ctrl+C entirely — read the selection via UIA TextPattern (the
+            // worklist's flagged alternative to synthetic Ctrl+C).
             try
             {
                 var (textPattern, selText) = ReadUiaSelection(hwnd);
@@ -924,13 +874,9 @@ public partial class App : System.Windows.Application
                 log.AppendLine($"[D] UIA threw: {ex}");
             }
 
-            // --- Step E: simulate the REAL trigger condition none of A/B/C/D actually tested — Alt
-            // genuinely, physically still held down (synthetic key-DOWN with no matching key-up yet)
-            // at the moment capture runs, exactly like a real Alt+/ press. Every step so far invoked
-            // CaptureSelection cold, via a command-line flag, with no key ever actually pressed — not
-            // a faithful reproduction of the real hotkey trigger. SAFETY: the Alt-down is always
-            // released in this same block, synchronously, before doing anything else, so a crash here
-            // can't leave the machine's Alt key stuck down. ---
+            // Step E: the real trigger condition A/B/C/D missed — Alt physically held down (key-down, no
+            // key-up) at capture time, like a real Alt+/ press. SAFETY: the Alt-down is always released
+            // synchronously in this block so a crash can't leave Alt stuck down.
             Delivery.TextInjector.FocusWindow(hwnd);
             Pump(200);
             Delivery.TextInjector.SendKeyChord(0x1D, Delivery.TextInjector.SCAN_A);
@@ -954,10 +900,9 @@ public partial class App : System.Windows.Application
                 $"gracefully report empty, not hang or crash): ms={msE} gotLength={capturedE.Length} " +
                 $"correct={eCorrect} text=[{capturedE}]");
 
-            // --- Step F: the REALISTIC case — Alt held at the moment capture starts (like a real
-            // fast Alt+/ tap), then released ~100ms later by a background thread WHILE CaptureSelection
-            // is running, simulating the user's natural key release. The fix should detect that release
-            // and succeed instead of racing a fixed 40ms sleep against it. ---
+            // Step F: the realistic case — Alt held as capture starts (fast Alt+/ tap), released ~100ms
+            // in by a background thread while CaptureSelection runs. The fix should detect the release
+            // instead of racing a fixed 40ms sleep.
             Delivery.TextInjector.FocusWindow(hwnd);
             Pump(200);
             Delivery.TextInjector.SendKeyChord(0x1D, Delivery.TextInjector.SCAN_A);
@@ -993,21 +938,16 @@ public partial class App : System.Windows.Application
         }
         finally
         {
-            // Kill every "Notepad" process this test may have spawned (the stub + the real window
-            // owner), not just the one we ended up tracking — avoid leaving test junk running.
+            // Kill every "Notepad" process this test spawned (stub + real window owner), not just the
+            // tracked one.
             try { foreach (var p in System.Diagnostics.Process.GetProcessesByName("Notepad")) { try { p.Kill(); } catch { } } }
             catch { /* best effort — avoid a save-changes prompt hanging around */ }
             try { System.IO.File.Delete(tmpFile); } catch { /* best effort */ }
         }
     }
 
-    /// <summary>
-    /// Verifies the NEW UIA-first selection capture against REAL notepad.exe by driving the exact
-    /// production method <see cref="Delivery.UiaSelectionReader.TryReadSelection"/> — no synthetic
-    /// Ctrl+C, no clipboard, no modifier games. Reuses the Notepad launch/focus scaffolding proven out
-    /// by <see cref="RunNotepadSelfTest"/>. Also confirms it still works with Alt physically held (the
-    /// old failure mode) — UIA sends no keys, so a held Alt is irrelevant. → %TEMP%\jot-uiacapturetest.txt.
-    /// </summary>
+    /// <summary>Verifies UIA-first selection capture (<see cref="Delivery.UiaSelectionReader.TryReadSelection"/>)
+    /// against real notepad.exe, including with Alt physically held (UIA sends no keys).</summary>
     private void RunUiaCaptureTest()
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-uiacapturetest.txt");
@@ -1053,7 +993,7 @@ public partial class App : System.Windows.Application
             Pump(300);
             log.AppendLine($"docTextAfterSelectAll=[{ReadUiaDocumentText(hwnd)}]");
 
-            // --- The real production read: UI Automation, on its own MTA thread, no keystroke. ---
+            // The real production read: UI Automation, own MTA thread, no keystroke.
             var sw1 = System.Diagnostics.Stopwatch.StartNew();
             string? got1 = Delivery.UiaSelectionReader.TryReadSelection();
             sw1.Stop();
@@ -1061,8 +1001,8 @@ public partial class App : System.Windows.Application
             log.AppendLine($"[1] UiaSelectionReader.TryReadSelection(): ms={sw1.ElapsedMilliseconds} " +
                 $"len={(got1 ?? "").Length} correct={ok1} text=[{got1}]");
 
-            // --- Same read, but with Alt PHYSICALLY held the whole time — the exact condition that broke
-            //     synthetic Ctrl+C. UIA sends no keys, so this should be identical to [1]. ---
+            // Same read with Alt physically held — the condition that broke synthetic Ctrl+C. UIA sends
+            // no keys, so this should match [1].
             Delivery.TextInjector.FocusWindow(hwnd);
             Pump(150);
             Delivery.TextInjector.SendKeyChord(0x1D, Delivery.TextInjector.SCAN_A);
@@ -1110,8 +1050,8 @@ public partial class App : System.Windows.Application
                 Width = 440, Height = 240, Title = "Jot paste self-test", Content = tb, Topmost = true,
                 WindowStartupLocation = WindowStartupLocation.CenterScreen,
             };
-            // Defeat the foreground lock so an auto-launched process can pull its own window to the
-            // front (SPI_SETFOREGROUNDLOCKTIMEOUT=0). Only needed for this headless self-test.
+            // Defeat the foreground lock (SPI_SETFOREGROUNDLOCKTIMEOUT=0) so this headless self-test can
+            // pull its own window to the front.
             SystemParametersInfo(0x2001, 0, IntPtr.Zero, 0);
 
             w.Show();
@@ -1420,7 +1360,7 @@ public partial class App : System.Windows.Application
                     Forms.ToolTipIcon.Info));
                 await installer.EnsureInstalledAsync();
                 Dispatcher.Invoke(() => Notify("Speech model ready",
-                    "Press Alt+Space to start dictating.", Forms.ToolTipIcon.Info));
+                    $"Press {ToggleHotkeyLabel()} to start dictating.", Forms.ToolTipIcon.Info));
             }
 
             await Task.Run(transcriber.WarmUp);
@@ -1535,39 +1475,6 @@ public partial class App : System.Windows.Application
         Shutdown();
     }
 
-    private static void RunCleanupTest()
-    {
-        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-cleanuptest.txt");
-        const string original =
-            "um so yeah i think we should uh ship the new feature on friday you know what i mean and " +
-            "uh the cert thing needs to get done too like before the standup on monday";
-        try
-        {
-            var ai = new AiClient();
-            var config = new AiConfig("Ollama", null, "gemma4:e4b", null);
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            string cleaned = Task.Run(() => ai.CleanupAsync(original, config)).GetAwaiter().GetResult();
-            sw.Stop();
-
-            bool changed = !string.Equals(cleaned, original, StringComparison.Ordinal);
-            string cleanedLower = cleaned.ToLowerInvariant();
-            string[] mustKeep = ["friday", "cert", "standup", "monday"];
-            bool keptContent = mustKeep.All(w => cleanedLower.Contains(w));
-            bool fillerGone = !cleanedLower.Contains(" um ") && !cleanedLower.StartsWith("um ")
-                && !cleanedLower.Contains(" uh ") && !cleanedLower.Contains("you know what i mean");
-            bool pass = changed && keptContent && fillerGone && cleaned.Length > 0;
-
-            System.IO.File.WriteAllText(outPath,
-                $"{(pass ? "PASS" : "FAIL")}\nms={sw.ElapsedMilliseconds}\n" +
-                $"changed={changed}\nkeptContentWords={keptContent}\nfillerGone={fillerGone}\n" +
-                $"ORIGINAL={original}\nCLEANED={cleaned}\n");
-        }
-        catch (Exception ex)
-        {
-            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
-        }
-    }
-
     // Minimal in-memory IRecordingStore so the rewrite self-test never touches the real library.json.
     private sealed class FakeRecordingStore : Services.Abstractions.IRecordingStore
     {
@@ -1578,16 +1485,10 @@ public partial class App : System.Windows.Application
         public IReadOnlyList<string> AllTags() => Array.Empty<string>();
     }
 
-    /// <summary>
-    /// Rewrite self-test target: a WPF window running on its OWN thread with its own message pump,
-    /// standing in for a genuinely external app. This matters specifically for
-    /// <see cref="Delivery.TextInjector.CaptureSelection"/>, which blocks the CALLING thread with
-    /// <c>Thread.Sleep</c> while it waits for the Ctrl+C to land — if the "target" window shared the
-    /// caller's thread/dispatcher (as a same-thread self-test window would), that Sleep would also
-    /// freeze the target's own message pump and starve it of the very keystroke we just sent,
-    /// producing a false negative unrelated to whether selection capture actually works against a
-    /// real separate process.
-    /// </summary>
+    /// <summary>Rewrite self-test target: a WPF window on its OWN thread/message pump, standing in for an
+    /// external app. Needed because <see cref="Delivery.TextInjector.CaptureSelection"/> blocks the calling
+    /// thread with <c>Thread.Sleep</c> — a same-thread target would freeze its own pump and never receive
+    /// the Ctrl+C, giving a false negative.</summary>
     private sealed class RewriteTestTarget : IDisposable
     {
         public IntPtr Hwnd { get; }
@@ -1642,9 +1543,8 @@ public partial class App : System.Windows.Application
             System.Windows.Input.Keyboard.FocusedElement?.GetType().Name ?? "null");
         public string TextNow() => Dispatcher.Invoke(() => _tb.Text);
 
-        /// <summary>Wires a counter that increments whenever the target's own window sees a KeyDown for
-        /// <paramref name="key"/> — used to prove a passive keyboard hook let the key through normally
-        /// instead of consuming it.</summary>
+        /// <summary>Increments a counter when the target window sees a KeyDown for <paramref name="key"/>
+        /// — proves a passive hook let the key through instead of consuming it.</summary>
         public void CountKeyDown(System.Windows.Input.Key key, Action onSeen) => Dispatcher.Invoke(() =>
         {
             _window.AddHandler(System.Windows.UIElement.PreviewKeyDownEvent,
@@ -1661,6 +1561,88 @@ public partial class App : System.Windows.Application
             try { Dispatcher.InvokeShutdown(); } catch { /* best effort */ }
         }
     }
+
+#if SONY
+    // Offline verification of the PFB integration's two correctness-critical pieces. Everything else
+    // (the actual gateway call) needs the Sony network and is verified by a colleague on-network.
+    private void RunPfbSelfTest()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-pfbselftest.txt");
+        var log = new System.Text.StringBuilder();
+        int pass = 0, fail = 0;
+        void Check(string name, bool ok)
+        {
+            log.AppendLine($"{(ok ? "PASS" : "FAIL")}  {name}");
+            if (ok) pass++; else fail++;
+        }
+
+        try
+        {
+            // 1) Per-model body quirks (§5). Get one wrong → HTTP 400 every time.
+            foreach ((string label, string id) in global::Jot.Services.Ai.PfbGateway.Catalog)
+            {
+                string json = global::Jot.Services.Ai.PfbGateway.SerializeBody(id, "sys", "user", 0.3, stream: false);
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                bool hasTemp = root.TryGetProperty("temperature", out _);
+                bool hasReasoning = root.TryGetProperty("reasoning_effort", out var re);
+                bool hasMaxCompletion = root.TryGetProperty("max_completion_tokens", out _);
+                bool hasMaxTokens = root.TryGetProperty("max_tokens", out _);
+
+                log.AppendLine($"  [{label}] {id}");
+                log.AppendLine($"    {json}");
+                // No token-limit field on EITHER family (the model runs uncapped).
+                Check($"{label}: no token-limit field", !hasMaxCompletion && !hasMaxTokens);
+                if (global::Jot.Services.Ai.PfbGateway.IsGpt5(id))
+                {
+                    Check($"{label}: OMITS temperature", !hasTemp);
+                    Check($"{label}: reasoning_effort == none", hasReasoning && re.GetString() == "none");
+                }
+                else
+                {
+                    Check($"{label}: sends temperature", hasTemp);
+                    Check($"{label}: no reasoning_effort", !hasReasoning);
+                }
+            }
+
+            // 2) JWT parse: build a synthetic token (exp 2h out, a subject) and round-trip it.
+            long exp = DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds();
+            static string B64Url(string s)
+            {
+                string b = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s));
+                return b.TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            }
+            string jwt = $"{B64Url("{\"alg\":\"none\"}")}.{B64Url($"{{\"exp\":{exp},\"sub\":\"tester@sony.com\"}}")}.sig";
+            bool parsed = global::Jot.Services.Ai.PfbAuth.TryParse(jwt, out var session);
+            Check("JWT parses", parsed && session is not null);
+            Check("JWT exp read (valid, ~2h out)", session?.IsValid == true
+                && session!.Remaining > TimeSpan.FromMinutes(115) && session.Remaining < TimeSpan.FromMinutes(125));
+            Check("JWT sub read", session?.Subject == "tester@sony.com");
+
+            // An already-expired token must be rejected as invalid.
+            long past = DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds();
+            string expiredJwt = $"{B64Url("{\"alg\":\"none\"}")}.{B64Url($"{{\"exp\":{past}}}")}.sig";
+            bool parsedExpired = global::Jot.Services.Ai.PfbAuth.TryParse(expiredJwt, out var expiredSession);
+            Check("expired JWT parses but is invalid", parsedExpired && expiredSession?.IsValid == false);
+
+            // Garbage must not throw and must not parse.
+            Check("garbage token rejected", !global::Jot.Services.Ai.PfbAuth.TryParse("not-a-jwt", out _));
+
+            // 3) Sanity on the constants.
+            Check("4 models in catalog", global::Jot.Services.Ai.PfbGateway.Catalog.Length == 4);
+            Check("base URL is the prod gateway",
+                global::Jot.Services.Ai.PfbGateway.ProdBaseUrl == "https://ai-gateway.dspprod.bis.sie.sony.com/pfb/common/v1");
+        }
+        catch (Exception ex)
+        {
+            log.AppendLine("EXCEPTION: " + ex);
+            fail++;
+        }
+
+        log.Insert(0, $"PFB self-test — {pass} passed, {fail} failed\n\n");
+        System.IO.File.WriteAllText(outPath, log.ToString());
+    }
+#endif
 
     private void RunRewriteSelfTest()
     {
@@ -1682,11 +1664,9 @@ public partial class App : System.Windows.Application
             log.AppendLine($"foreground={GetForegroundWindow()} (match={GetForegroundWindow() == target.Hwnd})");
             log.AppendLine($"targetSelectionLength={target.SelectionLengthNow()}");
 
-            // In-memory settings pointed at local Ollama — never saved, so the user's real
-            // configured provider/key in settings.json is untouched.
-            // Uses a fast local model (not gemma4:e4b) so the AI leg finishes well inside
-            // AiClient's hardcoded 30s HTTP timeout — isolates the selection-capture/paste-back
-            // mechanics from the slow-model timeout bug --cleanuptest already found separately.
+            // In-memory settings at local Ollama — never saved, so real settings.json is untouched. Uses a
+            // fast model so the AI leg finishes inside AiClient's 30s timeout, isolating capture/paste
+            // mechanics from any slow-model timeout.
             var settings = new JsonSettingsStore();
             settings.Current.AiProvider = "Ollama";
             settings.Current.AiModel = "qwen3:4b-instruct";
@@ -1710,21 +1690,16 @@ public partial class App : System.Windows.Application
             rewrite.Failed += (t, m) => { failedTitle = t; failedMsg = m; done = true; };
             rewrite.NothingSelected += () => { nothingSelected = true; done = true; };
 
-            // Simulate the REAL Alt+/ trigger condition: Alt is still physically held down at the
-            // instant WM_HOTKEY fires (that's how hotkeys work — they fire on the second key's
-            // down-press, before the user has necessarily released either key), released here ~100ms
-            // later by a background thread, matching a normal fast tap. This is what real use looks
-            // like and what CaptureContext()/CaptureSelection() must cope with — every earlier version
-            // of this test called CaptureContext() cold, with no key ever actually pressed, which is
-            // NOT a faithful reproduction of a real hotkey press (see --notepadselftest, which found
-            // this exact gap: a genuinely-held Alt defeated the old synthetic-release-only fix).
+            // Simulate the real Alt+/ trigger: Alt still physically held when WM_HOTKEY fires, released
+            // ~100ms later by a background thread (a normal fast tap) — the condition CaptureContext must
+            // cope with. Earlier versions called it cold with no key pressed (see --notepadselftest,
+            // which found a held Alt defeated the old synthetic-release-only fix).
             log.AppendLine($"focusBeforeAltTap: hasFocus={target.TextBoxHasKeyboardFocus()} " +
                 $"element={target.FocusedElementTypeName()}");
 
-            // Isolate the theory directly: a bare Alt down+up (nothing else — exactly what the target
-            // window sees for a real Alt+/ press, since RegisterHotKey swallows "/" system-wide and
-            // never delivers it) may trigger WPF's menu-mnemonic focus handling, moving keyboard focus
-            // OFF the TextBox before Ctrl+C is ever sent. Test this in isolation, no capture involved.
+            // Isolate the theory: a bare Alt down+up (what the target sees for a real Alt+/, since
+            // RegisterHotKey swallows "/") may trigger WPF's menu-mnemonic focus handling, moving focus
+            // off the TextBox before Ctrl+C is sent. Tested here with no capture involved.
             Delivery.TextInjector.SendScanKeyDown(Delivery.TextInjector.SCAN_ALT);
             Pump(50);
             Delivery.TextInjector.SendScanKeyUp(Delivery.TextInjector.SCAN_ALT);
@@ -1733,8 +1708,8 @@ public partial class App : System.Windows.Application
                 $"element={target.FocusedElementTypeName()}  <-- isolates whether a bare Alt tap alone " +
                 "steals focus, independent of anything CaptureSelection does");
 
-            // Re-establish focus/selection exactly like a real user would have it before pressing the
-            // hotkey, then run the real end-to-end capture with Alt held ~100ms in (realistic timing).
+            // Re-establish focus/selection as a real user would, then run the end-to-end capture with
+            // Alt held ~100ms in.
             target.FocusAndSelectAll();
             Pump(200);
             Delivery.TextInjector.SendScanKeyDown(Delivery.TextInjector.SCAN_ALT);
@@ -1913,11 +1888,9 @@ public partial class App : System.Windows.Application
         picker.Activate();
     }
 
-    /// <summary>
-    /// Relaunch Jot cleanly. Releases the single-instance mutex FIRST so the freshly-spawned process
-    /// can claim it — otherwise the child sees us still holding the mutex, treats itself as a duplicate
-    /// and bows out, and then we shut down too, leaving nothing running (the "Restart quits" bug).
-    /// </summary>
+    /// <summary>Relaunch Jot cleanly. Releases the single-instance mutex FIRST so the child can claim it
+    /// — otherwise the child bows out as a duplicate and we shut down too, leaving nothing running (the
+    /// "Restart quits" bug).</summary>
     public static void RestartApp()
     {
         string? exe = Environment.ProcessPath;
@@ -1962,6 +1935,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ISoundService, SoundService>();
         services.AddSingleton<IAiClient, AiClient>();
         services.AddSingleton<AiCredentials>();
+        services.AddSingleton<PfbAuth>();
         services.AddSingleton<AudioRecorder>();
         services.AddSingleton<Transcription.Onnx.OnnxSessionFactory>();
         services.AddSingleton<ParakeetModel>();
@@ -1972,10 +1946,9 @@ public partial class App : System.Windows.Application
         services.AddSingleton<RetentionCleaner>();
         services.AddSingleton<UsageStats>();
         services.AddSingleton<HotkeyManager>();
-        // Nemotron 3.5 (streaming RNNT) is the engine. Two builds: the int4 export runs CPU-only
-        // (int4 has no DirectML kernels); the FP16 export runs on DirectML. When the user picks the GPU
-        // device AND the FP16 model is installed, use the FP16 engine on DirectML; otherwise keep the
-        // int4 engine on CPU (default, correct everywhere). Backend is read once at construction.
+        // Nemotron 3.5 (streaming RNNT). int4 export is CPU-only (no DirectML kernels); FP16 export runs
+        // on DirectML. Use FP16/DML when the user picks GPU and the FP16 model is installed; otherwise
+        // int4/CPU (default, correct everywhere). Backend read once at construction.
         services.AddSingleton<ITranscriber>(sp =>
         {
             string? device = sp.GetRequiredService<ISettingsStore>().Current.TranscriptionDevice;
@@ -1997,7 +1970,6 @@ public partial class App : System.Windows.Application
         services.AddSingleton<Import.MediaImporter>();
         services.AddSingleton<PillController>();
 
-        // Library + navigation + view-models
         services.AddSingleton<IRecordingStore, JsonRecordingStore>();
         services.AddSingleton<Navigator>();
         services.AddSingleton<INavigator>(sp => sp.GetRequiredService<Navigator>());
@@ -2043,17 +2015,22 @@ public partial class App : System.Windows.Application
         return Drawing.SystemIcons.Application;
     }
 
+    /// <summary>The current toggle-recording shortcut as a display label ("Alt + Space", "Apps", …),
+    /// read live from settings — so every surface shows the user's real binding, never a hardcoded one.</summary>
+    private string ToggleHotkeyLabel() =>
+        Recording.HotkeyChord.Display(Services.GetRequiredService<ISettingsStore>().Current.ToggleRecordingHotkey);
+
     private void SetupTray()
     {
         _tray = new Forms.NotifyIcon
         {
             Icon = LoadAppIcon(Forms.SystemInformation.SmallIconSize),
             Visible = true,
-            Text = "Jot — Alt+Space to dictate",
+            Text = $"Jot — {ToggleHotkeyLabel()} to dictate",
         };
 
         var menu = new Forms.ContextMenuStrip();
-        _toggleItem = new Forms.ToolStripMenuItem("Start dictation\tAlt+Space", null, (_, _) => _recorder!.Toggle());
+        _toggleItem = new Forms.ToolStripMenuItem($"Start dictation\t{ToggleHotkeyLabel()}", null, (_, _) => _recorder!.Toggle());
         _copyLastItem = new Forms.ToolStripMenuItem("Copy last transcription", null, (_, _) => CopyLast());
         _recentItem = new Forms.ToolStripMenuItem("Recent transcriptions");
 
@@ -2078,8 +2055,8 @@ public partial class App : System.Windows.Application
     {
         if (_toggleItem is not null)
             _toggleItem.Text = _recorder!.State == RecorderState.Recording
-                ? "Stop dictation\tAlt+Space"
-                : "Start dictation\tAlt+Space";
+                ? $"Stop dictation\t{ToggleHotkeyLabel()}"
+                : $"Start dictation\t{ToggleHotkeyLabel()}";
 
         var store = Services.GetRequiredService<IRecordingStore>();
         var completed = store.Items
@@ -2215,11 +2192,37 @@ public partial class App : System.Windows.Application
             if (_tray is null) return;
             _tray.Text = state switch
             {
-                RecorderState.Recording => "Jot — recording… (Alt+Space to stop)",
+                RecorderState.Recording => $"Jot — recording… ({ToggleHotkeyLabel()} to stop)",
                 RecorderState.Transcribing => "Jot — transcribing…",
-                _ => "Jot — Alt+Space to dictate",
+                _ => $"Jot — {ToggleHotkeyLabel()} to dictate",
             };
         };
+
+        // After a dictation, check whether it's time for the one-time "you've saved ~1h" donation nudge.
+        _recorder.TranscriptReady += _ => MaybeShowDonationNudge();
+    }
+
+    private bool _donationNudgeShown; // once per app session, so an un-dismissed nudge doesn't re-pop each dictation
+
+    // Show the donation nudge the first time time-saved crosses ~1h. Once snoozed ("maybe later") it only
+    // re-asks at a much higher bar much later; "don't ask again"/donate makes it terminal. All on-device.
+    private void MaybeShowDonationNudge()
+    {
+        if (_donationNudgeShown) return;
+        var s = Services.GetRequiredService<ISettingsStore>().Current;
+        if (s.DonationNudgeDone) return;
+
+        double minsSaved = Services.GetRequiredService<UsageStats>().MinutesSaved;
+        if (minsSaved < 60) return;                                   // first fire: ~1h saved
+        if (s.DonationNudgeSnoozedAt is DateTime snoozed              // snoozed: only re-ask at 5h+ and 30+ days on
+            && !(minsSaved >= 300 && (DateTime.UtcNow - snoozed).TotalDays >= 30)) return;
+
+        _donationNudgeShown = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            try { new Controls.DonationNudgeWindow().Show(); }
+            catch (Exception ex) { JotLog.Error("donation nudge failed to show", ex); }
+        });
     }
 
     private void Notify(string title, string message, Forms.ToolTipIcon icon)
@@ -2228,15 +2231,12 @@ public partial class App : System.Windows.Application
     private static void LogCrash(Exception? ex)
         => JotLog.Error("Unhandled exception", ex);
 
-    /// <summary>
-    /// Called by the Velopack uninstaller (Add or remove programs → Uninstall): removes all of Jot's
-    /// data and its launch-at-login entry. Deliberately targets known Jot artifacts (recordings, models,
-    /// logs, library, key, stats) rather than blindly nuking the data folder, in case the user pointed
-    /// their save location at a shared directory. Best-effort — never throw out of an uninstall hook.
-    /// </summary>
+    /// <summary>Called by the Velopack uninstaller: removes Jot's data and launch-at-login entry.
+    /// Targets known Jot artifacts rather than nuking the data folder (the save location may be a shared
+    /// directory). Best-effort — never throw out of an uninstall hook.</summary>
     private static void WipeAllData()
     {
-        // 1. Remove the per-user "launch at login" Run entry so nothing tries to start after removal.
+        // Remove the per-user "launch at login" Run entry so nothing starts after removal.
         try
         {
             using Microsoft.Win32.RegistryKey? run = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
@@ -2245,7 +2245,7 @@ public partial class App : System.Windows.Application
         }
         catch { /* best effort */ }
 
-        // 2. Delete Jot's data under the chosen save location.
+        // Delete Jot's data under the chosen save location.
         try
         {
             var settings = new JsonSettingsStore();
@@ -2281,7 +2281,7 @@ public partial class App : System.Windows.Application
         }
         catch { /* best effort */ }
 
-        // 3. Delete the app-config folder in LocalAppData (settings.json + any legacy logs).
+        // Delete the app-config folder in LocalAppData (settings.json + any legacy logs).
         try
         {
             string local = System.IO.Path.Combine(

@@ -37,7 +37,6 @@ public sealed class JotSettings
     public string AiProvider { get; set; } = "None"; // None | OpenAI | Anthropic | Gemini | Ollama
     public string? AiBaseUrl { get; set; }
     public string? AiModel { get; set; }
-    public bool CleanupEnabled { get; set; }
 
     // Sounds
     public bool SoundStart { get; set; } = true;
@@ -50,13 +49,18 @@ public sealed class JotSettings
     public string ToggleRecordingHotkey { get; set; } = "Alt+Space";
     public string CancelRecordingHotkey { get; set; } = "Escape"; // armed only while recording
     public string? PushToTalkHotkey { get; set; }
-    public string PasteLastHotkey { get; set; } = "Alt+OemComma";
+    public string PasteLastHotkey { get; set; } = "Ctrl+Alt+P"; // paste last transcript (rewrite or raw) at the cursor
     public string RewriteHotkey { get; set; } = "Alt+OemQuestion";
     public string RewriteWithVoiceHotkey { get; set; } = "Alt+OemPeriod";
 
     // Lifecycle
     public bool FirstRunComplete { get; set; }
     public bool ShowSampleData { get; set; } = true; // seed the demo library until real recordings exist
+
+    // Donation nudge — one-time "you've saved ~1h" prompt. Terminal once dismissed-forever or donated;
+    // SnoozedAt records a "maybe later" so it re-asks later at a higher bar.
+    public bool DonationNudgeDone { get; set; }
+    public DateTime? DonationNudgeSnoozedAt { get; set; }
 }
 
 /// <summary>Loads, exposes, and persists <see cref="JotSettings"/>; raises <see cref="Changed"/> after a save.</summary>

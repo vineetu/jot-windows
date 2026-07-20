@@ -1,10 +1,6 @@
 namespace Jot.Transcription;
 
-/// <summary>
-/// Converts 16 kHz mono Float32 audio to text. The Mac app fulfils this with
-/// FluidAudio/Parakeet on the Neural Engine; on Windows the production
-/// implementation will be Parakeet TDT via ONNX Runtime + DirectML.
-/// </summary>
+/// <summary>Converts 16 kHz mono Float32 audio to text.</summary>
 public interface ITranscriber
 {
     Task<string> TranscribeAsync(float[] samples, int sampleRate, CancellationToken ct = default);
@@ -18,8 +14,8 @@ public interface ITranscriber
 
 /// <summary>
 /// A transcriber whose model streams natively: open a live session, feed audio chunks as they arrive,
-/// and read the transcript as it grows. On stop the transcript is essentially already done — no
-/// re-decoding of the whole clip (which is what a non-streaming model would be forced to do).
+/// read the transcript as it grows. On stop the transcript is essentially already done — no re-decoding
+/// of the whole clip.
 /// </summary>
 public interface IStreamingTranscriber
 {
@@ -36,10 +32,7 @@ public interface IStreamingSession
     string Finish();
 }
 
-/// <summary>
-/// Milestone-1 placeholder: proves the record → transcribe → paste loop end to end
-/// without a real model. Emits a marker describing the captured audio.
-/// </summary>
+/// <summary>Milestone-1 placeholder: exercises the record→transcribe→paste loop without a real model.</summary>
 public sealed class StubTranscriber : ITranscriber
 {
     public Task<string> TranscribeAsync(float[] samples, int sampleRate, CancellationToken ct = default)

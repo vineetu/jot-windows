@@ -7,12 +7,9 @@
         <StackPanel MaxWidth="760">
             <TextBlock Text="About" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,16" />
 
-            <!-- Identity -->
             <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
-                <Border Width="64" Height="64" CornerRadius="16"
-                        Background="{DynamicResource AccentFillColorDefaultBrush}">
-                    <ui:SymbolIcon Symbol="Mic24" FontSize="30" Foreground="White" />
-                </Border>
+                <Image Source="pack://application:,,,/Assets/jot-logo.png" Width="64" Height="64"
+                       VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" />
                 <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="Jot for Windows" Style="{DynamicResource SubtitleTextBlockStyle}" />
                     <TextBlock Text="Free, on-device dictation. Press a key, speak, and it's pasted at your cursor."
@@ -22,12 +19,17 @@
                 </StackPanel>
             </StackPanel>
 
+            <TextBlock Text="Vision" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,4,0,8" />
+            <ui:Card>
+                <TextBlock TextWrapping="Wrap" FontSize="14" LineHeight="22"
+                           Text="To use AI to optimize your natural flow of thought and clearly articulate your ideas — empowering you to think for yourself rather than letting the AI do the thinking for you." />
+            </ui:Card>
+
             <!-- HIDDEN until real: no network check yet (hardcoded "up to date"). Restore when
                  Velopack auto-update lands. See docs/plans/fixit-worklist.md (B3). -->
             <ui:Button Content="Check for updates" Icon="{ui:SymbolIcon ArrowSync24}" Click="OnCheckUpdates"
                        Visibility="Collapsed" />
 
-            <!-- Privacy pledge -->
             <ui:Card Margin="0,20,0,0">
                 <StackPanel>
                     <StackPanel Orientation="Horizontal">
@@ -36,14 +38,13 @@
                     </StackPanel>
                     <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                               Text="Transcription runs entirely on your PC — audio and transcripts never leave the device. No accounts, no telemetry. Optional AI cleanup only calls a provider you configure yourself." />
+                               Text="Transcription runs entirely on your PC — audio and transcripts never leave the device. No accounts, no telemetry. Optional AI rewrite only calls a provider you configure yourself." />
                     <ui:Button Content="Read the full privacy policy" Appearance="Transparent"
                                HorizontalAlignment="Left" Padding="0,8,0,0" Margin="0,4,0,0"
                                Click="OnOpenPrivacyPolicy" />
                 </StackPanel>
             </ui:Card>
 
-            <!-- Usage impact (on-device counters — D2) -->
             <ui:Card Margin="0,16,0,0">
                 <StackPanel>
                     <StackPanel Orientation="Horizontal">
@@ -55,11 +56,36 @@
                 </StackPanel>
             </ui:Card>
 
-            <!-- Support -->
             <TextBlock Text="Support Jot" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,24,0,8" />
             <ui:Button Content="Donate to charity" Icon="{ui:SymbolIcon Heart24}" Appearance="Primary" Click="OnDonate" />
 
-            <!-- Troubleshooting -->
+            <!-- Jot for iPhone. Windows has no AirDrop, so a QR (scan with the phone camera → App Store)
+                 is the get-it-on-your-phone bridge, with a copy-link fallback. QR is generated on-device. -->
+            <TextBlock Text="Jot for iPhone" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,24,0,8" />
+            <ui:Card>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="176" Height="176" CornerRadius="10" Background="White"
+                            Padding="10" VerticalAlignment="Center">
+                        <Image x:Name="IPhoneQr" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="Dictate on your iPhone too." FontWeight="SemiBold" />
+                        <TextBlock TextWrapping="Wrap" FontSize="12" Margin="0,2,0,10"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="Scan this with your phone's camera to open Jot on the App Store — or copy the link." />
+                        <StackPanel Orientation="Horizontal">
+                            <ui:Button Content="Copy link" Icon="{ui:SymbolIcon Copy24}" Margin="0,0,8,0" Click="OnCopyIPhoneLink" />
+                            <ui:Button Content="Open App Store page" Icon="{ui:SymbolIcon Globe24}"
+                                       Appearance="Transparent" Click="OnOpenIPhoneAppStore" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </ui:Card>
+
             <TextBlock Text="Troubleshooting" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,24,0,8" />
             <StackPanel Orientation="Horizontal">
                 <ui:Button Content="View log" Icon="{ui:SymbolIcon DocumentText24}" Margin="0,0,8,0" Click="OnViewLog" />

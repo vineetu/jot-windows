@@ -103,7 +103,6 @@
             </ListView.ItemTemplate>
         </ListView>
 
-        <!-- Add a custom prompt -->
         <ui:CardExpander Grid.Row="3" Margin="0,10,0,0" Icon="{ui:SymbolIcon Add24}">
             <ui:CardExpander.Header>
                 <TextBlock Text="Add your own prompt" FontWeight="SemiBold" />

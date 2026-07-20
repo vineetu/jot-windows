@@ -5,18 +5,15 @@ using Jot.Services;
 namespace Jot.Delivery;
 
 /// <summary>
-/// Reads the current text selection out of whatever app has focus using UI Automation's
-/// <see cref="TextPattern"/> — <b>no synthetic keystroke and no clipboard involved</b>. This is the
-/// clean primary path for the Rewrite feature: because it sends no keys, it sidesteps the entire class
-/// of fragility around <see cref="TextInjector.CaptureSelection"/> (a still-held Alt corrupting the
-/// synthetic Ctrl+C, clipboard save/restore races, fixed timing waits). It works for native Windows
-/// text surfaces — Notepad, WordPad, Win32/WinForms/WPF/UWP edit controls, and Microsoft Word.
+/// Reads the focused app's text selection via UI Automation's <see cref="TextPattern"/> — no synthetic
+/// keystroke, no clipboard. Primary path for Rewrite: sending no keys sidesteps the fragility of
+/// <see cref="TextInjector.CaptureSelection"/> (still-held Alt corrupting Ctrl+C, clipboard races,
+/// fixed timing waits). Works for native Windows text surfaces — Notepad, WordPad,
+/// Win32/WinForms/WPF/UWP edit controls, and Microsoft Word.
 ///
-/// It is NOT universal: Chromium-based apps (Chrome, Edge, VS Code, Slack, Discord, Electron) build
-/// their accessibility tree lazily and may expose nothing on the first read, and Java apps need the
-/// Access Bridge. For those, the caller falls back to the clipboard Ctrl+C path. That UIA-first,
-/// clipboard-fallback shape is the same one accessibility-grade tools (Talon, Windows Voice Access)
-/// and text-expanders use.
+/// NOT universal: Chromium apps (Chrome, Edge, VS Code, Slack, Discord, Electron) build their a11y tree
+/// lazily and may expose nothing on first read, and Java apps need the Access Bridge — the caller falls
+/// back to the clipboard Ctrl+C path.
 /// </summary>
 public static class UiaSelectionReader
 {

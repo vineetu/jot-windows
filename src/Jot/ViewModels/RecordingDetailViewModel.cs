@@ -17,9 +17,9 @@ namespace Jot.ViewModels;
 public sealed record SpeakerTurn(string Speaker, string Text, Brush Color);
 
 /// <summary>
-/// The recording "reading surface": transcript, slim playback bar (real only when the row has audio
-/// on disk), inline edit with an "edited" marker, tags, stub speaker detection, and real WebVTT
-/// export. Constructed by the caller with the selected item and passed in as the page DataContext.
+/// The recording "reading surface": transcript, playback bar (real only when the row has audio on
+/// disk), inline edit, tags, stub speaker detection, WebVTT export. Constructed with the selected
+/// item as the page DataContext.
 /// </summary>
 public sealed partial class RecordingDetailViewModel : ObservableObject
 {
@@ -39,7 +39,6 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
     [ObservableProperty] private string _newTag = "";
     [ObservableProperty] private bool _showPlain = true;
 
-    // ---- Find & Replace (worklist A2) -------------------------------------------------------------
     [ObservableProperty] private bool _isFindReplaceOpen;
     [ObservableProperty] private string _findText = "";
     [ObservableProperty] private string _replaceText = "";
@@ -64,7 +63,7 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
     public bool IsDictation => Item.Kind == RecordingKind.Dictation;
     public bool IsRewrite => Item.Kind == RecordingKind.Rewrite;
 
-    /// <summary>Sub-title meta line. Rewrites keep no audio, so show the model + kind rather than a
+    /// <summary>Sub-title meta line. Rewrites keep no audio, so show model + kind rather than a
     /// misleading 0:00 duration; dictations show model + length.</summary>
     public string MetaText => IsRewrite
         ? $"{Item.ModelLabel} · Rewrite"
@@ -117,7 +116,7 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
     [RelayCommand]
     private void CancelEdit() => IsEditing = false;
 
-    // ---- Find & Replace commands (operate on Item.Transcript; the store auto-persists the change) --
+    // Find & Replace commands mutate Item.Transcript directly; the store auto-persists.
 
     [RelayCommand]
     private void OpenFindReplace() => IsFindReplaceOpen = true;
@@ -125,7 +124,6 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
     [RelayCommand]
     private void CloseFindReplace() => IsFindReplaceOpen = false;
 
-    /// <summary>Replace the first occurrence of Find with Replace.</summary>
     [RelayCommand]
     private void ReplaceNext()
     {
@@ -139,7 +137,6 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
         OnPropertyChanged(nameof(MatchSummary));
     }
 
-    /// <summary>Replace every occurrence of Find with Replace.</summary>
     [RelayCommand]
     private void ReplaceAll()
     {

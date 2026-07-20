@@ -4,11 +4,9 @@ using System.Windows.Interop;
 namespace Jot.Recording;
 
 /// <summary>
-/// A single system-wide hotkey registered via Win32 <c>RegisterHotKey</c>.
-/// Mirrors the Mac app's KeyboardShortcuts binding: the OS delivers a
-/// <c>WM_HOTKEY</c> message even when Jot has no focused window, which is what
-/// makes dictation work "into any app". Messages are pumped through a hidden
-/// <see cref="HwndSource"/> so we don't need a visible window.
+/// A single system-wide hotkey via Win32 <c>RegisterHotKey</c>. The OS delivers <c>WM_HOTKEY</c> even
+/// when Jot has no focused window — that's what makes dictation work into any app. Messages pump
+/// through a hidden <see cref="HwndSource"/> so no visible window is needed.
 /// </summary>
 public sealed class GlobalHotkey : IDisposable
 {
@@ -40,7 +38,6 @@ public sealed class GlobalHotkey : IDisposable
     /// <summary>Raised on the UI thread each time the hotkey fires.</summary>
     public event Action? Pressed;
 
-    /// <summary>True once the combination is actively registered with the OS.</summary>
     public bool IsRegistered => _registered;
 
     /// <param name="vk">Virtual-key code (e.g. <c>0x20</c> for Space).</param>
@@ -52,7 +49,7 @@ public sealed class GlobalHotkey : IDisposable
         _modifiers = modifiers;
         _vk = vk;
 
-        // Message-only window: invisible, never shown, exists purely to receive WM_HOTKEY.
+        // Message-only window: exists purely to receive WM_HOTKEY.
         var parameters = new HwndSourceParameters("Jot.HotkeyWindow")
         {
             WindowStyle = 0,
