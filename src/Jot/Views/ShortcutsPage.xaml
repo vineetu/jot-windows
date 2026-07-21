@@ -28,6 +28,10 @@
                             Description="Rewrite the highlighted text with AI, using your default prompt (or pick one).">
                 <ctl:HotkeyBox Chord="{Binding RewriteHotkey, Mode=TwoWay}" />
             </ctl:SettingRow>
+            <ctl:SettingRow Title="Rewrite with voice"
+                            Description="Rewrite the highlighted text by speaking the instruction (e.g. &quot;make this more formal&quot;) instead of picking a prompt.">
+                <ctl:HotkeyBox Chord="{Binding RewriteWithVoiceHotkey, Mode=TwoWay}" />
+            </ctl:SettingRow>
             <ctl:SettingRow Title="Paste last transcript"
                             Description="Paste your most recent transcript (AI-rewritten or raw) at the cursor from anywhere.">
                 <ctl:HotkeyBox Chord="{Binding PasteLastHotkey, Mode=TwoWay}" />

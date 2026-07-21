@@ -6,6 +6,38 @@ and free; the AI cleanup/rewrite features are optional and use a key you supply.
 
 ---
 
+## Notes for certification (Partner Center → submission → Submission options → "Notes for certification")
+
+Paste the block below verbatim. It exists because the primary feature (on-device dictation) needs a
+one-time model download on first run — the exact step the 2026-07 review (policy 10.1.2.10) could not get
+past. Microsoft explicitly asks for "any steps required to access hidden or locked features" here.
+
+> Jot transcribes speech to text 100% on-device. On first launch a short setup wizard opens, and one step
+> downloads the speech model (~754 MB, one time, needs internet). Please make sure the test PC has internet
+> for this step. The model is hosted on our own GitHub release CDN
+> (https://github.com/vineetu/jot-windows/releases). After this one-time download, dictation works fully offline.
+>
+> To verify the primary feature (dictation):
+> 1. Launch Jot Transcribe — the setup wizard opens automatically on first run.
+> 2. On the "What language will you speak?" step, click the "Download & continue" button. The model
+>    downloads with a progress bar ("Downloading… X MB of 754 MB"); the wizard continues automatically once
+>    it finishes. Please let it finish — it is required for transcription (time depends on the connection).
+> 3. Finish the wizard (pick a microphone; the remaining steps can be left at their defaults).
+> 4. Click into any text field (Notepad, a browser box, even this form). Press the dictation hotkey —
+>    default Alt+Space (the current binding is shown in Settings → Shortcuts) — speak a sentence, then press
+>    it again to stop. Your words are typed at the cursor.
+>
+> Notes:
+> • Microphone access is required; Windows prompts on first use — please Allow.
+> • The download resumes/retries automatically if interrupted, and the app never crashes on a network
+>   failure — it shows a clear message and can be retried.
+> • The optional "Rewrite with…" / AI features are OFF by default and require the tester to supply their own
+>   AI provider key (OpenAI/Anthropic/Google) or a local Ollama endpoint — they are not part of core dictation.
+>
+> Product ID: 9NDXTM774RGM
+
+---
+
 ## Product name
 Jot Transcribe
 

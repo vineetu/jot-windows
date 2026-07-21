@@ -26,6 +26,8 @@ public sealed partial class PromptPickerViewModel : ObservableObject
     {
         _catalog = catalog;
         var cvs = new CollectionViewSource { Source = catalog.Prompts };
+        // Default first (so it lands at index 0, pre-selected → Enter runs it), then pinned, recent, alphabetical.
+        cvs.SortDescriptions.Add(new SortDescription(nameof(PromptItem.IsDefault), ListSortDirection.Descending));
         cvs.SortDescriptions.Add(new SortDescription(nameof(PromptItem.IsPinned), ListSortDirection.Descending));
         cvs.SortDescriptions.Add(new SortDescription(nameof(PromptItem.LastPickedSeq), ListSortDirection.Descending));
         cvs.SortDescriptions.Add(new SortDescription(nameof(PromptItem.Title), ListSortDirection.Ascending));

@@ -19,7 +19,7 @@
                     <TextBlock Text="Rewrite selected text" FontWeight="SemiBold" />
                 </ui:CardExpander.Header>
                 <TextBlock TextWrapping="Wrap"
-                           Text="Select text anywhere, press the Rewrite shortcut, and speak an instruction like &quot;make this more formal&quot; or &quot;turn this into bullet points.&quot; The rewritten text replaces your selection." />
+                           Text="Select text anywhere and press the Rewrite shortcut — a prompt picker opens. Press Enter to run your default (Rewrite), or pick another like &quot;Make formal&quot; or &quot;Summarize.&quot; The result replaces your selection. There's also a separate &quot;Rewrite with voice&quot; shortcut that lets you speak the instruction instead." />
             </ui:CardExpander>
 
             <TextBlock Text="Advanced" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,20,0,8" />
@@ -51,7 +51,7 @@
                     <TextBlock Text="My hotkey doesn't work" FontWeight="SemiBold" />
                 </ui:CardExpander.Header>
                 <TextBlock TextWrapping="Wrap"
-                           Text="Another app may have claimed the same global shortcut. Global hotkeys work best with a modifier (Ctrl / Alt / Win). Push-to-talk needs a low-level keyboard hook because Windows hotkeys don't report key release." />
+                           Text="Another app may have claimed the same global shortcut. Global hotkeys work best with a modifier (Ctrl / Alt / Win)." />
             </ui:CardExpander>
             <ui:CardExpander Icon="{ui:SymbolIcon ShieldQuestion24}" Margin="0,0,0,6">
                 <ui:CardExpander.Header>

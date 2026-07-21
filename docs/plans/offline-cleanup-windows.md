@@ -205,15 +205,27 @@ the safety property. The German anchors "ähnlich", "er kommt um drei Uhr" are s
 1. Before replacing, for each match record whether it is **sentence-initial**: the preceding text, with
    trailing `[ \t\r\n]` skipped, is empty (string start) OR ends in `.`/`!`/`?` — or, for es, an opening `¡`/`¿`.
 2. Replace all matches with a single space and run English steps 1–4 (collapse `[ \t]{2,}`, trim around `\n\n`,
-   drop orphan `" [,.?!]"`, strip leading punctuation/space).
+   drop orphan `" [,.?!]"`, strip leading punctuation/space). **es exception:** the orphan-drop must NOT delete a
+   sentence-terminal `?`/`!` that closes an inverted `¿`/`¡` — see the Spanish rule below, which replaces the
+   generic orphan-drop for the es path.
 3. For each recorded sentence-initial position, uppercase the first alphabetic char of the word now at that
    position. **No other casing change** — the model's own casing stands. (This is *why* there is no blanket
    recap: it would wrongly re-case after "z. B." / "M." using English abbreviation logic.)
 4. Append one trailing space iff non-empty (English step 6).
 
-**Spanish inverted punctuation:** before the general strip, delete a fully-wrapped interjection wholesale —
-`¡[ \t]*(?:<es-token>)[ \t]*!` and `¿[ \t]*(?:<es-token>)[ \t]*\?` → "" (so `"¡eh!"`→`""`). Inside a sentence
-the token strips normally and the enclosing `¿…?`/`¡…!` survives.
+**Spanish inverted punctuation (two rules):**
+1. **Wholesale-delete a fully-wrapped interjection** *before* the general strip:
+   `¡[ \t]*(?:<es-token>)[ \t]*!` and `¿[ \t]*(?:<es-token>)[ \t]*\?` → "" (so `"¡eh!"`→`""`).
+2. **Closing-mark-safe orphan-drop** — for the es path *replace* English step 3's generic
+   `" [,.?!]"`→"" with two sub-steps so a terminal `?`/`!` closing an inverted opener is never deleted:
+   - `[ \t]+([?!])` → `$1` — a space left in front of a closing `?`/`!` collapses to just the mark (the mark
+     stays). Deterministic; no bracket-balance tracking needed — a bare `?`/`!` is always kept in es, which is
+     correct (Spanish sentences end in them, and a dangling one is better kept than silently dropped).
+   - `" [,.]"` → "" — orphan comma/period after a stripped trailing filler drops exactly as in English.
+
+   Trace `"¿Verdad, eh?"`: strip `", eh"`→one space → `"¿Verdad ?"`; sub-step 1 `" ?"`→`"?"` → `"¿Verdad?"`;
+   step 4 appends one trailing space → `"¿Verdad? "`. The enclosing `¿…?` survives; only the filler and its
+   spacing go.
 
 **Spec-derived fixtures (single unambiguous expected values; reconcile with `jot-shared`'s 53 later):**
 | iso | input | expected |
@@ -230,7 +242,7 @@ the token strips normally and the enclosing `¿…?`/`¡…!` survives.
 | it | `"ehm, mmm"` | `""` (both stripped) |
 | es | `"em hola"` | `"Hola "` |
 | es | `"hola eh mundo"` | `"hola mundo "` (mid; "hola" stays as the model wrote it) |
-| es | `"¿Verdad, eh?"` | `"¿Verdad?"` |
+| es | `"¿Verdad, eh?"` | `"¿Verdad? "` (closing `?` preserved; one trailing space per step 4) |
 | es | `"¡eh!"` | `""` |
 | es | `"pues bien"` | `"pues bien "` ("pues" is discourse → untouched) |
 | pt | `"hum certo"` | `"Certo "` |

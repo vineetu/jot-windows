@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Jot.Services;
@@ -9,14 +10,18 @@ namespace Jot.ViewModels;
 
 /// <summary>
 /// Drives the first-run setup wizard (Welcome → Permissions → Language → Microphone → Shortcut →
-/// Save location → Done). Skippable and re-runnable. Completing it marks first-run done and flips
-/// Advanced features on (matching the Mac app), then requests the window close.
+/// Save location → Done). Skippable and re-runnable. Completing it marks first-run done, then requests
+/// the window close. It intentionally leaves Advanced features off (the basic/advanced split protects
+/// first-time users); the user opts into Advanced from Settings.
 /// </summary>
 public sealed partial class WizardViewModel : ObservableObject
 {
     public const int StepCount = 7;
 
+    private const int LanguageStep = 3;
+
     private readonly ISettingsStore _store;
+    private readonly ModelDownload _download;
 
     public string[] Languages { get; } =
         ["English", "Spanish", "French", "German", "Italian", "Portuguese", "Japanese"];
@@ -29,13 +34,32 @@ public sealed partial class WizardViewModel : ObservableObject
 
     public event Action? CloseRequested;
 
-    public WizardViewModel(ISettingsStore store)
+    public WizardViewModel(ISettingsStore store, ModelDownload download)
     {
         _store = store;
+        _download = download;
+        _download.Refresh();                       // reflect current on-disk state
         _language = store.Current.Language;
         _dataDirectory = JotPaths.DataDir(store.Current);
         LoadDevices();
+        // The primary button doubles as the download trigger + progress readout, so re-evaluate it as the
+        // shared download reports progress / finishes.
+        _download.PropertyChanged += OnDownloadChanged;
     }
+
+    private void OnDownloadChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(PrimaryButtonText));
+        OnPropertyChanged(nameof(ShowSkip));
+        NextCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>Unsubscribe from the shared (singleton) download so this wizard VM — and its window — can be
+    /// collected once closed. Without this the long-lived ModelDownload pins them for the app's lifetime.</summary>
+    public void Detach() => _download.PropertyChanged -= OnDownloadChanged;
+
+    /// <summary>Shared model-download state — the Language step binds its status + progress bar to this.</summary>
+    public ModelDownload Download => _download;
 
     [RelayCommand]
     private void BrowseSaveLocation()
@@ -70,10 +94,10 @@ public sealed partial class WizardViewModel : ObservableObject
     {
         0 => "Welcome to Jot",
         1 => "Microphone access",
-        2 => "What language will you speak?",
-        3 => "Choose your microphone",
-        4 => "Your dictation shortcut",
-        5 => "Where should Jot save recordings?",
+        2 => "Where should Jot store its files?",
+        3 => "What language will you speak?",
+        4 => "Choose your microphone",
+        5 => "Your dictation shortcut",
         _ => "You're all set",
     };
 
@@ -81,10 +105,10 @@ public sealed partial class WizardViewModel : ObservableObject
     {
         0 => "Free, on-device dictation for Windows. Press a key, speak, and your words are pasted at the cursor.",
         1 => "Jot needs permission to use your microphone. Windows has no separate input-monitoring or accessibility prompt.",
-        2 => "Jot downloads the right on-device model for the language you pick. Model names stay out of your way.",
-        3 => "Pick the input device to record from. The meter below confirms Jot can hear you.",
-        4 => $"Press {HotkeyLabel} anywhere to start and stop dictation. You can change this later in Settings.",
-        5 => "Your recordings and transcripts are saved here. The default keeps them off your system drive to save space — change it if you like.",
+        2 => "The speech model (~754 MB) and your recordings are stored here. Pick a drive with room — you can change it later in Settings.",
+        3 => "One multilingual on-device model handles every language — pick the one you'll speak most. The next step downloads it here.",
+        4 => "Pick the input device to record from. The meter below confirms Jot can hear you.",
+        5 => $"Press {HotkeyLabel} anywhere to start and stop dictation. You can change this later in Settings.",
         _ => $"You can re-run this anytime from Settings. Press {HotkeyLabel} to try your first dictation.",
     };
 
@@ -102,6 +126,8 @@ public sealed partial class WizardViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFirstStep));
         OnPropertyChanged(nameof(IsLastStep));
         OnPropertyChanged(nameof(Progress));
+        OnPropertyChanged(nameof(PrimaryButtonText));
+        OnPropertyChanged(nameof(ShowSkip));
     }
 
     partial void OnLanguageChanged(string value) { _store.Current.Language = value; _store.Save(); }
@@ -111,9 +137,31 @@ public sealed partial class WizardViewModel : ObservableObject
         _store.Save();
     }
 
-    [RelayCommand]
-    private void Next()
+    /// <summary>Primary-button label: normally "Next"/"Get started", but on the Language step (when the model
+    /// isn't present yet) it becomes "Download &amp; continue", then a live "Downloading… N%", so one click both
+    /// fetches the model and moves on. Uses the same shared downloader as Settings.</summary>
+    public string PrimaryButtonText =>
+        _download.IsDownloading ? $"Downloading… {_download.Progress:0}%"
+        : IsLastStep ? "Get started"
+        : (StepIndex == LanguageStep && !_download.IsInstalled) ? "Download & continue"
+        : "Next";
+
+    /// <summary>No Skip anywhere until the model is downloaded — the user can't skip past onboarding without
+    /// it. Once it's present, Skip is fine on every step except the last (which has no Skip).</summary>
+    public bool ShowSkip => !IsLastStep && _download.IsInstalled;
+
+    private bool CanAdvance() => !_download.IsDownloading;
+
+    [RelayCommand(CanExecute = nameof(CanAdvance))]
+    private async Task Next()
     {
+        // Gate the Language step on the model being present: download it (with progress shown on the button
+        // and bar) on first click, then advance once it's ready. Same ModelDownload the Settings page uses.
+        if (StepIndex == LanguageStep && !_download.IsInstalled)
+        {
+            bool ok = await _download.EnsureAsync();
+            if (!ok) return;   // failed — stay on the step; the status line explains, the button retries
+        }
         if (IsLastStep) Finish();
         else StepIndex++;
     }
@@ -137,7 +185,8 @@ public sealed partial class WizardViewModel : ObservableObject
     private void Finish()
     {
         _store.Current.FirstRunComplete = true;
-        _store.Current.AdvancedFeatures = true; // completing setup reveals power-user surfaces
+        // Deliberately does NOT flip AdvancedFeatures on — the basic/advanced split exists so a first-time
+        // user isn't dropped into a wall of options. Advanced stays off until the user opts in from Settings.
         _store.Save();
         CloseRequested?.Invoke();
     }

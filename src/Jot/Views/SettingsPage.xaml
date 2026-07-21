@@ -151,7 +151,7 @@
                  Named so search can force it open when a query matches an advanced row. -->
             <StackPanel x:Name="AdvancedPanel" Visibility="{Binding AdvancedFeatures, Converter={StaticResource BoolToVis}}">
 
-                <ctl:SettingRow Title="Launch at login" Description="Start Jot in the tray when you sign in.">
+                <ctl:SettingRow Title="Launch at login" Description="Open Jot when you sign in.">
                     <ui:ToggleSwitch IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}" />
                 </ctl:SettingRow>
                 <ctl:SettingRow Title="Save location" Description="Where Jot keeps your recordings and transcripts.">
@@ -186,15 +186,15 @@
                     <StackPanel MinWidth="280">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}"
-                                           Visibility="{Binding IsModelInstalled, Converter={StaticResource BoolToVis}}" />
-                            <TextBlock Text="{Binding ModelStatusText}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                           Visibility="{Binding Download.IsInstalled, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Text="{Binding Download.StatusText}" Margin="8,0,0,0" VerticalAlignment="Center" />
                             <ui:Button Content="Download" Margin="12,0,0,0" Appearance="Primary"
-                                       Command="{Binding DownloadModelCommand}"
-                                       Visibility="{Binding ShowDownloadButton, Converter={StaticResource BoolToVis}}" />
+                                       Command="{Binding Download.EnsureCommand}"
+                                       Visibility="{Binding Download.ShowButton, Converter={StaticResource BoolToVis}}" />
                         </StackPanel>
                         <ProgressBar Margin="0,8,0,0" Minimum="0" Maximum="100"
-                                     Value="{Binding ModelDownloadProgress}"
-                                     Visibility="{Binding IsDownloadingModel, Converter={StaticResource BoolToVis}}" />
+                                     Value="{Binding Download.Progress}"
+                                     Visibility="{Binding Download.IsDownloading, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </ctl:SettingRow>
                 <ctl:SettingRow Title="Processing"
@@ -205,6 +205,10 @@
                 <ctl:SettingRow Title="Live captions while recording"
                                 Description="Show a running transcript in the status pill as you speak.">
                     <ui:ToggleSwitch IsChecked="{Binding LiveCaptions, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Clean up transcripts"
+                                Description="Fix filler words, casing, and numbers on-device — no AI, no network.">
+                    <ui:ToggleSwitch IsChecked="{Binding OfflineCleanupEnabled, Mode=TwoWay}" />
                 </ctl:SettingRow>
                 <ctl:SettingRow Title="Auto-paste transcription" Description="Insert the text at your cursor automatically.">
                     <ui:ToggleSwitch IsChecked="{Binding AutoPaste, Mode=TwoWay}" />

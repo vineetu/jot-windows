@@ -28,6 +28,7 @@ public sealed class JotSettings
     public string Language { get; set; } = "English";
     public string TranscriptionDevice { get; set; } = "CPU"; // CPU | GPU (DirectML) — encoder execution provider
     public bool LiveCaptions { get; set; } = true;            // show a running transcript in the pill while recording
+    public bool OfflineCleanupEnabled { get; set; } = true;   // on-device, non-AI tidy of every transcript (filler/casing/numbers)
     public bool AutoPaste { get; set; } = true;
     public bool AutoEnter { get; set; }
     public bool KeepInClipboard { get; set; }
@@ -49,9 +50,9 @@ public sealed class JotSettings
     public string ToggleRecordingHotkey { get; set; } = "Alt+Space";
     public string CancelRecordingHotkey { get; set; } = "Escape"; // armed only while recording
     public string? PushToTalkHotkey { get; set; }
-    public string PasteLastHotkey { get; set; } = "Ctrl+Alt+P"; // paste last transcript (rewrite or raw) at the cursor
-    public string RewriteHotkey { get; set; } = "Alt+OemQuestion";
-    public string RewriteWithVoiceHotkey { get; set; } = "Alt+OemPeriod";
+    public string PasteLastHotkey { get; set; } = "Ctrl+Alt+V"; // paste last transcript (rewrite or raw) at the cursor
+    public string RewriteHotkey { get; set; } = "Ctrl+Alt+OemQuestion";   // rewrite selection: Ctrl+Alt+/
+    public string RewriteWithVoiceHotkey { get; set; } = "Ctrl+Alt+OemPeriod"; // rewrite with voice: Ctrl+Alt+.
 
     // Lifecycle
     public bool FirstRunComplete { get; set; }

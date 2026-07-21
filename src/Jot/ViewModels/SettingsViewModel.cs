@@ -24,8 +24,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsStore _store;
     private readonly IThemeService _theme;
-    private readonly NemotronModel _model;
-    private readonly NemotronModelInstaller _installer;
+    private readonly ModelDownload _download;
     private readonly ITranscriber _transcriber;
     private readonly IAiClient _ai;
     private readonly AiCredentials _credentials;
@@ -68,6 +67,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _language = "English";
     [ObservableProperty] private string _transcriptionDevice = "CPU";
     [ObservableProperty] private bool _liveCaptions = true;
+    [ObservableProperty] private bool _offlineCleanupEnabled = true;
     [ObservableProperty] private bool _autoPaste;
     [ObservableProperty] private bool _autoEnter;
     [ObservableProperty] private bool _keepInClipboard;
@@ -79,15 +79,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _rewriteHotkey = "Alt+OemQuestion";
     [ObservableProperty] private string _rewriteWithVoiceHotkey = "Alt+OemPeriod";
 
-    // On-device model download state (backed by NemotronModelInstaller)
-    [ObservableProperty] private bool _isModelInstalled;
-    [ObservableProperty] private bool _isDownloadingModel;
-    [ObservableProperty] private double _modelDownloadProgress; // 0..100
-    [ObservableProperty] private string _modelStatusText = "";
-
-    public bool ShowDownloadButton => !IsModelInstalled && !IsDownloadingModel;
-    partial void OnIsModelInstalledChanged(bool value) => OnPropertyChanged(nameof(ShowDownloadButton));
-    partial void OnIsDownloadingModelChanged(bool value) => OnPropertyChanged(nameof(ShowDownloadButton));
+    /// <summary>Shared on-device model download — the SAME instance the setup wizard uses (one downloader,
+    /// one progress/status surface). The Model row binds its status, progress bar and Download button here.</summary>
+    public ModelDownload Download => _download;
 
     [ObservableProperty] private string _aiProvider = "None";
     [ObservableProperty] private string _aiBaseUrl = "";
@@ -192,13 +186,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
-        NemotronModel model, NemotronModelInstaller installer,
+        ModelDownload download,
         ITranscriber transcriber, IAiClient ai, AiCredentials credentials, PfbAuth pfb, ISoundService sound)
     {
         _store = store;
         _theme = theme;
-        _model = model;
-        _installer = installer;
+        _download = download;
         _transcriber = transcriber;
         _ai = ai;
         _credentials = credentials;
@@ -215,6 +208,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _language = S.Language;
         _transcriptionDevice = S.TranscriptionDevice;
         _liveCaptions = S.LiveCaptions;
+        _offlineCleanupEnabled = S.OfflineCleanupEnabled;
         _autoPaste = S.AutoPaste;
         _autoEnter = S.AutoEnter;
         _keepInClipboard = S.KeepInClipboard;
@@ -236,7 +230,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _soundError = S.SoundError;
 
         LoadDevices();
-        RefreshModelStatus();
+        _download.Refresh();
         RefreshAiModels();
     }
 
@@ -248,15 +242,6 @@ public sealed partial class SettingsViewModel : ObservableObject
             n.SetLanguageId(id);
         else if (transcriber is NemotronFp16Transcriber f)
             f.SetLanguageSlot(id);   // English = 0 in both maps
-    }
-
-    private void RefreshModelStatus()
-    {
-        IsModelInstalled = _model.IsInstalled;
-        if (IsModelInstalled)
-            ModelStatusText = "Nemotron 3.5 · Installed";
-        else if (!IsDownloadingModel)
-            ModelStatusText = "Not installed (~0.67 GB)";
     }
 
     private void LoadDevices()
@@ -287,6 +272,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
     partial void OnTranscriptionDeviceChanged(string value) { S.TranscriptionDevice = value; Save(); }
     partial void OnLiveCaptionsChanged(bool value) { S.LiveCaptions = value; Save(); }
+    partial void OnOfflineCleanupEnabledChanged(bool value) { S.OfflineCleanupEnabled = value; Save(); }
     partial void OnAutoPasteChanged(bool value) { S.AutoPaste = value; Save(); }
     partial void OnAutoEnterChanged(bool value) { S.AutoEnter = value; Save(); }
     partial void OnKeepInClipboardChanged(bool value) { S.KeepInClipboard = value; Save(); }
@@ -529,34 +515,6 @@ public sealed partial class SettingsViewModel : ObservableObject
             IsPfbBusy = false;
             RefreshPfb();
         }
-    }
-
-    [RelayCommand]
-    private async Task DownloadModel()
-    {
-        if (IsModelInstalled || IsDownloadingModel) return;
-
-        IsDownloadingModel = true;
-        ModelDownloadProgress = 0;
-        ModelStatusText = "Downloading… 0%";
-        try
-        {
-            var progress = new Progress<double>(p =>
-            {
-                ModelDownloadProgress = p * 100;
-                ModelStatusText = $"Downloading… {p * 100:0}%";
-            });
-            await _installer.EnsureInstalledAsync(progress);
-        }
-        catch (Exception ex)
-        {
-            ModelStatusText = "Download failed — " + ex.Message;
-            IsDownloadingModel = false;
-            return;
-        }
-
-        IsDownloadingModel = false;
-        RefreshModelStatus();
     }
 
 

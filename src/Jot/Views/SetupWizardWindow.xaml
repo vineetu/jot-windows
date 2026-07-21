@@ -47,21 +47,28 @@
                            Text="If Jot isn't listed, make sure &quot;Let apps access your microphone&quot; is on. Unlike macOS, Windows doesn't require separate input-monitoring or accessibility permissions." />
             </StackPanel>
 
-            <!-- 2 Language -->
+            <!-- 3 Language -->
             <StackPanel VerticalAlignment="Center"
-                        Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=2}">
+                        Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=3}">
                 <ComboBox Width="220" HorizontalAlignment="Left" ItemsSource="{Binding Languages}"
                           SelectedItem="{Binding Language, Mode=TwoWay}" />
                 <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                    <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}" />
-                    <TextBlock Text="On-device model ready (≈600 MB)" Margin="8,0,0,0" VerticalAlignment="Center"
+                    <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}"
+                                   Visibility="{Binding Download.IsInstalled, Converter={StaticResource BoolToVis}}" />
+                    <ui:SymbolIcon Symbol="ArrowDownload24" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Visibility="{Binding Download.IsInstalled, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                    <TextBlock Text="{Binding Download.StatusText}" Margin="8,0,0,0" VerticalAlignment="Center"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
+                <ProgressBar Margin="0,12,0,0" Minimum="0" Maximum="100" Width="360" Height="6"
+                             HorizontalAlignment="Left"
+                             Value="{Binding Download.Progress}"
+                             Visibility="{Binding Download.IsDownloading, Converter={StaticResource BoolToVis}}" />
             </StackPanel>
 
-            <!-- 3 Microphone -->
+            <!-- 4 Microphone -->
             <StackPanel VerticalAlignment="Center"
-                        Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=3}">
+                        Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=4}">
                 <ComboBox Width="280" HorizontalAlignment="Left" DisplayMemberPath="Name"
                           ItemsSource="{Binding InputDevices}" SelectedItem="{Binding SelectedDevice, Mode=TwoWay}" />
                 <TextBlock Text="Input level" Margin="0,20,0,6"
@@ -70,9 +77,9 @@
                              HorizontalAlignment="Left" />
             </StackPanel>
 
-            <!-- 4 Shortcut -->
+            <!-- 5 Shortcut -->
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                        Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=4}">
+                        Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=5}">
                 <Border Padding="24,14" CornerRadius="10" HorizontalAlignment="Center"
                         Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}">
@@ -83,9 +90,9 @@
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
-            <!-- 5 Save location -->
+            <!-- 2 Save location -->
             <StackPanel VerticalAlignment="Center"
-                        Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=5}">
+                        Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=2}">
                 <TextBlock Text="Save location" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,6" />
                 <Border Padding="12,8" CornerRadius="6" Background="{DynamicResource ControlFillColorSecondaryBrush}"
                         BorderThickness="1" BorderBrush="{DynamicResource ControlElevationBorderBrush}">
@@ -119,11 +126,11 @@
 
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <ui:Button Content="Skip" Appearance="Transparent" Margin="0,0,8,0" Command="{Binding SkipCommand}"
-                           Visibility="{Binding IsLastStep, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
-                <ui:Button Content="Next" Appearance="Primary" Command="{Binding NextCommand}"
-                           Visibility="{Binding IsLastStep, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
-                <ui:Button Content="Get started" Appearance="Primary" Command="{Binding NextCommand}"
-                           Visibility="{Binding IsLastStep, Converter={StaticResource BoolToVis}}" />
+                           Visibility="{Binding ShowSkip, Converter={StaticResource BoolToVis}}" />
+                <!-- One primary button: label + enabled-state come from the VM, so on the Language step it reads
+                     "Download & continue" / "Downloading… N%" and disables itself while the shared download runs. -->
+                <ui:Button Content="{Binding PrimaryButtonText}" Appearance="Primary" Command="{Binding NextCommand}"
+                           MinWidth="160" />
             </StackPanel>
         </Grid>
     </Grid>

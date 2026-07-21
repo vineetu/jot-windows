@@ -163,6 +163,11 @@ public sealed class RecorderController : IDisposable
             }
             Log($"final text len={text.Length}");
 
+            // Deterministic on-device tidy (filler/casing/numbers) before the empty gate, so an all-filler
+            // dictation still routes to NothingTranscribed. isNemotron:true — the wired engine is Nemotron.
+            if (_settings.Current.OfflineCleanupEnabled)
+                text = Jot.Text.TextPipeline.Clean(text, _settings.Current.Language, isNemotron: true);
+
             if (string.IsNullOrWhiteSpace(text))
             {
                 Log("NOTHING transcribed (both live and batch empty)");

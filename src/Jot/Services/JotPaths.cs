@@ -14,29 +14,13 @@ public static class JotPaths
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
 
     /// <summary>
-    /// Default data folder. To keep the system drive free, this picks the fixed drive with the most
-    /// free space that ISN'T the system drive (e.g. D:), falling back to %LOCALAPPDATA% when no such
-    /// roomy drive exists (so it stays portable on single-drive PCs).
+    /// Default data folder: the standard Windows per-user location, <c>%LOCALAPPDATA%\Jot</c>. Always
+    /// present and writable for the current user — no drive guessing. A previous build auto-picked the
+    /// roomiest non-system drive (e.g. D:), which put the model somewhere unpredictable and could land on
+    /// a volume that isn't writable on an unfamiliar machine (a Store-cert failure vector). Users who want
+    /// a different drive set it explicitly via <see cref="JotSettings.DataDirectory"/> (Settings / wizard).
     /// </summary>
-    public static string DefaultDataDir
-    {
-        get
-        {
-            try
-            {
-                string? systemRoot = Path.GetPathRoot(Environment.SystemDirectory);
-                DriveInfo? best = DriveInfo.GetDrives()
-                    .Where(d => d.DriveType == DriveType.Fixed && d.IsReady
-                        && !string.Equals(d.Name, systemRoot, StringComparison.OrdinalIgnoreCase))
-                    .OrderByDescending(d => d.AvailableFreeSpace)
-                    .FirstOrDefault();
-                if (best is not null && best.AvailableFreeSpace > 5L * 1024 * 1024 * 1024) // >5 GB free
-                    return Path.Combine(best.RootDirectory.FullName, "Jot");
-            }
-            catch { /* fall through to LocalAppData */ }
-            return LocalAppDataDir;
-        }
-    }
+    public static string DefaultDataDir => LocalAppDataDir;
 
     /// <summary>The effective data folder (user-chosen, or the default).</summary>
     public static string DataDir(JotSettings s) =>

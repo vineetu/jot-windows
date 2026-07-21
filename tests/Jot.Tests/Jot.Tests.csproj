@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- Match the app: WPF types (PromptItem : ObservableObject pulls in nothing WPF, but the app project
+         is UseWPF, and matching the TFM/platform keeps the ProjectReference clean) on x64 so the native
+         ONNX payload the app references resolves. -->
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Jot\Jot.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The bundled prompt library the catalog reads from AppContext.BaseDirectory\Assets. Linked explicitly
+         so the fidelity test always has it, independent of transitive Content-copy behavior. -->
+    <Content Include="..\..\src\Jot\Assets\prompt-library.json" Link="Assets\prompt-library.json"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

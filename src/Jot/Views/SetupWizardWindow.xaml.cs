@@ -17,7 +17,9 @@ public partial class SetupWizardWindow : FluentWindow
     public SetupWizardWindow()
     {
         InitializeComponent();
-        _vm = new WizardViewModel(App.Services.GetRequiredService<ISettingsStore>());
+        _vm = new WizardViewModel(
+            App.Services.GetRequiredService<ISettingsStore>(),
+            App.Services.GetRequiredService<Jot.Services.ModelDownload>());
         DataContext = _vm;
         _vm.CloseRequested += Close;
         _vm.PropertyChanged += OnVmPropertyChanged;
@@ -32,7 +34,7 @@ public partial class SetupWizardWindow : FluentWindow
     {
         if (e.PropertyName != nameof(WizardViewModel.StepIndex)) return;
         UpdateDots();
-        if (_vm.StepIndex == 3) _meter.Start();
+        if (_vm.StepIndex == 4) _meter.Start();   // step 4 = "Choose your microphone"
         else _meter.Stop();
     }
 
@@ -53,6 +55,7 @@ public partial class SetupWizardWindow : FluentWindow
     protected override void OnClosed(EventArgs e)
     {
         _meter.Dispose();
+        _vm.Detach();   // drop the wizard's subscription to the singleton download so it can be collected
 
         // Closing via the title-bar X still counts as completing first-run so it doesn't nag again.
         var store = App.Services.GetRequiredService<ISettingsStore>();

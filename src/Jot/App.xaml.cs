@@ -1677,10 +1677,9 @@ public partial class App : System.Windows.Application
             var ai = new AiClient();
             var credentials = new AiCredentials(settings);
             var sound = new SoundService(settings);
-            var catalog = new PromptCatalog();
             var recorder = new AudioRecorder();
             var transcriber = new StubTranscriber();
-            var rewrite = new Rewrite.RewriteController(transcriber, recorder, settings, store, ai, credentials, sound, catalog);
+            var rewrite = new Rewrite.RewriteController(transcriber, recorder, settings, store, ai, credentials, sound);
 
             bool done = false;
             string? succeeded = null;
@@ -1940,9 +1939,11 @@ public partial class App : System.Windows.Application
         services.AddSingleton<Transcription.Onnx.OnnxSessionFactory>();
         services.AddSingleton<ParakeetModel>();
         services.AddSingleton<ParakeetModelInstaller>();
-        services.AddSingleton<Transcription.Nemotron.NemotronModel>();
+        services.AddSingleton<Transcription.Nemotron.NemotronModel>(sp =>
+            new Transcription.Nemotron.NemotronModel(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
         services.AddSingleton<Transcription.Nemotron.NemotronFp16Model>();
         services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>();
+        services.AddSingleton<ModelDownload>();   // shared model-download state (wizard + settings)
         services.AddSingleton<RetentionCleaner>();
         services.AddSingleton<UsageStats>();
         services.AddSingleton<HotkeyManager>();

@@ -26,6 +26,7 @@ public sealed class PillController
     private DispatcherTimer? _autoHideTimer;
     private DateTime _startedAt;
     private bool _transient; // a success/error/notice is showing and manages its own dismissal
+    private bool _isRewrite; // the current pill activity is a voice-rewrite (hide Copy; rewrite-specific hints)
 
     public PillController(RecorderController recorder, RewriteController rewrite, ISettingsStore settings)
     {
@@ -60,6 +61,7 @@ public sealed class PillController
 
         // Rewrite pipeline drives the same pill (all events marshalled onto the UI thread).
         _rewrite.PhaseChanged += p => _dispatcher.BeginInvoke(() => OnRewritePhase(p));
+        _rewrite.PartialTranscript += text => _dispatcher.BeginInvoke(DispatcherPriority.Background, () => OnRewritePartial(text));
         _rewrite.Succeeded += t => _dispatcher.BeginInvoke(() => OnTranscriptReady(t));
         _rewrite.Failed += (title, msg) => _dispatcher.BeginInvoke(() => OnFailed(title, msg));
         _rewrite.NothingSelected += () => _dispatcher.BeginInvoke(() =>
@@ -74,14 +76,16 @@ public sealed class PillController
     {
         switch (phase)
         {
-            case RewritePhase.Listening: // recording the spoken instruction — show the waveform
+            case RewritePhase.Listening: // recording the spoken instruction — live caption like dictation
+                _isRewrite = true;
                 CancelAutoHide();
                 _transient = false;
                 _startedAt = DateTime.Now;
                 StartElapsed();
-                Pill.SetKeyHints(null, null); // no global cancel key is armed for voice rewrite; use the Stop button
+                Pill.SetKeyHints(VoiceRewriteStopHint(), EscHint()); // e.g. "Ctrl + Alt + . or Esc to stop"
                 Pill.SetState(PillState.Recording);
                 Pill.SetStopAction(_rewrite.ToggleVoiceRewrite);
+                Pill.SetCopyVisible(false); // the result is pasted over the selection — no copy affordance here
                 break;
             case RewritePhase.Working:
                 _transient = false;
@@ -97,6 +101,22 @@ public sealed class PillController
         }
     }
 
+    // Live caption of the spoken rewrite instruction — same cosmetic <unk>-scrub as dictation partials.
+    private void OnRewritePartial(string text)
+    {
+        if (_rewrite.Phase != RewritePhase.Listening) return;
+        string shown = _settings.Current.OfflineCleanupEnabled
+            ? Jot.Text.TextPipeline.CleanPartial(text, isNemotron: true)
+            : text;
+        _pill?.SetLiveText(shown);
+    }
+
+    private string? VoiceRewriteStopHint()
+        => HotkeyChord.TryParse(_settings.Current.RewriteWithVoiceHotkey, out HotkeyChord c) ? c.ToDisplayString() : null;
+
+    private static string? EscHint()
+        => HotkeyChord.TryParse(Jot.Recording.RecorderController.StopRecordingChord, out HotkeyChord c) ? c.ToDisplayString() : null;
+
     private PillWindow Pill => _pill ??= new PillWindow();
 
     // Capture-thread callback → hop onto the UI thread at render priority.
@@ -108,7 +128,13 @@ public sealed class PillController
     private void OnPartial(string text)
         => _dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
-            if (_recorder.State == RecorderState.Recording) _pill?.SetLiveText(text);
+            if (_recorder.State != RecorderState.Recording) return;
+            // Cosmetic <unk>-scrub of the growing partial (idempotent). The authoritative clean is the final
+            // pass in RecorderController; this just keeps the live caption from flashing a raw artifact.
+            string shown = _settings.Current.OfflineCleanupEnabled
+                ? Jot.Text.TextPipeline.CleanPartial(text, isNemotron: true)
+                : text;
+            _pill?.SetLiveText(shown);
         });
 
     private void OnStateChanged(RecorderState state)
@@ -116,6 +142,7 @@ public sealed class PillController
         switch (state)
         {
             case RecorderState.Recording:
+                _isRewrite = false;
                 CancelAutoHide();
                 _transient = false;
                 _startedAt = DateTime.Now;
@@ -124,6 +151,7 @@ public sealed class PillController
                 Pill.SetKeyHints(stop, cancel);
                 Pill.SetState(PillState.Recording);
                 Pill.SetStopAction(_recorder.Toggle);
+                Pill.SetCopyVisible(true);
                 break;
 
             case RecorderState.Transcribing:
@@ -147,6 +175,7 @@ public sealed class PillController
     {
         _transient = true;
         Pill.SetState(PillState.Success, text.Trim());
+        Pill.SetCopyVisible(!_isRewrite);   // a dictation result is copyable; a voice-rewrite result is not
         ScheduleHide(4000);
     }
 

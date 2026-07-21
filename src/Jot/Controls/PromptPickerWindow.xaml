@@ -85,7 +85,7 @@
                                         <TextBlock Text="default" FontSize="10" Foreground="#B0FFFFFF" />
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Text="{Binding Body}" Foreground="#8CFFFFFF" FontSize="12" Margin="0,2,0,0"
+                                <TextBlock Text="{Binding Subtitle}" Foreground="#8CFFFFFF" FontSize="12" Margin="0,2,0,0"
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                             <TextBlock Grid.Column="2" Text="{Binding Category}" Foreground="#66FFFFFF" FontSize="11"
@@ -100,6 +100,7 @@
                     <Run Text="↑↓" /><Run Text=" navigate   " />
                     <Run Text="Enter" /><Run Text=" rewrite   " />
                     <Run Text="Ctrl+P" /><Run Text=" pin   " />
+                    <Run Text="Ctrl+D" /><Run Text=" default   " />
                     <Run Text="Esc" /><Run Text=" cancel" />
                 </TextBlock>
                 <TextBlock x:Name="CountText" HorizontalAlignment="Right" FontSize="11" Foreground="#66FFFFFF" />

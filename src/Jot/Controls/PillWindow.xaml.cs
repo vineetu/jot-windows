@@ -77,6 +77,11 @@ public partial class PillWindow : Window
         StopButton.Visibility = onStop is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>Shows/hides the Copy button in the expand panel. Hidden for voice-rewrite (its result is
+    /// pasted over the selection, not copied); shown for dictation.</summary>
+    public void SetCopyVisible(bool visible)
+        => CopyButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+
     /// <summary>
     /// Sets the key hints shown under the waveform while recording — the chord that stops recording
     /// and the one that cancels it (already display-formatted, e.g. "Alt + Space" / "Esc"). Pass null

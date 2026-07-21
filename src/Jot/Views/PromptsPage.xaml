@@ -64,7 +64,7 @@
                                         <TextBlock Text="Default" FontSize="10" Foreground="White" />
                                     </Border>
                                 </StackPanel>
-                                <TextBlock Text="{Binding Body}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
+                                <TextBlock Text="{Binding Subtitle}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
