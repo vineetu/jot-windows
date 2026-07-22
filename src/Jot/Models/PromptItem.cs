@@ -31,6 +31,21 @@ public sealed partial class PromptItem : ObservableObject
     /// <summary>v2 "Rewrite by voice" hint (e.g. "Add a tone or audience direction"). Carried but INERT in v1.</summary>
     public string? VoiceAugmentHint { get; init; }
 
+    /// <summary>When set, this prompt needs one piece of input before it can run (e.g. Translate → which
+    /// language) and the value is the question shown above the input field. Distinct from the optional
+    /// <see cref="VoiceAugmentHint"/>: this marks prompts that are materially degraded without input, so
+    /// picking one opens the type-or-speak field instead of running immediately.</summary>
+    public string? AugmentLabel { get; init; }
+
+    /// <summary>True when the prompt requires the extra-input step (see <see cref="AugmentLabel"/>).</summary>
+    public bool NeedsInput => !string.IsNullOrWhiteSpace(AugmentLabel);
+
+    /// <summary>The instruction actually sent to the LLM: the body, plus the user's supplied detail on its
+    /// own line when present. Empty detail runs the plain body (needs-input prompts still have a sensible
+    /// default, e.g. Translate falls back to English), so the input is never a hard blocker.</summary>
+    public string BuildInstruction(string? detail) =>
+        string.IsNullOrWhiteSpace(detail) ? Body : $"{Body}\n\n{detail.Trim()}";
+
     [ObservableProperty] private string _title = "";
     [ObservableProperty] private string _body = "";
     [ObservableProperty] private bool _isPinned;

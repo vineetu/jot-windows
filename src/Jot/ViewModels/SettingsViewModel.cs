@@ -25,6 +25,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsStore _store;
     private readonly IThemeService _theme;
     private readonly ModelDownload _download;
+    private readonly DataFolderMigrator _migrator;
     private readonly ITranscriber _transcriber;
     private readonly IAiClient _ai;
     private readonly AiCredentials _credentials;
@@ -82,6 +83,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Shared on-device model download — the SAME instance the setup wizard uses (one downloader,
     /// one progress/status surface). The Model row binds its status, progress bar and Download button here.</summary>
     public ModelDownload Download => _download;
+
+    /// <summary>Moves the model + recordings + library when the Save location changes — the Save-location
+    /// row binds its progress bar and status here. Shared singleton (also finishes interrupted moves on launch).</summary>
+    public DataFolderMigrator Migrator => _migrator;
 
     [ObservableProperty] private string _aiProvider = "None";
     [ObservableProperty] private string _aiBaseUrl = "";
@@ -186,12 +191,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
-        ModelDownload download,
+        ModelDownload download, DataFolderMigrator migrator,
         ITranscriber transcriber, IAiClient ai, AiCredentials credentials, PfbAuth pfb, ISoundService sound)
     {
         _store = store;
         _theme = theme;
         _download = download;
+        _migrator = migrator;
         _transcriber = transcriber;
         _ai = ai;
         _credentials = credentials;
@@ -414,30 +420,30 @@ public sealed partial class SettingsViewModel : ObservableObject
 
 
     [RelayCommand]
-    private void BrowseDataDirectory()
+    private async Task BrowseDataDirectory()
     {
         using var dlg = new System.Windows.Forms.FolderBrowserDialog
         {
-            Description = "Choose where Jot saves your recordings and transcripts",
+            Description = "Choose where Jot saves your model, recordings and transcripts",
             UseDescriptionForTitle = true,
             SelectedPath = DataDirectory,
         };
         if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK || string.IsNullOrWhiteSpace(dlg.SelectedPath))
             return;
-        S.DataDirectory = dlg.SelectedPath;
-        Save();
-        DataDirectory = dlg.SelectedPath;
-        System.Windows.MessageBox.Show(
-            "Save location updated. Restart Jot for it to fully take effect.",
-            "Save location", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+        await MoveDataTo(dlg.SelectedPath);
     }
 
     [RelayCommand]
-    private void UseDefaultDataDirectory()
+    private Task UseDefaultDataDirectory() => MoveDataTo(JotPaths.DefaultDataDir);
+
+    // Migrate everything (model + recordings + library) to the chosen folder rather than stranding it,
+    // then reflect the now-flipped setting. The migrator repoints DataDirectory itself on success and
+    // leaves it untouched on failure, so DataDir(S) is the source of truth either way.
+    private async Task MoveDataTo(string target)
     {
-        S.DataDirectory = null;
-        Save();
+        bool ok = await _migrator.MoveToAsync(target);
         DataDirectory = JotPaths.DataDir(S);
+        if (ok) _download.Refresh(); // model now lives in the new folder — re-check "Installed" against it
     }
 
     [RelayCommand]

@@ -144,6 +144,7 @@
       "sampleInput": "Hey team, just confirming the demo is at 3pm Pacific tomorrow. Please test your mic beforehand.",
       "sampleOutput": "Equipo, confirmo que la demo es mañana a las 3pm hora del Pacífico. Por favor prueben su micrófono antes.",
       "voiceAugmentHint": "Say the target language (e.g. \"to Japanese\")",
+      "augmentLabel": "Translate to which language?",
       "providerCompatibility": ["anthropic", "openai", "gemini", "ollama"]
     },
     {

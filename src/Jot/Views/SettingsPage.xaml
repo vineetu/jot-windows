@@ -154,12 +154,25 @@
                 <ctl:SettingRow Title="Launch at login" Description="Open Jot when you sign in.">
                     <ui:ToggleSwitch IsChecked="{Binding LaunchAtLogin, Mode=TwoWay}" />
                 </ctl:SettingRow>
-                <ctl:SettingRow Title="Save location" Description="Where Jot keeps your recordings and transcripts.">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding DataDirectory}" VerticalAlignment="Center" MaxWidth="300"
-                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                        <ui:Button Content="Change…" Margin="10,0,0,0" Command="{Binding BrowseDataDirectoryCommand}" />
-                        <ui:Button Content="Default" Margin="6,0,0,0" Command="{Binding UseDefaultDataDirectoryCommand}" />
+                <ctl:SettingRow Title="Save location" Description="Where Jot keeps your model, recordings and transcripts. Changing it moves your data — Jot stays usable and won't re-download.">
+                    <StackPanel MinWidth="300">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <TextBlock Text="{Binding DataDirectory}" VerticalAlignment="Center" MaxWidth="300"
+                                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <ui:Button Content="Change…" Margin="10,0,0,0" Command="{Binding BrowseDataDirectoryCommand}"
+                                       IsEnabled="{Binding Migrator.NotMigrating}" />
+                            <ui:Button Content="Default" Margin="6,0,0,0" Command="{Binding UseDefaultDataDirectoryCommand}"
+                                       IsEnabled="{Binding Migrator.NotMigrating}" />
+                        </StackPanel>
+                        <!-- Move progress: shown only while a migration runs. Warn against closing mid-move. -->
+                        <StackPanel Margin="0,8,0,0"
+                                    Visibility="{Binding Migrator.IsMigrating, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding Migrator.StatusText}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="Please keep Jot open until this finishes." FontSize="11" Margin="0,2,0,0"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                            <ProgressBar Margin="0,6,0,0" Minimum="0" Maximum="100" Value="{Binding Migrator.Progress}" />
+                        </StackPanel>
                     </StackPanel>
                 </ctl:SettingRow>
                 <ctl:SettingRow Title="Keep audio" Description="Older audio is cleared automatically to save space. Transcripts are always kept.">

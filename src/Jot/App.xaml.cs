@@ -280,7 +280,21 @@ public partial class App : System.Windows.Application
         var transcriber = Services.GetRequiredService<ITranscriber>();
         var settings = Services.GetRequiredService<ISettingsStore>();
         SettingsViewModel.ApplyLanguage(transcriber, settings.Current.Language);
-        if (transcriber.IsModelInstalled) _ = Task.Run(transcriber.WarmUp);
+
+        // Finish any data-folder move interrupted by a crash/kill before warming up (so warmup reads the
+        // settled folder and doesn't pin files the resume needs to delete). The app already points at a
+        // complete folder throughout, so this can run in the background off the boot path.
+        var migrator = Services.GetRequiredService<DataFolderMigrator>();
+        if (migrator.HasPendingMigration)
+        {
+            Notify("Finishing move", "Jot is finishing moving your data to the new folder…", Forms.ToolTipIcon.Info);
+            _ = Task.Run(() =>
+            {
+                migrator.ResumePending();
+                if (transcriber.IsModelInstalled) transcriber.WarmUp();
+            });
+        }
+        else if (transcriber.IsModelInstalled) _ = Task.Run(transcriber.WarmUp);
 
         // Enforce the retention window (delete old recordings) off the UI thread.
         _ = Task.Run(() => Services.GetRequiredService<RetentionCleaner>().Prune());
@@ -1944,6 +1958,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<Transcription.Nemotron.NemotronFp16Model>();
         services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>();
         services.AddSingleton<ModelDownload>();   // shared model-download state (wizard + settings)
+        services.AddSingleton<DataFolderMigrator>(); // moves data when the Save location changes; resumes on launch
         services.AddSingleton<RetentionCleaner>();
         services.AddSingleton<UsageStats>();
         services.AddSingleton<HotkeyManager>();
@@ -1967,6 +1982,7 @@ public partial class App : System.Windows.Application
         });
         services.AddSingleton<RecorderController>();
         services.AddSingleton<Rewrite.RewriteController>();
+        services.AddSingleton<IPhraseDictation, PhraseDictation>(); // "speak" side of the prompt-augment field (reuses recorder+engine)
         services.AddSingleton<Import.FfmpegInstaller>();
         services.AddSingleton<Import.MediaImporter>();
         services.AddSingleton<PillController>();
@@ -2133,7 +2149,9 @@ public partial class App : System.Windows.Application
         var vm = Services.GetRequiredService<PromptPickerViewModel>();
         var picker = new Controls.PromptPickerWindow(vm)
         {
-            PromptChosen = item => _rewrite!.RunRewrite(item.Body),
+            // Needs-input prompts (e.g. Translate) arrive with the typed/spoken detail folded in; plain
+            // prompts pass detail=null and run the body as-is.
+            PromptChosen = (item, detail) => _rewrite!.RunRewrite(item.BuildInstruction(detail)),
         };
         picker.Show();
         picker.Activate();

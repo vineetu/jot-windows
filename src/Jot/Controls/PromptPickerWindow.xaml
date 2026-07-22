@@ -31,6 +31,7 @@
 
             <ui:TextBox x:Name="Search" Grid.Row="1" PlaceholderText="Search prompts…"
                         Icon="{ui:SymbolIcon Wand24}"
+                        Visibility="{Binding IsAugmenting, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
 
             <ListView x:Name="List" Grid.Row="2" Margin="0,10,0,0"
@@ -38,6 +39,7 @@
                       Background="Transparent" BorderThickness="0"
                       IsSynchronizedWithCurrentItem="True"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      Visibility="{Binding IsAugmenting, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
                       Focusable="False">
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
@@ -95,15 +97,57 @@
                 </ListView.ItemTemplate>
             </ListView>
 
+            <!-- Augment step: shown instead of the list for needs-input prompts (e.g. Translate → which
+                 language). The user types the detail or speaks it (mic → PhraseDictation), then runs. -->
+            <StackPanel Grid.Row="2" Margin="0,10,0,0" VerticalAlignment="Top"
+                        Visibility="{Binding IsAugmenting, Converter={StaticResource BoolToVis}}">
+                <StackPanel Orientation="Horizontal">
+                    <!-- Live-recording dot: same brush the pill uses, so "you're being heard" reads consistently. -->
+                    <Ellipse Width="9" Height="9" Margin="0,0,8,0" VerticalAlignment="Center"
+                             Fill="{DynamicResource JotRecordingBrush}"
+                             Visibility="{Binding IsListening, Converter={StaticResource BoolToVis}}" />
+                    <TextBlock Text="{Binding AugmentLabel}" Foreground="#F2FFFFFF" FontWeight="SemiBold" FontSize="15"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <!-- Editable while the mic is live: the caption streams in, and the first keystroke hands the
+                     field to the user (VM's typing-takeover), so no read-only lock and no lost characters.
+                     No Speak/Stop button — the mic auto-starts, Esc stops, Enter runs, typing takes over. -->
+                <ui:TextBox x:Name="AugmentBox" Margin="0,10,0,0"
+                            PlaceholderText="Speak now, or type the answer…"
+                            Icon="{ui:SymbolIcon Mic24}"
+                            Text="{Binding AugmentText, UpdateSourceTrigger=PropertyChanged}" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                    <ui:Button Content="Cancel" Margin="0,0,8,0" Command="{Binding CancelAugmentCommand}" />
+                    <!-- Always enabled: ConfirmAugment stops the mic first, so running mid-speech is safe. -->
+                    <ui:Button Content="Rewrite" Appearance="Primary" Command="{Binding ConfirmAugmentCommand}" />
+                </StackPanel>
+            </StackPanel>
+
             <Grid Grid.Row="3" Margin="4,10,4,0">
-                <TextBlock HorizontalAlignment="Left" FontSize="11" Foreground="#66FFFFFF">
+                <TextBlock HorizontalAlignment="Left" FontSize="11" Foreground="#66FFFFFF"
+                           Visibility="{Binding IsAugmenting, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
                     <Run Text="↑↓" /><Run Text=" navigate   " />
                     <Run Text="Enter" /><Run Text=" rewrite   " />
                     <Run Text="Ctrl+P" /><Run Text=" pin   " />
                     <Run Text="Ctrl+D" /><Run Text=" default   " />
                     <Run Text="Esc" /><Run Text=" cancel" />
                 </TextBlock>
-                <TextBlock x:Name="CountText" HorizontalAlignment="Right" FontSize="11" Foreground="#66FFFFFF" />
+                <!-- Listening: show how to stop speaking (Esc), and that Enter runs. No silence timeout —
+                     the mic waits for an explicit stop, since the user needs time to give the instruction. -->
+                <TextBlock HorizontalAlignment="Left" FontSize="11" Foreground="#66FFFFFF"
+                           Visibility="{Binding ShowListeningHint, Converter={StaticResource BoolToVis}}">
+                    <Run Text="Listening…  " Foreground="#B0FFFFFF" />
+                    <Run Text="Esc" /><Run Text=" stop speaking   " />
+                    <Run Text="Enter" /><Run Text=" rewrite   " />
+                    <Run Text="or just type" />
+                </TextBlock>
+                <TextBlock HorizontalAlignment="Left" FontSize="11" Foreground="#66FFFFFF"
+                           Visibility="{Binding ShowAugmentIdleHint, Converter={StaticResource BoolToVis}}">
+                    <Run Text="Enter" /><Run Text=" rewrite   " />
+                    <Run Text="Esc" /><Run Text=" back" />
+                </TextBlock>
+                <TextBlock x:Name="CountText" HorizontalAlignment="Right" FontSize="11" Foreground="#66FFFFFF"
+                           Visibility="{Binding IsAugmenting, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
             </Grid>
         </Grid>
     </Border>

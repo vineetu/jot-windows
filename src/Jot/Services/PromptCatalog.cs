@@ -64,7 +64,7 @@ public sealed class PromptCatalog
                     Slug = p.Id, Category = p.Category, Title = p.Title, Body = p.Body,
                     Description = p.Description ?? "", Tier = p.Tier, Tags = p.Tags ?? [],
                     SampleInput = p.SampleInput ?? "", SampleOutput = p.SampleOutput ?? "",
-                    VoiceAugmentHint = p.VoiceAugmentHint, IsBuiltIn = true,
+                    VoiceAugmentHint = p.VoiceAugmentHint, AugmentLabel = p.AugmentLabel, IsBuiltIn = true,
                 });
         }
         catch (Exception ex)
@@ -95,7 +95,7 @@ public sealed class PromptCatalog
     private sealed record BundledLibraryDto(int Version, List<BundledPromptDto> Prompts);
     private sealed record BundledPromptDto(string Id, string Title, int Tier, string Category,
         string[]? Tags, string Body, string? Description, string? SampleInput, string? SampleOutput,
-        string? VoiceAugmentHint);
+        string? VoiceAugmentHint, string? AugmentLabel);
 
     public IEnumerable<string> Categories => Prompts.Select(p => p.Category).Distinct();
 
