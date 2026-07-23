@@ -86,6 +86,13 @@
                                             Visibility="{Binding IsDefault, Converter={StaticResource BoolToVis}}">
                                         <TextBlock Text="default" FontSize="10" Foreground="#B0FFFFFF" />
                                     </Border>
+                                    <!-- "Suggested" affordance: this prompt runs fine as-is but improves with a
+                                         direction — Shift+Enter opens the type/speak step (PromptItem.SuggestsInput). -->
+                                    <Border Margin="8,1,0,0" Padding="5,0" CornerRadius="4" Background="#1FFFFFFF"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding SuggestsInput, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="⇧⏎ direction" FontSize="10" Foreground="#B0FFFFFF" />
+                                    </Border>
                                 </StackPanel>
                                 <TextBlock Text="{Binding Subtitle}" Foreground="#8CFFFFFF" FontSize="12" Margin="0,2,0,0"
                                            TextTrimming="CharacterEllipsis" />
@@ -113,7 +120,7 @@
                      field to the user (VM's typing-takeover), so no read-only lock and no lost characters.
                      No Speak/Stop button — the mic auto-starts, Esc stops, Enter runs, typing takes over. -->
                 <ui:TextBox x:Name="AugmentBox" Margin="0,10,0,0"
-                            PlaceholderText="Speak now, or type the answer…"
+                            PlaceholderText="{Binding AugmentPlaceholder}"
                             Icon="{ui:SymbolIcon Mic24}"
                             Text="{Binding AugmentText, UpdateSourceTrigger=PropertyChanged}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
@@ -125,12 +132,18 @@
 
             <Grid Grid.Row="3" Margin="4,10,4,0">
                 <TextBlock HorizontalAlignment="Left" FontSize="11" Foreground="#66FFFFFF"
-                           Visibility="{Binding IsAugmenting, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                           Visibility="{Binding ShowShortcutHint, Converter={StaticResource BoolToVis}}">
                     <Run Text="↑↓" /><Run Text=" navigate   " />
                     <Run Text="Enter" /><Run Text=" rewrite   " />
+                    <Run Text="Shift + Enter" /><Run Text=" direction   " />
                     <Run Text="Ctrl+P" /><Run Text=" pin   " />
-                    <Run Text="Ctrl+D" /><Run Text=" default   " />
                     <Run Text="Esc" /><Run Text=" cancel" />
+                </TextBlock>
+                <!-- First-run coach for the optional-direction feature (PromptPickerViewModel.ShowAugmentTip):
+                     least-text one-liner, self-reverts to the shortcut row once used or after a few opens. -->
+                <TextBlock HorizontalAlignment="Left" FontSize="11" Foreground="#66FFFFFF"
+                           Visibility="{Binding ShowTipHint, Converter={StaticResource BoolToVis}}">
+                    <Run Text="Tip · " Foreground="#B0FFFFFF" /><Run Text="Shift + Enter" Foreground="#B0FFFFFF" /><Run Text=" to add a direction — e.g. “for execs”, “to Japanese”" />
                 </TextBlock>
                 <!-- Listening: show how to stop speaking (Esc), and that Enter runs. No silence timeout —
                      the mic waits for an explicit stop, since the user needs time to give the instruction. -->

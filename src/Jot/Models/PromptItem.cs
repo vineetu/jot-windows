@@ -40,6 +40,11 @@ public sealed partial class PromptItem : ObservableObject
     /// <summary>True when the prompt requires the extra-input step (see <see cref="AugmentLabel"/>).</summary>
     public bool NeedsInput => !string.IsNullOrWhiteSpace(AugmentLabel);
 
+    /// <summary>True for prompts that run fine by default but are improved by an optional direction — they
+    /// carry a <see cref="VoiceAugmentHint"/> but don't <see cref="NeedsInput"/>. The picker shows a
+    /// "⇧⏎ direction" affordance on these rows; Shift+Enter opens the same step on demand (empty = plain body).</summary>
+    public bool SuggestsInput => !NeedsInput && !string.IsNullOrWhiteSpace(VoiceAugmentHint);
+
     /// <summary>The instruction actually sent to the LLM: the body, plus the user's supplied detail on its
     /// own line when present. Empty detail runs the plain body (needs-input prompts still have a sensible
     /// default, e.g. Translate falls back to English), so the input is never a hard blocker.</summary>

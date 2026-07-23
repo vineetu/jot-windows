@@ -52,7 +52,8 @@ public partial class PromptPickerWindow : Window
         if (d is System.Windows.Controls.ListViewItem { DataContext: PromptItem item })
         {
             List.SelectedItem = item;
-            _vm.PickCommand.Execute(item);
+            if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0) _vm.PickWithAugmentCommand.Execute(item); // Shift+click parity
+            else _vm.PickCommand.Execute(item);
             e.Handled = true;
         }
     }
@@ -123,6 +124,10 @@ public partial class PromptPickerWindow : Window
         {
             case Key.Down: Move(+1); e.Handled = true; break;
             case Key.Up: Move(-1); e.Handled = true; break;
+            case Key.Enter when (Keyboard.Modifiers & ModifierKeys.Shift) != 0:
+                _vm.PickWithAugmentCommand.Execute(List.SelectedItem); // Shift+Enter: add an optional direction first
+                e.Handled = true;
+                break;
             case Key.Enter:
                 _vm.PickCommand.Execute(List.SelectedItem);
                 e.Handled = true;

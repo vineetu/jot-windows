@@ -62,6 +62,11 @@ public sealed class JotSettings
     // SnoozedAt records a "maybe later" so it re-asks later at a higher bar.
     public bool DonationNudgeDone { get; set; }
     public DateTime? DonationNudgeSnoozedAt { get; set; }
+
+    // One-time coach for the Shift+Enter "add a direction" affordance in the rewrite picker: the footer
+    // shows a tip for the first few opens (DirectionTipOpens), until the user tries it (DirectionTipDone).
+    public bool DirectionTipDone { get; set; }
+    public int DirectionTipOpens { get; set; }
 }
 
 /// <summary>Loads, exposes, and persists <see cref="JotSettings"/>; raises <see cref="Changed"/> after a save.</summary>

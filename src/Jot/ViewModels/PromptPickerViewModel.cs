@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Jot.Models;
 using Jot.Services;
+using Jot.Services.Abstractions;
 
 namespace Jot.ViewModels;
 
@@ -21,8 +22,11 @@ public sealed partial class PromptPickerViewModel : ObservableObject
 {
     private readonly PromptCatalog _catalog;
     private readonly IPhraseDictation? _phrase;   // null only in headless tests that don't exercise voice
-    private PromptItem? _augmentItem;             // the needs-input prompt awaiting its detail
+    private readonly ISettingsStore? _settings;   // null in headless tests; drives the one-time Shift+Enter tip
+    private PromptItem? _augmentItem;             // the prompt awaiting its detail (needs-input or optional)
     private bool _applyingPartial;                // true while OnPartial writes the caption — so it isn't seen as typing
+
+    private const int TipMaxOpens = 3;            // show the "⇧⏎ add direction" footer tip for this many opens
 
     public ICollectionView Prompts { get; }
 
@@ -33,14 +37,35 @@ public sealed partial class PromptPickerViewModel : ObservableObject
     [ObservableProperty] private bool _isAugmenting;
     [ObservableProperty] private string _augmentLabel = "";
     [ObservableProperty] private string _augmentText = "";
+    [ObservableProperty] private string _augmentPlaceholder = "";
     [ObservableProperty] private bool _isListening;
+
+    // First-run coaching for Shift+Enter. True while the footer should showcase "⇧⏎ add a direction";
+    // cleared the moment the user tries it (or after TipMaxOpens opens). Set from settings in the ctor.
+    [ObservableProperty] private bool _showAugmentTip;
 
     /// <summary>Stop-hint line ("Esc to stop speaking…") — shown only while the mic is live.</summary>
     public bool ShowListeningHint => IsListening;
     /// <summary>Idle augment hint ("Enter rewrite · Esc back") — augment step, mic not live.</summary>
     public bool ShowAugmentIdleHint => IsAugmenting && !IsListening;
 
-    partial void OnIsAugmentingChanged(bool value) => OnPropertyChanged(nameof(ShowAugmentIdleHint));
+    /// <summary>Footer shows the normal shortcut row — prompt list up, no first-run tip active.</summary>
+    public bool ShowShortcutHint => !IsAugmenting && !ShowAugmentTip;
+    /// <summary>Footer shows the one-time "⇧⏎ add a direction" tip instead of the shortcut row.</summary>
+    public bool ShowTipHint => !IsAugmenting && ShowAugmentTip;
+
+    partial void OnIsAugmentingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowAugmentIdleHint));
+        OnPropertyChanged(nameof(ShowShortcutHint));
+        OnPropertyChanged(nameof(ShowTipHint));
+    }
+
+    partial void OnShowAugmentTipChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowShortcutHint));
+        OnPropertyChanged(nameof(ShowTipHint));
+    }
 
     partial void OnIsListeningChanged(bool value)
     {
@@ -59,10 +84,18 @@ public sealed partial class PromptPickerViewModel : ObservableObject
     /// <c>detail</c> is null for plain prompts, or the typed/spoken parameter for needs-input prompts.</summary>
     public event Action<PromptItem, string?>? Picked;
 
-    public PromptPickerViewModel(PromptCatalog catalog, IPhraseDictation? phrase = null)
+    public PromptPickerViewModel(PromptCatalog catalog, IPhraseDictation? phrase = null, ISettingsStore? settings = null)
     {
         _catalog = catalog;
         _phrase = phrase;
+        _settings = settings;
+
+        // One-time Shift+Enter coach: show it for the first few opens until the user tries the feature.
+        // A transient VM is created per open, so counting opens here is one increment per picker appearance.
+        JotSettings? s = settings?.Current;
+        ShowAugmentTip = s is { DirectionTipDone: false } && s.DirectionTipOpens < TipMaxOpens;
+        if (ShowAugmentTip) { s!.DirectionTipOpens++; settings!.Save(); }
+
         var cvs = new CollectionViewSource { Source = catalog.Prompts };
         // Default first (so it lands at index 0, pre-selected → Enter runs it), then pinned, recent, alphabetical.
         cvs.SortDescriptions.Add(new SortDescription(nameof(PromptItem.IsDefault), ListSortDirection.Descending));
@@ -94,19 +127,43 @@ public sealed partial class PromptPickerViewModel : ObservableObject
     {
         if (p is null) return;
         _catalog.RecordPick(p);
-        if (p.NeedsInput)
+        if (p.NeedsInput) EnterAugment(p);   // required (e.g. Translate) — collect the parameter first
+        else Picked?.Invoke(p, null);        // runs immediately with the plain body
+    }
+
+    /// <summary>Shift+Enter: open the augment step for ANY prompt — even ones that run fine by default — so
+    /// the user can add an optional direction (e.g. "for execs" to Summarize). Same field/mic as the required
+    /// path; an empty answer just runs the plain body.</summary>
+    [RelayCommand]
+    public void PickWithAugment(PromptItem? p)
+    {
+        if (p is null) return;
+        _catalog.RecordPick(p);
+        MarkTipDone();   // they found the feature — stop coaching it
+        EnterAugment(p);
+    }
+
+    // Open the type-or-speak step for a prompt. Needs-input prompts show their specific question; optional
+    // ones show a generic header with the prompt's own hint as the field placeholder. Then auto-arm the mic
+    // (mic not live yet, so clearing the field can't trigger the typing-takeover).
+    private void EnterAugment(PromptItem p)
+    {
+        _augmentItem = p;
+        AugmentLabel = p.NeedsInput ? (p.AugmentLabel ?? "") : "Add a direction";
+        AugmentPlaceholder = string.IsNullOrWhiteSpace(p.VoiceAugmentHint) ? "Speak now, or type…" : p.VoiceAugmentHint!;
+        AugmentText = "";
+        IsAugmenting = true;
+        StartListening();
+    }
+
+    // The Shift+Enter tip is one-shot: mark it done the first time the feature is used so it never nags again.
+    private void MarkTipDone()
+    {
+        ShowAugmentTip = false;
+        if (_settings is { Current.DirectionTipDone: false })
         {
-            // Don't run yet — collect the parameter. Clear the field (mic not live yet, so no takeover),
-            // enter the step, then auto-arm the mic.
-            _augmentItem = p;
-            AugmentLabel = p.AugmentLabel ?? "";
-            AugmentText = "";
-            IsAugmenting = true;
-            StartListening();
-        }
-        else
-        {
-            Picked?.Invoke(p, null);
+            _settings.Current.DirectionTipDone = true;
+            _settings.Save();
         }
     }
 

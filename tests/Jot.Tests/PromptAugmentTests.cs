@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jot.Models;
 using Jot.Services;
+using Jot.Services.Abstractions;
 using Jot.ViewModels;
 using Xunit;
 
@@ -206,6 +207,105 @@ public sealed class PromptAugmentTests : IDisposable
             Assert.True(vm.IsAugmenting);   // ...but still collecting input
             Assert.False(ran);              // nothing ran yet
         });
+    }
+
+    [Fact]
+    public void SuggestsInput_TrueOnlyForOptionalHint_NotRequiredOrPlain()
+    {
+        Assert.True(new PromptItem { VoiceAugmentHint = "How long?" }.SuggestsInput);           // optional → chip
+        Assert.False(new PromptItem { VoiceAugmentHint = "x", AugmentLabel = "q" }.SuggestsInput); // required → no chip
+        Assert.False(new PromptItem { VoiceAugmentHint = null }.SuggestsInput);                  // plain
+        Assert.False(new PromptItem { VoiceAugmentHint = "   " }.SuggestsInput);
+    }
+
+    [Fact]
+    public void BundledLibrary_LightsUpSuggestedPrompts_NotPlainOnes()
+    {
+        var catalog = new PromptCatalog(_dir);
+        Assert.True(catalog.Prompts.First(p => p.Slug == "summarize").SuggestsInput);
+        Assert.True(catalog.Prompts.First(p => p.Slug == "respond-to-email").SuggestsInput);
+        Assert.False(catalog.Prompts.First(p => p.Slug == "rewrite").SuggestsInput);    // no hint → plain
+        Assert.False(catalog.Prompts.First(p => p.Slug == "translate").SuggestsInput);  // required, not a suggested chip
+    }
+
+    [Fact]
+    public void Picker_ShiftEnter_OpensAugmentOnRunByDefaultPrompt_EmptyRunsPlainBody()
+    {
+        RunSta(() =>
+        {
+            var catalog = new PromptCatalog(_dir);
+            var vm = new PromptPickerViewModel(catalog);
+            (string Slug, string? Detail)? raised = null;
+            vm.Picked += (item, detail) => raised = (item.Slug, detail);
+
+            PromptItem summarize = catalog.Prompts.First(p => p.Slug == "summarize");
+            vm.PickWithAugmentCommand.Execute(summarize);   // Shift+Enter on a prompt that normally runs immediately
+
+            Assert.True(vm.IsAugmenting);                    // opened despite not being needs-input
+            Assert.Equal("Add a direction", vm.AugmentLabel);
+            Assert.Equal(summarize.VoiceAugmentHint, vm.AugmentPlaceholder); // its own hint as the field placeholder
+            Assert.Null(raised);                             // nothing ran yet
+
+            vm.ConfirmAugmentCommand.Execute(null);          // Enter with no detail
+            Assert.NotNull(raised);
+            Assert.Equal("summarize", raised!.Value.Slug);
+            Assert.True(string.IsNullOrEmpty(raised.Value.Detail)); // empty → plain body via BuildInstruction
+        });
+    }
+
+    [Fact]
+    public void Picker_ShiftEnter_PlainPrompt_UsesGenericPlaceholder()
+    {
+        RunSta(() =>
+        {
+            var catalog = new PromptCatalog(_dir);
+            var vm = new PromptPickerViewModel(catalog);
+            vm.PickWithAugmentCommand.Execute(catalog.Prompts.First(p => p.Slug == "rewrite")); // no hint
+            Assert.True(vm.IsAugmenting);
+            Assert.Equal("Speak now, or type…", vm.AugmentPlaceholder);
+        });
+    }
+
+    [Fact]
+    public void DirectionTip_ShowsForFirstOpens_ThenStopsOnceUsed()
+    {
+        RunSta(() =>
+        {
+            var catalog = new PromptCatalog(_dir);
+            var settings = new FakeSettings();
+
+            var vm1 = new PromptPickerViewModel(catalog, settings: settings);
+            Assert.True(vm1.ShowAugmentTip);                     // coached on first open
+            Assert.Equal(1, settings.Current.DirectionTipOpens); // and the open was counted
+
+            vm1.PickWithAugmentCommand.Execute(catalog.Prompts.First(p => p.Slug == "summarize"));
+            Assert.False(vm1.ShowAugmentTip);                    // using it dismisses the tip
+            Assert.True(settings.Current.DirectionTipDone);
+
+            Assert.False(new PromptPickerViewModel(catalog, settings: settings).ShowAugmentTip); // done → never again
+        });
+    }
+
+    [Fact]
+    public void DirectionTip_StopsAfterAFewOpens_EvenIfNeverUsed()
+    {
+        RunSta(() =>
+        {
+            var catalog = new PromptCatalog(_dir);
+            var settings = new FakeSettings();
+            for (int i = 0; i < 3; i++)
+                Assert.True(new PromptPickerViewModel(catalog, settings: settings).ShowAugmentTip);
+            Assert.False(new PromptPickerViewModel(catalog, settings: settings).ShowAugmentTip); // past the cap
+        });
+    }
+
+    // Minimal in-memory settings so the one-time-tip logic is testable without touching real settings.json.
+    private sealed class FakeSettings : ISettingsStore
+    {
+        public JotSettings Current { get; } = new();
+        public void Save() { }
+        public void Reset() { }
+        public event EventHandler? Changed { add { } remove { } }
     }
 
     // Stand-in for the real recorder+engine so the auto-mic/takeover state machine is testable headlessly.
