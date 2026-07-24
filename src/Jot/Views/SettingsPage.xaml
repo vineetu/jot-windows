@@ -215,7 +215,7 @@
                     </StackPanel>
                 </ctl:SettingRow>
                 <ctl:SettingRow Title="Processing"
-                                Description="CPU works on every PC. GPU (DirectML) is faster where a compatible graphics card is present, and falls back to CPU automatically. Applies after restart.">
+                                Description="Auto picks the best engine for your hardware with a one-time speed test — you don't need to do anything. CPU works on every PC; GPU (DirectML) forces the graphics card. Applies after restart.">
                     <ComboBox MinWidth="180" ItemsSource="{Binding TranscriptionDevices}"
                               SelectedItem="{Binding TranscriptionDevice, Mode=TwoWay}" />
                 </ctl:SettingRow>

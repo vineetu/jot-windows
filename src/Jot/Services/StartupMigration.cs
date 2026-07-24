@@ -121,6 +121,21 @@ public static class StartupMigration
         return HasData(legacy) && !HasData(root);
     }
 
+    /// <summary>One-time device-setting upgrade: the pre-GPU-tier default was "CPU", so existing users all
+    /// carry "CPU" without ever having chosen it — migrate that to "Auto" (provably safe: no fp16 model
+    /// shipped before this, so Auto can't route anyone to GPU until the probe passes on their machine).
+    /// An explicit "GPU (DirectML)" pick is preserved. The marker makes any LATER explicit "CPU" pick
+    /// sticky — migration never runs twice.</summary>
+    public static void MigrateTranscriptionDevice(ISettingsStore store)
+    {
+        var s = store.Current;
+        if (s.TranscriptionDeviceMigrated) return;
+        if (s.TranscriptionDevice == Transcription.TranscriptionDevices.Cpu)
+            s.TranscriptionDevice = Transcription.TranscriptionDevices.Auto;
+        s.TranscriptionDeviceMigrated = true;
+        store.Save();
+    }
+
     private static bool HasData(string dir) =>
         Directory.Exists(Path.Combine(dir, "models")) || File.Exists(Path.Combine(dir, "library.json"));
 

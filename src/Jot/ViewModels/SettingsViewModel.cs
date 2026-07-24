@@ -53,7 +53,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string AiInfoTitle => BuildFlavor.AiInfoTitle;
     public string AiInfoMessage => BuildFlavor.AiInfoMessage;
     public string[] RetentionOptions { get; } = ["Forever", "7 days", "30 days", "90 days"];
-    public string[] TranscriptionDevices { get; } = ["CPU", "GPU (DirectML)"];
+    public string[] TranscriptionDevices { get; } =
+    [
+        Jot.Transcription.TranscriptionDevices.Auto,
+        Jot.Transcription.TranscriptionDevices.Cpu,
+        Jot.Transcription.TranscriptionDevices.Gpu,
+    ];
 
     /// <summary>Paste-method choices for the Settings dropdown (value persisted, label shown). Mirrors Handy.</summary>
     public sealed record PasteMethodOption(string Value, string Label);
@@ -78,7 +83,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private AudioInputDevice? _selectedDevice;
 
     [ObservableProperty] private string _language = "English";
-    [ObservableProperty] private string _transcriptionDevice = "CPU";
+    [ObservableProperty] private string _transcriptionDevice = Jot.Transcription.TranscriptionDevices.Auto;
     [ObservableProperty] private bool _liveCaptions = true;
     [ObservableProperty] private bool _offlineCleanupEnabled = true;
     [ObservableProperty] private bool _autoPaste;

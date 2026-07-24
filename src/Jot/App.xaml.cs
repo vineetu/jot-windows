@@ -336,6 +336,9 @@ public partial class App : System.Windows.Application
         // the setting at it (no file move) so the model/history isn't stranded now that the default is the
         // container. Must run before anything resolves DataDir (recorder/transcriber/stores, below).
         StartupMigration.AdoptLegacyDataDir(Services.GetRequiredService<ISettingsStore>());
+        // One-time "CPU"→"Auto" device upgrade — must run BEFORE the ITranscriber singleton is resolved
+        // below, or the old default would pick the engine one last time.
+        StartupMigration.MigrateTranscriptionDevice(Services.GetRequiredService<ISettingsStore>());
         // Route all logging into the user's chosen data folder (D5) via the single activity log (D4).
         var settingsForLog = Services.GetRequiredService<ISettingsStore>();
         JotLog.Initialize(() => JotPaths.DataDir(settingsForLog.Current));
@@ -363,6 +366,12 @@ public partial class App : System.Windows.Application
             });
         }
         else if (transcriber.IsModelInstalled) _ = Task.Run(transcriber.WarmUp);
+
+        // With Auto + fp16 present but no verdict for the CURRENT adapter+driver (fresh model, GPU swap,
+        // driver update), earn one in the background — the probe takes ~10 s cold and must never touch
+        // the boot path. The verdict applies at the NEXT engine construction; if it says GPU while we're
+        // running int4, one informational balloon says faster dictation is a restart away.
+        ScheduleGpuProbeIfNeeded();
 
         // Enforce the retention window (delete old recordings) off the UI thread.
         _ = Task.Run(() => Services.GetRequiredService<RetentionCleaner>().Prune());
@@ -1291,6 +1300,45 @@ public partial class App : System.Windows.Application
         }
     }
 
+    /// <summary>
+    /// Background GPU-verdict upkeep for "Auto": probe when the fp16 model is present but the cached
+    /// verdict is missing or was earned on different hardware/driver. Saves the verdict for the NEXT
+    /// engine construction (the running engine is never hot-swapped) and — when the answer is "GPU"
+    /// while this launch runs int4 — shows the one informational upgrade balloon.
+    /// </summary>
+    private void ScheduleGpuProbeIfNeeded()
+    {
+        var store = Services.GetRequiredService<ISettingsStore>();
+        var s = store.Current;
+        if (!string.Equals(s.TranscriptionDevice, Transcription.TranscriptionDevices.Auto,
+                StringComparison.OrdinalIgnoreCase)) return; // explicit CPU/GPU: the user decided — no probing
+        var fp16Model = Services.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>();
+        if (!fp16Model.IsInstalled) return;                  // nothing to measure (E4's coordinator fetches first)
+        var adapter = Platform.GpuInfo.TryGetPrimaryAdapter();
+        if (adapter is null) return;                         // no DXGI identity → can't cache a verdict honestly
+        if (s.GpuProbeVerdict is not null && s.GpuProbeKey == adapter.CacheKey) return; // verdict is current
+
+        _ = Task.Run(() =>
+        {
+            var r = Transcription.GpuProbe.Run(fp16Model);
+            Dispatcher.Invoke(() =>
+            {
+                s.GpuProbeKey = adapter.CacheKey;
+                s.GpuProbeVerdict = r.GpuViable ? "GPU" : "CPU";
+                s.GpuProbeAvgChunkMs = r.AvgChunkMs;
+                s.GpuProbeReason = r.Reason;
+                store.Save();
+                JotLog.Info($"gpu probe: verdict={s.GpuProbeVerdict} ({r.Reason})");
+                if (r.GpuViable && !s.GpuUpgradeBalloonShown)
+                {
+                    s.GpuUpgradeBalloonShown = true;
+                    store.Save();
+                    NotifyGpuUpgradeReady();
+                }
+            });
+        });
+    }
+
     private static void RunProbeTest()
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-probetest.txt");
@@ -2101,22 +2149,31 @@ public partial class App : System.Windows.Application
         services.AddSingleton<UsageStats>();
         services.AddSingleton<HotkeyManager>();
         // Nemotron 3.5 (streaming RNNT). int4 export is CPU-only (no DirectML kernels); FP16 export runs
-        // on DirectML. Use FP16/DML when the user picks GPU and the FP16 model is installed; otherwise
-        // int4/CPU (default, correct everywhere). Backend read once at construction.
+        // on DirectML. Selection is EngineSelector's pure rule: explicit picks honored, "Auto" (default)
+        // takes the GPU tier only with the fp16 model on disk AND a probe verdict earned on the current
+        // adapter+driver. Backend read once at construction; a changed verdict applies next launch.
         services.AddSingleton<ITranscriber>(sp =>
         {
-            string? device = sp.GetRequiredService<ISettingsStore>().Current.TranscriptionDevice;
+            var s = sp.GetRequiredService<ISettingsStore>().Current;
             var fp16Model = sp.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>();
-            bool wantsGpu = device is not null && device.Contains("GPU", StringComparison.OrdinalIgnoreCase);
-            if (wantsGpu && fp16Model.IsInstalled)
-                return new Transcription.Nemotron.NemotronFp16Transcriber(
-                    fp16Model,
-                    sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
-                    Transcription.Onnx.ComputeBackend.DirectML);
-            return new Transcription.Nemotron.NemotronTranscriber(
-                sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
-                sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
-                ParseBackend(device));
+            var adapter = Platform.GpuInfo.TryGetPrimaryAdapter(); // ~1 ms enumeration, no D3D device
+            bool keyMatches = adapter is not null && s.GpuProbeKey == adapter.CacheKey;
+            var choice = Transcription.EngineSelector.Select(
+                s.TranscriptionDevice, fp16Model.IsInstalled, s.GpuProbeVerdict, keyMatches);
+            JotLog.Info($"engine: {choice} (device={s.TranscriptionDevice}, " +
+                $"verdict={s.GpuProbeVerdict ?? "none"}, keyMatch={keyMatches}, fp16={fp16Model.IsInstalled})");
+            var factory = sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>();
+            return choice switch
+            {
+                Transcription.EngineChoice.Fp16Dml => new Transcription.Nemotron.NemotronFp16Transcriber(
+                    fp16Model, factory, Transcription.Onnx.ComputeBackend.DirectML),
+                Transcription.EngineChoice.Int4DmlEncoder => new Transcription.Nemotron.NemotronTranscriber(
+                    sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(), factory,
+                    Transcription.Onnx.ComputeBackend.DirectML),
+                _ => new Transcription.Nemotron.NemotronTranscriber(
+                    sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(), factory,
+                    Transcription.Onnx.ComputeBackend.Cpu),
+            };
         });
         services.AddSingleton<RecorderController>();
         services.AddSingleton<Rewrite.RewriteController>();
@@ -2392,6 +2449,30 @@ public partial class App : System.Windows.Application
 
     private void Notify(string title, string message, Forms.ToolTipIcon icon)
         => _tray?.ShowBalloonTip(2500, title, message, icon);
+
+    /// <summary>The one informational "GPU tier ready" balloon. Clicking it restarts Jot on the spot
+    /// (idle only — never yank an active recording); ignoring it is fine, the engine switches whenever
+    /// Jot next starts. Handlers detach on click AND close so a later unrelated balloon can't restart.</summary>
+    private void NotifyGpuUpgradeReady()
+    {
+        if (_tray is null) return;
+        void Detach()
+        {
+            _tray!.BalloonTipClicked -= OnClick;
+            _tray.BalloonTipClosed -= OnClosed;
+        }
+        void OnClick(object? sender, EventArgs e)
+        {
+            Detach();
+            if (_recorder?.State == RecorderState.Idle) RestartApp();
+        }
+        void OnClosed(object? sender, EventArgs e) => Detach();
+        _tray.BalloonTipClicked += OnClick;
+        _tray.BalloonTipClosed += OnClosed;
+        _tray.ShowBalloonTip(5000, "Faster transcription ready",
+            "Jot verified your graphics card and will use it from the next launch. Click to restart now.",
+            Forms.ToolTipIcon.Info);
+    }
 
     private static void LogCrash(Exception? ex)
         => JotLog.Error("Unhandled exception", ex);
