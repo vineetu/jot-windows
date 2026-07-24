@@ -26,7 +26,7 @@ public sealed class LowLevelHotkeys : IDisposable
     private const int WM_SYSKEYUP = 0x0105;
 
     private readonly Dispatcher _dispatcher;
-    private readonly Dictionary<uint, Action> _actions = new();
+    private readonly Dictionary<uint, (Action Down, Action? Up)> _actions = new();
     private readonly HashSet<uint> _down = new(); // suppress auto-repeat: fire once per physical press
 
     private IntPtr _hook;
@@ -45,13 +45,15 @@ public sealed class LowLevelHotkeys : IDisposable
     }
 
     /// <summary>Replaces the current bindings. Installs the hook on first non-empty set; removes it when
-    /// the set goes empty. Call from the UI thread (the hook lives on this thread's message loop).</summary>
-    public void SetBindings(IEnumerable<(uint vk, Action action)> bindings)
+    /// the set goes empty. Call from the UI thread (the hook lives on this thread's message loop).
+    /// <paramref name="bindings"/>: down fires once per physical press (repeat-suppressed); the optional
+    /// up fires on release — that's the push-to-talk hold edge.</summary>
+    public void SetBindings(IEnumerable<(uint vk, Action down, Action? up)> bindings)
     {
         _actions.Clear();
         _down.Clear();
-        foreach (var (vk, action) in bindings)
-            _actions[vk] = action;
+        foreach (var (vk, down, up) in bindings)
+            _actions[vk] = (down, up);
 
         if (_actions.Count > 0) EnsureHook();
         else RemoveHook();
@@ -82,17 +84,18 @@ public sealed class LowLevelHotkeys : IDisposable
         {
             int msg = wParam.ToInt32();
             uint vk = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam).vkCode;
-            if (_actions.TryGetValue(vk, out Action? action))
+            if (_actions.TryGetValue(vk, out var binding))
             {
                 if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
                 {
                     if (_down.Add(vk)) // first down of this press (ignore key-repeat)
-                        _dispatcher.BeginInvoke(action);
+                        _dispatcher.BeginInvoke(binding.Down);
                     return (IntPtr)1; // SUPPRESS — the app never sees the key
                 }
                 if (msg == WM_KEYUP || msg == WM_SYSKEYUP)
                 {
-                    _down.Remove(vk);
+                    if (_down.Remove(vk) && binding.Up is not null) // release edge (push-to-talk hold)
+                        _dispatcher.BeginInvoke(binding.Up);
                     return (IntPtr)1; // SUPPRESS the up too — this is what kills the Apps context menu
                 }
             }

@@ -14,6 +14,12 @@ public readonly record struct HotkeyChord(GlobalHotkey.Modifiers Modifiers, Key 
 
     public bool IsValid => Key != Key.None;
 
+    /// <summary>A single modifier used AS the key ("RightCtrl", no other parts) — the classic
+    /// push-to-talk binding. RegisterHotKey can't take these; they ride a passive key monitor.</summary>
+    public bool IsBareModifier => Modifiers == GlobalHotkey.Modifiers.None && Key is
+        Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift or
+        Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin;
+
     /// <summary>Parses "Alt+Space" style strings. Returns false for empty/garbage input.</summary>
     public static bool TryParse(string? text, out HotkeyChord chord)
     {
@@ -100,6 +106,14 @@ public readonly record struct HotkeyChord(GlobalHotkey.Modifiers Modifiers, Key 
         Key.Return => "Enter",
         Key.Escape => "Esc",
         Key.Space => "Space",
+        Key.LeftCtrl => "Left Ctrl",
+        Key.RightCtrl => "Right Ctrl",
+        Key.LeftShift => "Left Shift",
+        Key.RightShift => "Right Shift",
+        Key.LeftAlt => "Left Alt",
+        Key.RightAlt => "Right Alt",
+        Key.LWin => "Left Win",
+        Key.RWin => "Right Win",
         _ => key.ToString(),
     };
 }

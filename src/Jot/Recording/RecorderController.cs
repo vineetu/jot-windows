@@ -96,13 +96,65 @@ public sealed class RecorderController : IDisposable
     private void StopAndSaveFromHotkey()
     {
         if (State != RecorderState.Recording) return;
-        Log("stop-and-save fired (Esc)");
-        // Defer off the hotkey's WndProc: StopAndDeliverAsync disarms (disposes) THIS Esc hotkey window
-        // synchronously, and destroying an HwndSource from inside its own message dispatch is a
-        // re-entrancy hazard. Posting to the dispatcher runs it after WndProc returns.
+        DeferStop("stop-and-save fired (Esc)");
+    }
+
+    // Defer off the hotkey's WndProc / hook callback: StopAndDeliverAsync disarms (disposes) the Esc
+    // hotkey window synchronously, and destroying an HwndSource from inside a message dispatch is a
+    // re-entrancy hazard. Posting to the dispatcher runs it after the current dispatch returns.
+    private void DeferStop(string why)
+    {
+        Log(why);
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         if (dispatcher is not null) dispatcher.BeginInvoke(new Action(() => _ = StopAndDeliverAsync()));
         else _ = StopAndDeliverAsync();
+    }
+
+    // push-to-talk hold
+
+    /// <summary>True while the current recording was started by holding the push-to-talk key — the pill
+    /// swaps its stop hint to "release to finish". Cleared by <see cref="SetState"/> the moment the
+    /// state leaves Recording (Esc, auto-stop, delivery), so a later key-release can never double-stop.</summary>
+    public bool HoldActive { get; private set; }
+
+    private DateTime _holdPressedAt;
+    private const int TapToToggleMs = 250; // a quick tap converts the press into a normal toggle-on
+
+    /// <summary>Push-to-talk key DOWN. Idle → start recording (hold begins). Already recording (toggle
+    /// or a previous tap) → stop + deliver, exactly like the toggle chord. Transcribing → ignored.</summary>
+    public void PressToStart()
+    {
+        switch (State)
+        {
+            case RecorderState.Idle:
+                // Arm BEFORE Start: SetState(Recording) fires the pill's hint refresh, which must
+                // already see HoldActive to show "Release … to stop" instead of the toggle chord.
+                HoldActive = true;
+                _holdPressedAt = DateTime.UtcNow;
+                Start();
+                if (State != RecorderState.Recording) HoldActive = false; // Start failed (mic missing)
+                break;
+            case RecorderState.Recording:
+                DeferStop("push-to-talk pressed while recording — stop+deliver");
+                break;
+            case RecorderState.Transcribing:
+                break; // busy
+        }
+    }
+
+    /// <summary>Push-to-talk key UP. Held long enough → stop + deliver. A quick tap (&lt; 250 ms) keeps
+    /// recording as a toggle (next press stops). No-ops whenever the hold isn't live anymore — Esc won,
+    /// delivery already ran, or the press never started a recording.</summary>
+    public void ReleaseToStop()
+    {
+        if (!HoldActive || State != RecorderState.Recording) return;
+        if ((DateTime.UtcNow - _holdPressedAt).TotalMilliseconds < TapToToggleMs)
+        {
+            HoldActive = false; // tap → behaves like the toggle chord from here on
+            Log("push-to-talk tap — staying in recording (toggle semantics)");
+            return;
+        }
+        DeferStop("push-to-talk released — stop+deliver");
     }
 
     /// <summary>Discards the in-flight recording without transcribing or pasting. Kept as an API for a
@@ -264,6 +316,8 @@ public sealed class RecorderController : IDisposable
 
     private void SetState(RecorderState state)
     {
+        if (state != RecorderState.Recording) HoldActive = false; // single choke point — every exit from
+                                                                  // Recording ends the hold, whoever caused it
         State = state;
         StateChanged?.Invoke(state);
     }

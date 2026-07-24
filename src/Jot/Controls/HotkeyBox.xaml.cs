@@ -25,7 +25,21 @@ public partial class HotkeyBox : UserControl
         set => SetValue(ChordProperty, value);
     }
 
+    public static readonly DependencyProperty AllowBareModifierProperty = DependencyProperty.Register(
+        nameof(AllowBareModifier), typeof(bool), typeof(HotkeyBox), new PropertyMetadata(false));
+
+    /// <summary>Lets a LONE modifier (Right Ctrl) be captured as the whole chord — the classic
+    /// push-to-talk binding. Off by default: for normal shortcuts a bare modifier press is just the
+    /// start of a chord. Capture commits on the modifier's key-UP, and only if no real key (which
+    /// would have committed a normal chord) and no second modifier is still involved.</summary>
+    public bool AllowBareModifier
+    {
+        get => (bool)GetValue(AllowBareModifierProperty);
+        set => SetValue(AllowBareModifierProperty, value);
+    }
+
     private bool _capturing;
+    private Key _pendingModifier; // AllowBareModifier: modifier held down, commits on its release
 
     public HotkeyBox()
     {
@@ -35,9 +49,10 @@ public partial class HotkeyBox : UserControl
         // started — that was the "clicking does nothing" bug. Keyboard.Focus(this) forces keyboard
         // focus; PreviewMouseLeftButtonDown (tunneling) guarantees we see the click before any child.
         PreviewMouseLeftButtonDown += (_, e) => { Keyboard.Focus(this); e.Handled = true; };
-        GotKeyboardFocus += (_, _) => { _capturing = true; UpdateLabel(); };
-        LostKeyboardFocus += (_, _) => { _capturing = false; UpdateLabel(); };
+        GotKeyboardFocus += (_, _) => { _capturing = true; _pendingModifier = Key.None; UpdateLabel(); };
+        LostKeyboardFocus += (_, _) => { _capturing = false; _pendingModifier = Key.None; UpdateLabel(); };
         PreviewKeyDown += OnPreviewKeyDown;
+        PreviewKeyUp += OnPreviewKeyUp;
         UpdateLabel();
     }
 
@@ -67,15 +82,39 @@ public partial class HotkeyBox : UserControl
             return;
         }
 
-        // Ignore bare modifier presses — wait for the actual key.
-        if (IsModifier(key)) { UpdateLabel(); return; }
+        // Bare modifier press: normally just the start of a chord (wait for the real key), but in
+        // AllowBareModifier mode remember it — its RELEASE commits it as the whole binding.
+        if (IsModifier(key))
+        {
+            if (AllowBareModifier) _pendingModifier = key;
+            UpdateLabel();
+            return;
+        }
 
+        _pendingModifier = Key.None; // a real key arrived — this is a normal chord capture
         HotkeyChord chord = HotkeyChord.FromKeyEvent(key, Keyboard.Modifiers);
         if (chord.IsValid)
         {
             Chord = chord.ToString();
             Keyboard.ClearFocus();
         }
+    }
+
+    private void OnPreviewKeyUp(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!_capturing || !AllowBareModifier || _pendingModifier == Key.None) return;
+        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key != _pendingModifier) return;
+        e.Handled = true;
+
+        // Commit only when nothing else is still held — releasing Ctrl while Shift is down means the
+        // user was building a Ctrl+Shift chord, not binding bare Ctrl.
+        if (Keyboard.Modifiers == ModifierKeys.None)
+        {
+            Chord = new HotkeyChord(GlobalHotkey.Modifiers.None, _pendingModifier).ToString();
+            Keyboard.ClearFocus();
+        }
+        _pendingModifier = Key.None;
     }
 
     private static bool IsModifier(Key key) => key is

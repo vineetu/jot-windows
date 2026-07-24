@@ -24,6 +24,10 @@
             <ctl:SettingRow Title="Toggle recording" Description="Start and stop dictation.">
                 <ctl:HotkeyBox Chord="{Binding ToggleRecordingHotkey, Mode=TwoWay}" />
             </ctl:SettingRow>
+            <ctl:SettingRow Title="Push to talk (hold)"
+                            Description="Hold to dictate, release to paste — a quick tap toggles instead. A single key like Right Ctrl works here. Optional; leave unset to turn off.">
+                <ctl:HotkeyBox Chord="{Binding PushToTalkHotkey, Mode=TwoWay}" AllowBareModifier="True" />
+            </ctl:SettingRow>
             <ctl:SettingRow Title="Rewrite selection"
                             Description="Rewrite the highlighted text with AI, using your default prompt (or pick one).">
                 <ctl:HotkeyBox Chord="{Binding RewriteHotkey, Mode=TwoWay}" />

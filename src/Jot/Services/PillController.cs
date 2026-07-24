@@ -41,11 +41,15 @@ public sealed class PillController
     // rebind is reflected next time recording starts. Either may be null if the chord doesn't parse.
     private (string? stop, string? cancel) RecordingHints()
     {
-        string? stop = HotkeyChord.TryParse(_settings.Current.ToggleRecordingHotkey, out HotkeyChord t)
-            ? t.ToDisplayString() : null;
         // Stop is fixed to Esc (see RecorderController.StopRecordingChord) — hint it consistently.
         string? cancel = HotkeyChord.TryParse(Jot.Recording.RecorderController.StopRecordingChord, out HotkeyChord c)
             ? c.ToDisplayString() : null;
+        // Hold-to-talk recording: stopping is RELEASING the held key, not pressing the toggle chord.
+        // All through HotkeyChord display formatting — never a hardcoded shortcut string.
+        if (_recorder.HoldActive && HotkeyChord.TryParse(_settings.Current.PushToTalkHotkey, out HotkeyChord p))
+            return ($"Release {p.ToDisplayString()}", cancel);
+        string? stop = HotkeyChord.TryParse(_settings.Current.ToggleRecordingHotkey, out HotkeyChord t)
+            ? t.ToDisplayString() : null;
         return (stop, cancel);
     }
 

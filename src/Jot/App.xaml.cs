@@ -270,6 +270,15 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // `--ptttest` proves every push-to-talk key class delivers BOTH edges: bare special key via the
+        // suppressing hook's new up-callback, modifier chord release + bare modifier via PassiveKeyMonitor
+        // (non-consuming — the key still reaches the focused app) → %TEMP%\jot-ptttest.txt.
+        if (e.Args.Contains("--ptttest"))
+        {
+            RunPttTest();
+            return;
+        }
+
         // `--notepadselftest` drives real notepad.exe (a separate process) to find out why Alt+/ reports
         // "no text selected" in real use though --rewriteselftest passes in-process → %TEMP%\jot-notepadselftest.txt.
         if (e.Args.Contains("--notepadselftest"))
@@ -580,6 +589,73 @@ public partial class App : System.Windows.Application
         public IntPtr dwExtraInfo;
     }
 
+    private void RunPttTest()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-ptttest.txt");
+        var log = new System.Text.StringBuilder();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Recording.LowLevelHotkeys? hook = null;
+        Recording.PassiveKeyMonitor? upOnly = null;
+        Recording.PassiveKeyMonitor? downUp = null;
+        RewriteTestTarget? target = null;
+        try
+        {
+            SystemParametersInfo(0x2001, 0, IntPtr.Zero, 0); // defeat the foreground lock (headless self-test)
+            void Mark(string what) => log.AppendLine($"{sw.ElapsedMilliseconds,5} ms  {what}");
+
+            // Class 1 — bare special key (F13: harmless, no native action) through the suppressing hook.
+            int f13Down = 0, f13Up = 0;
+            hook = new Recording.LowLevelHotkeys(Dispatcher);
+            hook.SetBindings([(0x7C /*VK_F13*/, () => { f13Down++; Mark("F13 DOWN (suppress hook)"); },
+                                                () => { f13Up++; Mark("F13 UP (suppress hook)"); })]);
+            Delivery.TextInjector.SendVirtualKeyPress(0x7C);
+            Pump(400);
+
+            // Class 2 — modifier-chord release via a passive UpOnly monitor on the chord's main key (F9).
+            // The press edge for chords comes from RegisterHotKey (long-shipped, covered by --hotkeytest);
+            // what's new and load-bearing here is the RELEASE edge + pass-through.
+            int f9Up = 0, targetSawF9 = 0;
+            target = new RewriteTestTarget("");
+            Delivery.TextInjector.FocusWindow(target.Hwnd);
+            Pump(200);
+            target.CountKeyDown(System.Windows.Input.Key.F9, () => targetSawF9++);
+            upOnly = new Recording.PassiveKeyMonitor(Dispatcher, 0x78 /*VK_F9*/,
+                Recording.PassiveKeyMonitor.Mode.UpOnly, null, () => { f9Up++; Mark("F9 UP (passive)"); });
+            Delivery.TextInjector.SendVirtualKeyPress(0x78);
+            Pump(400);
+
+            // Class 3 — bare modifier (Right Ctrl) via a passive DownAndUp monitor.
+            int rctrlDown = 0, rctrlUp = 0;
+            downUp = new Recording.PassiveKeyMonitor(Dispatcher, 0xA3 /*VK_RCONTROL*/,
+                Recording.PassiveKeyMonitor.Mode.DownAndUp,
+                () => { rctrlDown++; Mark("RCtrl DOWN (passive)"); },
+                () => { rctrlUp++; Mark("RCtrl UP (passive)"); });
+            Delivery.TextInjector.SendVirtualKeyPress(0xA3);
+            Pump(400);
+
+            bool pass = f13Down == 1 && f13Up == 1
+                     && f9Up == 1 && targetSawF9 > 0   // release seen AND key passed through untouched
+                     && rctrlDown == 1 && rctrlUp == 1;
+            System.IO.File.WriteAllText(outPath,
+                $"{(pass ? "PASS" : "FAIL")}\n" +
+                $"f13Down={f13Down} f13Up={f13Up}\n" +
+                $"f9Up={f9Up} targetAlsoSawF9={targetSawF9 > 0} (passive must not swallow)\n" +
+                $"rctrlDown={rctrlDown} rctrlUp={rctrlUp}\n--- timeline ---\n{log}");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n{log}");
+        }
+        finally
+        {
+            hook?.Dispose();
+            upOnly?.Dispose();
+            downUp?.Dispose();
+            target?.Dispose();
+        }
+        Shutdown();
+    }
+
     private void RunPassiveHookTest()
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-passivehooktest.txt");
@@ -693,7 +769,7 @@ public partial class App : System.Windows.Application
             log.AppendLine($"[baseline no-hook] targetSawF1={targetSawF1 - sawBaseline} (delivered={baselineFlows})");
 
             // Bound: F1 fires our action AND is swallowed (target sees nothing new).
-            hook.SetBindings([(VK_F1, () => Interlocked.Increment(ref hookFiredF1))]);
+            hook.SetBindings([(VK_F1, () => Interlocked.Increment(ref hookFiredF1), null)]);
             Delivery.TextInjector.FocusWindow(target.Hwnd);
             Pump(150);
             int sawBeforeBound = targetSawF1;
@@ -715,7 +791,7 @@ public partial class App : System.Windows.Application
             log.AppendLine($"[unbound F1] targetSawF1={targetSawF1 - sawBeforeUnbound} (normalDeliveryRestored={flowsWhenUnbound})");
 
             // Apps (the user's actual key): the bound action fires + the hook consumes it.
-            hook.SetBindings([(VK_APPS, () => Interlocked.Increment(ref hookFiredApps))]);
+            hook.SetBindings([(VK_APPS, () => Interlocked.Increment(ref hookFiredApps), null)]);
             Delivery.TextInjector.FocusWindow(target.Hwnd);
             Pump(150);
             Delivery.TextInjector.SendVirtualKeyPress((ushort)VK_APPS);
@@ -2330,6 +2406,8 @@ public partial class App : System.Windows.Application
         var settings = Services.GetRequiredService<ISettingsStore>();
         _hotkeys = Services.GetRequiredService<HotkeyManager>();
         _hotkeys.ToggleRecording += () => _recorder!.Toggle();
+        _hotkeys.PushToTalkPressed += () => _recorder!.PressToStart();
+        _hotkeys.PushToTalkReleased += () => _recorder!.ReleaseToStop();
         _hotkeys.PasteLast += PasteLastTranscript;
         _hotkeys.Rewrite += () => _rewrite!.BeginRewrite(OpenRewritePicker);       // default prompt, or pick one
         _hotkeys.RewriteWithVoice += () => _rewrite!.ToggleVoiceRewrite();          // speak the instruction
@@ -2349,7 +2427,8 @@ public partial class App : System.Windows.Application
     }
 
     private static string HotkeySignature(JotSettings s) => string.Join("|",
-        s.AdvancedFeatures, s.ToggleRecordingHotkey, s.PasteLastHotkey, s.RewriteHotkey, s.RewriteWithVoiceHotkey);
+        s.AdvancedFeatures, s.ToggleRecordingHotkey, s.PasteLastHotkey, s.RewriteHotkey,
+        s.RewriteWithVoiceHotkey, s.PushToTalkHotkey);
 
     private void PasteLastTranscript()
     {

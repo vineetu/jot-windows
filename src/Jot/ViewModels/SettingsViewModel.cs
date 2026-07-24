@@ -93,6 +93,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _pasteLastHotkey = "Ctrl+Alt+V";
     [ObservableProperty] private string _rewriteHotkey = "Ctrl+Alt+OemQuestion";
     [ObservableProperty] private string _rewriteWithVoiceHotkey = "Ctrl+Alt+OemPeriod";
+    [ObservableProperty] private string _pushToTalkHotkey = ""; // optional hold-to-dictate key; "" = off (null in store)
 
     /// <summary>Shared on-device model download — the SAME instance the setup wizard uses (one downloader,
     /// one progress/status surface). The Model row binds its status, progress bar and Download button here.</summary>
@@ -244,6 +245,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _pasteLastHotkey = S.PasteLastHotkey;
         _rewriteHotkey = S.RewriteHotkey;
         _rewriteWithVoiceHotkey = S.RewriteWithVoiceHotkey;
+        _pushToTalkHotkey = S.PushToTalkHotkey ?? "";
         // A provider persisted under a different flavor (or a tampered settings.json) may not exist
         // in this build's list — fall back to None so the dropdown always has a valid selection.
         _aiProvider = Providers.Contains(S.AiProvider, StringComparer.OrdinalIgnoreCase) ? S.AiProvider : "None";
@@ -363,6 +365,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnPasteLastHotkeyChanged(string value) { S.PasteLastHotkey = value; Save(); }
     partial void OnRewriteHotkeyChanged(string value) { S.RewriteHotkey = value; Save(); }
     partial void OnRewriteWithVoiceHotkeyChanged(string value) { S.RewriteWithVoiceHotkey = value; Save(); }
+    partial void OnPushToTalkHotkeyChanged(string value)
+    { S.PushToTalkHotkey = string.IsNullOrWhiteSpace(value) ? null : value; Save(); } // "" clears → off
 
     partial void OnAiProviderChanged(string value)
     {
