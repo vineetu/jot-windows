@@ -13,11 +13,13 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" ShowMaximize="False" ShowMinimize="False" Title="Welcome to Jot" />
+        <ui:TitleBar x:Name="WindowTitleBar" Grid.Row="0" ShowMaximize="False" ShowMinimize="False" Title="Welcome to Jot" />
 
         <StackPanel Grid.Row="1" Margin="24,8,24,20">
-            <TextBlock Text="A quick tour" Style="{DynamicResource SubtitleTextBlockStyle}" FontWeight="SemiBold" />
-            <TextBlock Margin="0,4,0,4" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+            <!-- Heading / subhead / title are set in code from the Tour being shown (see QuickTourWindow ctor). -->
+            <TextBlock x:Name="HeadingText" Text="A quick tour" Style="{DynamicResource SubtitleTextBlockStyle}" FontWeight="SemiBold" />
+            <TextBlock x:Name="SubheadText" Margin="0,4,0,4" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                        Text="A few things and you're off — no setup needed." />
 
             <!-- Cards are built in code from QuickTourWindow.Cards (the declarative showcase list) so adding a

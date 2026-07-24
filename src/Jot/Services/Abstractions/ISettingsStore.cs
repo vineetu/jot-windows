@@ -88,6 +88,15 @@ public sealed class JotSettings
     // One-time "quick tour" shown once, right after the setup wizard closes with setup complete. Re-runnable
     // from Help without resetting this. Existing upgraders never see the wizard, so they never see the tour.
     public bool FirstRunTipsDone { get; set; }
+
+    // Per-feature contextual tours already shown, by Tour.Id (see TourCatalog). One JSON-stable list instead
+    // of N bools — a new tour just adds an Id, no migration. Getting-started keeps its own FirstRunTipsDone
+    // flag above (a separate one-time lifecycle tied to the wizard).
+    public List<string> ShownTours { get; set; } = new();
+
+    // One-time behavioural nudge: a real user (≥N dictations) with no AI provider is offered the AI-setup
+    // tour once. Set the moment we offer, so it never nags again — whether or not they act on it.
+    public bool AiSetupNudgeDone { get; set; }
 }
 
 /// <summary>Loads, exposes, and persists <see cref="JotSettings"/>; raises <see cref="Changed"/> after a save.</summary>

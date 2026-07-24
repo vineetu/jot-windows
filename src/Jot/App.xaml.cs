@@ -415,6 +415,7 @@ public partial class App : System.Windows.Application
         _ = Task.Run(() => Services.GetRequiredService<RetentionCleaner>().Prune());
 
         WireRecorderNotifications();
+        WireTourTriggers();
         SetupTray();
         SetupHotkeys();
 
@@ -443,8 +444,31 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--pickerdemo")) RunPickerDemo();
         // `--donatedemo` shows the donate popup (fetches the live donations summary).
         if (e.Args.Contains("--donatedemo")) { new Controls.DonationsWindow().Show(); }
-        // `--tour` force-shows the one-time first-run quick tour (for testing/screenshots), ignoring the flag.
-        if (e.Args.Contains("--tour")) { new Controls.QuickTourWindow().Show(); }
+        // `--tour [name]` force-shows a tour (testing/screenshots), ignoring its show-once flag. Valid names:
+        // getting-started (default), shortcuts, ai, rewrite, import, feedback. Unknown → getting-started.
+        int tourArg = Array.IndexOf(e.Args, "--tour");
+        if (tourArg >= 0)
+        {
+            string name = tourArg + 1 < e.Args.Length && !e.Args[tourArg + 1].StartsWith("--")
+                ? e.Args[tourArg + 1] : Controls.TourCatalog.GettingStartedId;
+            new Controls.QuickTourWindow(Controls.TourCatalog.ById(name) ?? Controls.TourCatalog.GettingStarted).Show();
+        }
+        // `--ainudgedemo` fires the AI-setup nudge pill unconditionally (screenshots the nudge surface).
+        // Delayed like the real post-dictation nudge, so it lands after the warm-up notice has cleared.
+        if (e.Args.Contains("--ainudgedemo"))
+            _ = Task.Delay(12000).ContinueWith(
+                _ => Services.GetRequiredService<PillController>().ShowNotice(AiSetupNudgeText, hideAfterMs: 8000),
+                TaskScheduler.Default);
+        // `--simaiconfig` drives the real settings.Changed wiring by flipping AiProvider None→configured, so
+        // the rewrite/transform tour auto-opens (WireTourTriggers). Testing only — it persists a live provider
+        // change, so restore settings.json afterward.
+        if (e.Args.Contains("--simaiconfig"))
+            Dispatcher.BeginInvoke(() =>
+            {
+                var st = Services.GetRequiredService<ISettingsStore>();
+                st.Current.AiProvider = "OpenAI";
+                st.Save();
+            }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         // `--feedbackdemo` shows the feedback composer (does not auto-send).
         if (e.Args.Contains("--feedbackdemo")) { new Controls.FeedbackWindow(attachDiagnostics: true).Show(); }
         // Setup wizard: forced with `--wizard`, or on a normal (no-arg) launch when setup is incomplete OR
@@ -2572,30 +2596,83 @@ public partial class App : System.Windows.Application
                 "Click here to send feedback with diagnostics — it helps fix this for everyone.");
         };
 
-        // After a dictation, check whether it's time for the one-time "you've saved ~1h" donation nudge.
-        _recorder.TranscriptReady += _ => MaybeShowDonationNudge();
+        // After a dictation, consider a single behavioural nudge (AI-setup or donation).
+        _recorder.TranscriptReady += _ => MaybeShowNudge();
     }
 
-    private bool _donationNudgeShown; // once per app session, so an un-dismissed nudge doesn't re-pop each dictation
+    // GLOBAL etiquette: at most one behavioural nudge per app launch, so an un-dismissed nudge doesn't re-pop
+    // each dictation and two nudges never stack.
+    private bool _nudgeShownThisLaunch;
+
+    /// <summary>The single nudge scheduler, run after each dictation. AI-setup takes precedence — it's
+    /// actionable and unlocks a feature at a lower bar than the ~1h donation ask — and each nudge is itself
+    /// gated to fire at most once ever. At most one fires per launch.</summary>
+    private void MaybeShowNudge()
+    {
+        if (_nudgeShownThisLaunch) return;
+        if (TryShowAiSetupNudge() || TryShowDonationNudge())
+            _nudgeShownThisLaunch = true;
+    }
+
+    // The AI-setup nudge is a pill notice, not a modal: it's the app's established non-focus-stealing notice
+    // channel, so it never ambushes a heavy user mid-task. The AI tour itself stays discoverable in Help.
+    private const string AiSetupNudgeText = "Set up AI in Settings to rewrite and transform your text.";
+
+    /// <summary>Nudge a real user with no AI provider to set one up — once ever. Delayed so it lands after
+    /// the just-finished dictation's success pill, and only when Jot is idle (ShowNotice self-guards that).</summary>
+    private bool TryShowAiSetupNudge()
+    {
+        var store = Services.GetRequiredService<ISettingsStore>();
+        int dictations = Services.GetRequiredService<UsageStats>().TotalDictations;
+        if (!Controls.TourTriggers.ShouldNudgeAiSetup(store.Current, dictations)) return false;
+
+        store.Current.AiSetupNudgeDone = true; // once ever — whether or not they act on it
+        store.Save();
+        var pill = Services.GetRequiredService<PillController>();
+        _ = Task.Delay(3500).ContinueWith(
+            _ => pill.ShowNotice(AiSetupNudgeText, hideAfterMs: 8000), TaskScheduler.Default);
+        return true;
+    }
 
     // Show the donation nudge the first time time-saved crosses ~1h. Once snoozed ("maybe later") it only
     // re-asks at a much higher bar much later; "don't ask again"/donate makes it terminal. All on-device.
-    private void MaybeShowDonationNudge()
+    private bool TryShowDonationNudge()
     {
-        if (_donationNudgeShown) return;
         var s = Services.GetRequiredService<ISettingsStore>().Current;
-        if (s.DonationNudgeDone) return;
+        if (s.DonationNudgeDone) return false;
 
         double minsSaved = Services.GetRequiredService<UsageStats>().MinutesSaved;
-        if (minsSaved < 60) return;                                   // first fire: ~1h saved
+        if (minsSaved < 60) return false;                             // first fire: ~1h saved
         if (s.DonationNudgeSnoozedAt is DateTime snoozed              // snoozed: only re-ask at 5h+ and 30+ days on
-            && !(minsSaved >= 300 && (DateTime.UtcNow - snoozed).TotalDays >= 30)) return;
+            && !(minsSaved >= 300 && (DateTime.UtcNow - snoozed).TotalDays >= 30)) return false;
 
-        _donationNudgeShown = true;
         Dispatcher.BeginInvoke(() =>
         {
             try { new Controls.DonationNudgeWindow().Show(); }
             catch (Exception ex) { JotLog.Error("donation nudge failed to show", ex); }
+        });
+        return true;
+    }
+
+    private string _lastAiProvider = "None"; // tracks AiProvider across saves to catch the None→configured flip
+
+    /// <summary>Wires the "AI just configured" teachable moment: the instant the user connects a provider,
+    /// auto-open the rewrite/transform tour once (they just took the action, so a tour is expected). Honours
+    /// the two hard invariants — once ever (ShownTours), never over a live recording.</summary>
+    private void WireTourTriggers()
+    {
+        var settings = Services.GetRequiredService<ISettingsStore>();
+        _lastAiProvider = settings.Current.AiProvider;
+        settings.Changed += (_, _) => Dispatcher.BeginInvoke(() =>
+        {
+            string now = settings.Current.AiProvider;
+            bool justConfigured = Controls.TourTriggers.IsAiJustConfigured(_lastAiProvider, now);
+            _lastAiProvider = now;
+            if (!justConfigured) return;
+            if (Controls.TourCatalog.WasShown(settings.Current, Controls.TourCatalog.Rewrite.Id)) return;
+            if (_recorder?.State != RecorderState.Idle) return; // a tour must never appear mid-dictation
+            try { new Controls.QuickTourWindow(Controls.TourCatalog.Rewrite).Show(); }
+            catch (Exception ex) { JotLog.Error("rewrite tour failed to show", ex); }
         });
     }
 

@@ -1,57 +1,46 @@
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
-using Jot.Recording;
 using Jot.Services.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Wpf.Ui.Controls;
 
 namespace Jot.Controls;
 
-/// <summary>One card in the quick tour: an icon, a title, and a body built at show-time so it can splice in
-/// live values (e.g. the user's real toggle chord). Adding a card for a future feature is a one-entry change
-/// to <see cref="QuickTourWindow.Cards"/> — nothing else moves.</summary>
-internal sealed record TourCard(SymbolRegular Icon, string Title, System.Func<JotSettings, string> Body);
-
 /// <summary>
-/// One-time "quick tour" shown right after the setup wizard closes with setup complete — a friendly,
-/// zero-jargon nudge that teaches the essentials (toggle to dictate, the live pill + Esc, where to
-/// customize). Dismissed with "Got it"; re-runnable from Recents/Help. The show-once state lives in settings
-/// (<see cref="JotSettings.FirstRunTipsDone"/>); closing it (any way) marks it done so it never nags again.
+/// Renders any named <see cref="Tour"/> (title + subhead + declarative card list) — the getting-started
+/// essentials tour and every per-feature tour go through this one window. Dismissed with "Got it";
+/// re-runnable from Recents/Help. Closing it (any way) marks that tour seen via <see cref="TourCatalog.MarkShown"/>
+/// so it never nags again — getting-started via <see cref="JotSettings.FirstRunTipsDone"/>, the rest via
+/// <see cref="JotSettings.ShownTours"/>.
 ///
-/// The content is a declarative list (<see cref="Cards"/>) the window renders as-is — a small showcase system
-/// meant to grow: drop a new <see cref="TourCard"/> in when a feature ships (vocabulary, prompts, rewrite…).
-/// A future per-feature tour (its own named card list) would slot in beside this one; we deliberately keep to
-/// a single list until that's actually needed.
+/// The content lives in <see cref="TourCatalog"/>, not here: shipping a new tour is one entry there, with no
+/// change to this window. The parameterless ctor shows getting-started (the long-standing first-run tour).
 /// </summary>
 public partial class QuickTourWindow : FluentWindow
 {
     private readonly ISettingsStore _settings;
+    private readonly Tour _tour;
 
-    /// <summary>The tour's cards, in order. Bodies are factories so they read live settings when shown — never
-    /// a hardcoded shortcut string. Extend by adding an entry; the window renders whatever's here.</summary>
-    internal static readonly IReadOnlyList<TourCard> Cards = new[]
-    {
-        new TourCard(SymbolRegular.Keyboard24, "Start and stop dictating",
-            s => $"Press {HotkeyChord.Display(s.ToggleRecordingHotkey)} anywhere to start, then press it again " +
-                 "to stop — or click the Jot icon in your taskbar tray."),
-        new TourCard(SymbolRegular.Mic24, "Watch it as you speak",
-            _ => "A small floating pill shows your words appearing live. Press Esc anytime to stop and save what " +
-                 "you've said."),
-        new TourCard(SymbolRegular.Settings24, "Make it yours",
-            _ => "Change your shortcuts anytime on the Shortcuts page — you can even set a key to hold down while " +
-                 "you talk. Pick your language and AI helper in Settings."),
-        // Future feature cards slot in here (e.g. custom vocabulary when it ships) — one entry, no window changes.
-    };
+    /// <summary>The getting-started cards, kept as a stable accessor for existing tests and callers.</summary>
+    internal static IReadOnlyList<TourCard> Cards => TourCatalog.GettingStarted.Cards;
 
     /// <summary>The one place that decides whether the post-wizard tour fires: setup is complete and the
     /// tour hasn't been shown yet. Existing upgraders never run the wizard, so they never hit this true.</summary>
     internal static bool ShouldShowAfterWizard(JotSettings s) => s.FirstRunComplete && !s.FirstRunTipsDone;
 
-    public QuickTourWindow()
+    /// <summary>Shows the getting-started tour (the long-standing first-run / Recents / Help entry point).</summary>
+    public QuickTourWindow() : this(TourCatalog.GettingStarted) { }
+
+    internal QuickTourWindow(Tour tour)
     {
         InitializeComponent();
         _settings = App.Services.GetRequiredService<ISettingsStore>();
+        _tour = tour;
+        Title = tour.Title;
+        WindowTitleBar.Title = tour.Title;
+        HeadingText.Text = tour.Heading;
+        SubheadText.Text = tour.Subhead;
         BuildCards();
     }
 
@@ -59,7 +48,7 @@ public partial class QuickTourWindow : FluentWindow
     // instead of running off the fixed-width window.
     private void BuildCards()
     {
-        foreach (TourCard card in Cards)
+        foreach (TourCard card in _tour.Cards)
         {
             var grid = new Grid { Margin = new Thickness(0, 14, 0, 0) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -93,11 +82,11 @@ public partial class QuickTourWindow : FluentWindow
 
     private void OnGotIt(object sender, RoutedEventArgs e) => Close();
 
-    // Any close (Got it or the title-bar X) marks the tour done — truly one-time. Idempotent, so re-opening
-    // from Recents/Help just re-saves the same flag.
+    // Any close (Got it or the title-bar X) marks THIS tour done — truly one-time. Idempotent, so re-opening
+    // from Recents/Help/the Help hub just re-saves the same state.
     protected override void OnClosed(System.EventArgs e)
     {
-        _settings.Current.FirstRunTipsDone = true;
+        TourCatalog.MarkShown(_settings.Current, _tour.Id);
         _settings.Save();
         base.OnClosed(e);
     }

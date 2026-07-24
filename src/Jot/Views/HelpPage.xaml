@@ -13,6 +13,17 @@
                            Click="OnSendFeedback" />
             </StackPanel>
 
+            <!-- Tours hub: the one discoverable home for every per-feature tour (shortcuts + import live
+                 here primarily; the AI and rewrite tours also auto-fire at their teachable moments). -->
+            <TextBlock Text="Tours" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,16,0,8" />
+            <WrapPanel Orientation="Horizontal">
+                <ui:Button Content="Shortcuts" Icon="{ui:SymbolIcon Keyboard24}" Margin="0,0,8,8" Click="OnTourShortcuts" />
+                <ui:Button Content="Set up AI" Icon="{ui:SymbolIcon Brain24}" Margin="0,0,8,8" Click="OnTourAi" />
+                <ui:Button Content="Rewrite &amp; transform" Icon="{ui:SymbolIcon Wand24}" Margin="0,0,8,8" Click="OnTourRewrite" />
+                <ui:Button Content="Import a recording" Icon="{ui:SymbolIcon ArrowUpload24}" Margin="0,0,8,8" Click="OnTourImport" />
+                <ui:Button Content="Send feedback" Icon="{ui:SymbolIcon PersonFeedback24}" Margin="0,0,8,8" Click="OnTourFeedback" />
+            </WrapPanel>
+
             <TextBlock Text="Basics" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,16,0,8" />
             <ui:CardExpander Icon="{ui:SymbolIcon Mic24}" Margin="0,0,0,6">
                 <ui:CardExpander.Header>

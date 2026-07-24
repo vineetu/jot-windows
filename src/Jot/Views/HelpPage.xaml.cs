@@ -22,6 +22,15 @@ public partial class HelpPage : Page
     // Re-open the first-run quick tour on demand — doesn't reset the one-time flag, just shows it again.
     private void OnShowTour(object sender, System.Windows.RoutedEventArgs e) => new Controls.QuickTourWindow().Show();
 
+    // The Tours hub: each opens its per-feature tour on demand (re-runnable; showing marks it seen).
+    private void OnTourShortcuts(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Shortcuts);
+    private void OnTourAi(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Ai);
+    private void OnTourRewrite(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Rewrite);
+    private void OnTourImport(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Import);
+    private void OnTourFeedback(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Feedback);
+
+    private static void ShowTour(Controls.Tour tour) => new Controls.QuickTourWindow(tour).Show();
+
     // Diagnostics pre-checked here: someone reaching for feedback from Help usually has a problem worth
     // the report (they can untick it — and the full text is previewed either way).
     private void OnSendFeedback(object sender, System.Windows.RoutedEventArgs e)
