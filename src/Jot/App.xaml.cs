@@ -51,6 +51,16 @@ public partial class App : System.Windows.Application
                 .Run();
         }
 
+        // If "Erase all data" was chosen last run, the actual wipe was deferred to now — BEFORE any service
+        // opens the model/library — so it can't be blocked by our own open handles (the old erase-does-nothing
+        // bug). After a wipe, settings.json is gone, so this launch falls through to first-run (the wizard).
+        bool wiped = JotDataPurge.ConsumePendingWipe(JotPaths.ConfigDir);
+        // One-time upgrade: default storage moved into the MSIX container (so uninstall wipes everything).
+        // Bring an existing user's config across, and — when the old data is on the same volume — relocate
+        // the data into the container too (an instant rename), so uninstall removes it. Skipped right after
+        // an erase (a fresh first run must not resurrect the old data). Different-drive data is adopted below.
+        if (!wiped) StartupMigration.PrepareContainer();
+
         base.OnStartup(e);
 
         // App-wide scrolling: one class handler so wheel-over-text works on every page (see PageScrolling).
@@ -59,10 +69,44 @@ public partial class App : System.Windows.Application
         DispatcherUnhandledException += (_, ex) => { LogCrash(ex.Exception); };
         AppDomain.CurrentDomain.UnhandledException += (_, ex) => LogCrash(ex.ExceptionObject as Exception);
 
+        // `--datapaths` writes every resolved storage path to %TEMP%\jot-datapaths.txt — run it on the
+        // PACKAGED build to confirm the container root is right (and see exactly what a full wipe removes)
+        // before trusting the container-default / uninstall-wipe behavior.
+        if (e.Args.Contains("--datapaths"))
+        {
+            var st = new JsonSettingsStore();
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"IsPackaged       = {PackagePaths.IsPackaged}");
+            sb.AppendLine($"PackageFamily    = {PackagePaths.PackageFamilyName}");
+            sb.AppendLine($"ContainerRoot    = {PackagePaths.ContainerRoot}");
+            sb.AppendLine($"AppDataRoot      = {JotPaths.AppDataRoot}");
+            sb.AppendLine($"ConfigDir        = {JotPaths.ConfigDir}");
+            sb.AppendLine($"LegacyLocalApp   = {JotPaths.LegacyLocalAppDataDir}");
+            sb.AppendLine($"DataDirectory    = '{st.Current.DataDirectory}'");
+            sb.AppendLine($"DataDir(current) = {JotPaths.DataDir(st.Current)}");
+            sb.AppendLine($"ModelsDir        = {JotPaths.ModelsDir(st.Current)}");
+            sb.AppendLine("-- a full wipe (Erase / uninstall) removes --");
+            foreach (string p in JotDataPurge.ArtifactPaths(JotPaths.DataDir(st.Current), JotPaths.ConfigDir))
+                sb.AppendLine("  " + p);
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-datapaths.txt"), sb.ToString());
+            Shutdown();
+            return;
+        }
         if (e.Args.Contains("--dumpsymbols"))
         {
             System.IO.File.WriteAllLines(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-symbols.txt"),
                 Enum.GetNames(typeof(Wpf.Ui.Controls.SymbolRegular)));
+            Shutdown();
+            return;
+        }
+        // `--injecttest` runs the synthetic-input probe → %TEMP%\jot-injecttest.txt. On a normal PC = works;
+        // on a machine whose EDR filters injected keystrokes = blocked (→ clipboard-mode fallback).
+        if (e.Args.Contains("--injecttest"))
+        {
+            bool works = Delivery.TextInjector.SyntheticInputWorks();
+            System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-injecttest.txt"),
+                $"SyntheticInputWorks = {works}\n");
             Shutdown();
             return;
         }
@@ -268,6 +312,10 @@ public partial class App : System.Windows.Application
         }
 
         Services = BuildServices();
+        // Upgrade adoption: if data still sits in the old real folder and no custom folder was chosen, point
+        // the setting at it (no file move) so the model/history isn't stranded now that the default is the
+        // container. Must run before anything resolves DataDir (recorder/transcriber/stores, below).
+        StartupMigration.AdoptLegacyDataDir(Services.GetRequiredService<ISettingsStore>());
         // Route all logging into the user's chosen data folder (D5) via the single activity log (D4).
         var settingsForLog = Services.GetRequiredService<ISettingsStore>();
         JotLog.Initialize(() => JotPaths.DataDir(settingsForLog.Current));
@@ -330,9 +378,15 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--donatedemo")) { new Controls.DonationsWindow().Show(); }
         // `--feedbackdemo` shows the feedback composer (does not auto-send).
         if (e.Args.Contains("--feedbackdemo")) { new Controls.FeedbackWindow().Show(); }
-        // First-run setup wizard: on a normal (no-arg) launch, or forced with `--wizard`.
-        bool firstRun = !Services.GetRequiredService<ISettingsStore>().Current.FirstRunComplete;
-        if (e.Args.Contains("--wizard") || (e.Args.Length == 0 && firstRun)) ShowWizard();
+        // Setup wizard: forced with `--wizard`, or on a normal (no-arg) launch when setup is incomplete OR
+        // the speech model is missing. Re-showing whenever the model is absent (not just on first run)
+        // recovers any state where a user reached the app without a usable model — closing the wizard early,
+        // a failed/blocked download, stale settings after a reinstall — instead of stranding them at
+        // "model isn't installed" on the first dictation, with no obvious way back (the download UI is
+        // buried under Advanced). `transcriber` is the same singleton warmed up above.
+        bool firstRun = !settings.Current.FirstRunComplete;
+        bool modelMissing = !transcriber.IsModelInstalled;
+        if (e.Args.Contains("--wizard") || (e.Args.Length == 0 && (firstRun || modelMissing))) ShowWizard();
         // A normal / launch-at-login start (no args, already set up) opens the window instead of
         // booting silently to the tray — otherwise users think auto-start didn't work.
         else if (e.Args.Length == 0) ShowMainWindow();
@@ -2140,7 +2194,12 @@ public partial class App : System.Windows.Application
             i => i.Status == Models.RecordingStatus.Complete && !string.IsNullOrWhiteSpace(i.Transcript));
         if (last is null) return;
         var s = Services.GetRequiredService<ISettingsStore>().Current;
-        Delivery.TextInjector.PasteAtCursor(last.Transcript, IntPtr.Zero, s.KeepInClipboard, s.AutoEnter);
+        var pr = Delivery.TextInjector.PasteAtCursor(last.Transcript, IntPtr.Zero, s.KeepInClipboard, s.AutoEnter,
+            Delivery.TextInjector.ParsePasteMethod(s.PasteMethod));
+        if (pr == Delivery.TextInjector.PasteResult.CopiedToClipboard)
+            Notify("Transcript copied — press Ctrl+V to paste",
+                "This PC blocks apps from pasting for you, so Jot put the transcript on your clipboard.",
+                Forms.ToolTipIcon.Info);
     }
 
     private void OpenRewritePicker()
@@ -2217,6 +2276,9 @@ public partial class App : System.Windows.Application
             };
         };
 
+        // Clipboard-mode fallback (this PC blocks automatic paste) — surface the "press Ctrl+V" hint.
+        _recorder.Notice += (title, msg) => Notify(title, msg, Forms.ToolTipIcon.Info);
+
         // After a dictation, check whether it's time for the one-time "you've saved ~1h" donation nudge.
         _recorder.TranscriptReady += _ => MaybeShowDonationNudge();
     }
@@ -2250,74 +2312,15 @@ public partial class App : System.Windows.Application
     private static void LogCrash(Exception? ex)
         => JotLog.Error("Unhandled exception", ex);
 
-    /// <summary>Called by the Velopack uninstaller: removes Jot's data and launch-at-login entry.
-    /// Targets known Jot artifacts rather than nuking the data folder (the save location may be a shared
-    /// directory). Best-effort — never throw out of an uninstall hook.</summary>
+    /// <summary>Called by the Velopack uninstaller (unpackaged builds only): removes every Jot artifact via
+    /// the shared <see cref="JotDataPurge"/> — the exact same wipe "Erase all data" uses, so the two lists
+    /// can never drift. Best-effort; never throws out of an uninstall hook. (MSIX/Store builds get no
+    /// uninstall hook at all — their data lives in the package container, which Windows auto-deletes on
+    /// uninstall; that's why the default data root is the container under packaged builds.)</summary>
     private static void WipeAllData()
     {
-        // Remove the per-user "launch at login" Run entry so nothing starts after removal.
-        try
-        {
-            using Microsoft.Win32.RegistryKey? run = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
-            run?.DeleteValue("Jot", throwOnMissingValue: false);
-        }
-        catch { /* best effort */ }
-
-        // Delete Jot's data under the chosen save location.
-        try
-        {
-            var settings = new JsonSettingsStore();
-            JotSettings s = settings.Current;
-            string dataDir = JotPaths.DataDir(s);
-
-            // Only recursively remove the named subfolders (recordings/models/logs) if this really is a
-            // Jot data dir — guards a user who pointed the save location at a shared folder that happens
-            // to contain its own recordings/ etc. The marker: a library.json here, or a "…\Jot" basename.
-            bool looksLikeJotDir = System.IO.File.Exists(JotPaths.LibraryFile(s))
-                || string.Equals(System.IO.Path.GetFileName(dataDir.TrimEnd('\\', '/')), "Jot",
-                                 StringComparison.OrdinalIgnoreCase);
-
-            // Always safe: Jot's own files.
-            TryDeleteFile(JotPaths.LibraryFile(s));
-            TryDeleteFile(System.IO.Path.Combine(dataDir, "aikey.dat"));
-            TryDeleteFile(System.IO.Path.Combine(dataDir, "stats.json"));
-
-            if (looksLikeJotDir)
-            {
-                TryDeleteDir(JotPaths.RecordingsDir(s));
-                TryDeleteDir(JotPaths.ModelsDir(s));
-                TryDeleteDir(System.IO.Path.Combine(dataDir, "logs"));
-                // Remove the data folder itself only if it's now empty.
-                try
-                {
-                    if (System.IO.Directory.Exists(dataDir) &&
-                        !System.IO.Directory.EnumerateFileSystemEntries(dataDir).Any())
-                        System.IO.Directory.Delete(dataDir);
-                }
-                catch { /* leave a non-empty folder in place */ }
-            }
-        }
-        catch { /* best effort */ }
-
-        // Delete the app-config folder in LocalAppData (settings.json + any legacy logs).
-        try
-        {
-            string local = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
-            if (System.IO.Directory.Exists(local)) System.IO.Directory.Delete(local, recursive: true);
-        }
-        catch { /* best effort */ }
-    }
-
-    private static void TryDeleteDir(string dir)
-    {
-        try { if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, recursive: true); } catch { }
-    }
-
-    private static void TryDeleteFile(string file)
-    {
-        try { if (System.IO.File.Exists(file)) System.IO.File.Delete(file); } catch { }
+        try { JotDataPurge.PurgeAll(JotPaths.DataDir(new JsonSettingsStore().Current), JotPaths.ConfigDir); }
+        catch { /* best effort — never throw out of an uninstall hook */ }
     }
 
     protected override void OnExit(ExitEventArgs e)

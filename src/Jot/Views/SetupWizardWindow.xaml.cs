@@ -57,9 +57,13 @@ public partial class SetupWizardWindow : FluentWindow
         _meter.Dispose();
         _vm.Detach();   // drop the wizard's subscription to the singleton download so it can be collected
 
-        // Closing via the title-bar X still counts as completing first-run so it doesn't nag again.
+        // Closing via the title-bar X counts as completing first-run ONLY if the model actually made it
+        // down. Without a model the app can't dictate, so we must NOT mark setup done — App startup re-shows
+        // this wizard whenever the model is missing (see OnStartup's modelMissing check). With the model
+        // present (the normal path), closing still counts as done so it doesn't nag again.
         var store = App.Services.GetRequiredService<ISettingsStore>();
-        if (!store.Current.FirstRunComplete)
+        var transcriber = App.Services.GetRequiredService<Jot.Transcription.ITranscriber>();
+        if (!store.Current.FirstRunComplete && transcriber.IsModelInstalled)
         {
             store.Current.FirstRunComplete = true;
             store.Save();

@@ -21,9 +21,9 @@ namespace Jot.Services;
 /// </summary>
 public sealed partial class DataFolderMigrator : ObservableObject
 {
-    // The marker lives beside settings.json in the fixed per-user config folder (%LOCALAPPDATA%\Jot),
-    // NEVER under a data folder being moved — otherwise the record describing the move could itself get
-    // moved or orphaned mid-operation. DefaultDataDir is that fixed folder (see JotPaths / JsonSettingsStore).
+    // The marker lives beside settings.json in the fixed config folder (JotPaths.ConfigDir), NEVER under a
+    // data folder being moved — otherwise the record describing the move could itself get moved or orphaned
+    // mid-operation. ConfigDir is that fixed root (the MSIX container, or %LOCALAPPDATA%\Jot unpackaged).
     // Tests pass a temp configDir so they never touch the real user's config folder.
     private readonly string _configDir;
     private string MarkerPath => Path.Combine(_configDir, "migration.json");
@@ -39,7 +39,7 @@ public sealed partial class DataFolderMigrator : ObservableObject
     public DataFolderMigrator(ISettingsStore store, string? configDir = null)
     {
         _store = store;
-        _configDir = configDir ?? JotPaths.DefaultDataDir;
+        _configDir = configDir ?? JotPaths.ConfigDir;
     }
 
     [ObservableProperty] private bool _isMigrating;

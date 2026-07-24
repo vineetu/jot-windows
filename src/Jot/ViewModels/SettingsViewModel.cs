@@ -55,6 +55,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string[] RetentionOptions { get; } = ["Forever", "7 days", "30 days", "90 days"];
     public string[] TranscriptionDevices { get; } = ["CPU", "GPU (DirectML)"];
 
+    /// <summary>Paste-method choices for the Settings dropdown (value persisted, label shown). Mirrors Handy.</summary>
+    public sealed record PasteMethodOption(string Value, string Label);
+    public PasteMethodOption[] PasteMethods { get; } =
+    [
+        new("auto", "Automatic (recommended)"),
+        new("ctrl_v", "Ctrl+V"),
+        new("shift_insert", "Shift+Insert (terminals)"),
+        new("type", "Type it out"),
+        new("clipboard", "Copy to clipboard"),
+        new("none", "Don't paste"),
+    ];
+
     public ObservableCollection<AudioInputDevice> InputDevices { get; } = new();
 
     [ObservableProperty] private AppThemeMode _themeMode;
@@ -72,13 +84,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _autoPaste;
     [ObservableProperty] private bool _autoEnter;
     [ObservableProperty] private bool _keepInClipboard;
+    [ObservableProperty] private string _pasteMethod = "auto";
 
     // Shortcuts (editable chord strings). Persisted; App re-registers on the settings-changed signal.
-    [ObservableProperty] private string _toggleRecordingHotkey = "Alt+Space";
+    // These initializers must match the JotSettings defaults (they're overwritten on load, but a mismatch
+    // is a latent bug). Toggle is Ctrl+Shift+Space — NOT Alt+Space (Windows system-menu / focus steal).
+    [ObservableProperty] private string _toggleRecordingHotkey = "Ctrl+Shift+Space";
     [ObservableProperty] private string _cancelRecordingHotkey = "Escape";
-    [ObservableProperty] private string _pasteLastHotkey = "Ctrl+Alt+P";
-    [ObservableProperty] private string _rewriteHotkey = "Alt+OemQuestion";
-    [ObservableProperty] private string _rewriteWithVoiceHotkey = "Alt+OemPeriod";
+    [ObservableProperty] private string _pasteLastHotkey = "Ctrl+Alt+V";
+    [ObservableProperty] private string _rewriteHotkey = "Ctrl+Alt+OemQuestion";
+    [ObservableProperty] private string _rewriteWithVoiceHotkey = "Ctrl+Alt+OemPeriod";
 
     /// <summary>Shared on-device model download — the SAME instance the setup wizard uses (one downloader,
     /// one progress/status surface). The Model row binds its status, progress bar and Download button here.</summary>
@@ -218,6 +233,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _autoPaste = S.AutoPaste;
         _autoEnter = S.AutoEnter;
         _keepInClipboard = S.KeepInClipboard;
+        _pasteMethod = S.PasteMethod;
         _toggleRecordingHotkey = S.ToggleRecordingHotkey;
         _cancelRecordingHotkey = S.CancelRecordingHotkey;
         _pasteLastHotkey = S.PasteLastHotkey;
@@ -282,6 +298,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnAutoPasteChanged(bool value) { S.AutoPaste = value; Save(); }
     partial void OnAutoEnterChanged(bool value) { S.AutoEnter = value; Save(); }
     partial void OnKeepInClipboardChanged(bool value) { S.KeepInClipboard = value; Save(); }
+    partial void OnPasteMethodChanged(string value) { S.PasteMethod = value; Save(); }
     partial void OnSoundStartChanged(bool value) { S.SoundStart = value; Save(); }
     partial void OnSoundStopChanged(bool value) { S.SoundStop = value; Save(); }
     partial void OnSoundCancelChanged(bool value) { S.SoundCancel = value; Save(); }

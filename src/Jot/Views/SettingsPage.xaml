@@ -173,6 +173,10 @@
                                        Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                             <ProgressBar Margin="0,6,0,0" Minimum="0" Maximum="100" Value="{Binding Migrator.Progress}" />
                         </StackPanel>
+                        <!-- Uninstall can't reach a custom-drive location (MSIX removes only the app's own container). -->
+                        <TextBlock Text="A custom location isn't removed when you uninstall Jot — use “Erase all data” first to wipe everything."
+                                   FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                     </StackPanel>
                 </ctl:SettingRow>
                 <ctl:SettingRow Title="Keep audio" Description="Older audio is cleared automatically to save space. Transcripts are always kept.">
@@ -232,6 +236,12 @@
                 <ctl:SettingRow Title="Keep transcript on clipboard"
                                 Description="Otherwise your previous clipboard contents are restored after paste.">
                     <ui:ToggleSwitch IsChecked="{Binding KeepInClipboard, Mode=TwoWay}" />
+                </ctl:SettingRow>
+                <ctl:SettingRow Title="Paste method"
+                                Description="How Jot delivers the transcript. Automatic works for most apps and auto-detects locked-down work PCs. Use “Type it out” or “Shift+Insert” for terminals/apps that reject a paste, or “Copy to clipboard” to paste it yourself.">
+                    <ComboBox MinWidth="200" ItemsSource="{Binding PasteMethods}"
+                              DisplayMemberPath="Label" SelectedValuePath="Value"
+                              SelectedValue="{Binding PasteMethod, Mode=TwoWay}" />
                 </ctl:SettingRow>
 
                 <TextBlock Text="Sound" Style="{StaticResource SectionHeader}" Tag="section" />

@@ -126,7 +126,8 @@ public sealed class RewriteController
             }
 
             // Replace the selection: focus the origin window and paste over it.
-            TextInjector.PasteAtCursor(result, _origin, s.KeepInClipboard, pressEnter: false);
+            TextInjector.PasteAtCursor(result, _origin, s.KeepInClipboard, pressEnter: false,
+                method: TextInjector.ParsePasteMethod(s.PasteMethod));
             _store.Add(BuildRewrite(instruction, _selection, result, s.AiProvider));
             _sound.PlaySuccess();
             Succeeded?.Invoke(result);

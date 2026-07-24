@@ -18,8 +18,7 @@ public sealed class ParakeetModel
     public ParakeetModel(string? directory = null)
     {
         Directory = directory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Jot", "models", "parakeet-tdt-0.6b-v2");
+            Jot.Services.JotPaths.AppDataRoot, "models", "parakeet-tdt-0.6b-v2");
     }
 
     public string Directory { get; }

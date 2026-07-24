@@ -244,34 +244,19 @@ public partial class SettingsPage : Page
     private void OnEraseData(object sender, RoutedEventArgs e)
     {
         var result = System.Windows.MessageBox.Show(
-            "Erase all recordings, transcripts, the downloaded model, and settings? This can't be undone. Jot will restart.",
+            "Erase everything — recordings, transcripts, the downloaded model, saved AI keys, and settings? " +
+            "This can't be undone. Jot will restart.",
             "Erase all data", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (result != MessageBoxResult.OK) return;
 
+        // The running process can't reliably delete its own open/memory-mapped files (the model, the
+        // library) — deletes would hit sharing violations and silently leave data behind (the old bug).
+        // Record the wipe, capturing the RESOLVED data dir (which may be a custom drive, and would be lost
+        // once settings.json is gone), then restart. Startup purges everything before any file is opened.
         var settings = App.Services.GetRequiredService<Services.Abstractions.ISettingsStore>();
-        App.Services.GetRequiredService<IRecordingStore>().Items.Clear(); // writes an empty library
-
-        // Delete user data: recordings, library, prompts, model, encrypted key, and settings.
-        var s = settings.Current;
-        TryDeleteDir(Services.JotPaths.RecordingsDir(s));
-        TryDeleteDir(Services.JotPaths.ModelsDir(s));
-        TryDeleteFile(Services.JotPaths.LibraryFile(s));
-        string appData = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
-        TryDeleteFile(System.IO.Path.Combine(appData, "prompts.json"));
-        TryDeleteFile(System.IO.Path.Combine(Services.JotPaths.DataDir(s), "aikey.dat")); // now under the data folder
-        TryDeleteFile(System.IO.Path.Combine(appData, "settings.json")); // last: back to first-run defaults
+        Services.JotDataPurge.RequestWipe(
+            Services.JotPaths.DataDir(settings.Current), Services.JotPaths.ConfigDir);
         Restart();
-    }
-
-    private static void TryDeleteDir(string dir)
-    {
-        try { if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, recursive: true); } catch { }
-    }
-
-    private static void TryDeleteFile(string file)
-    {
-        try { if (System.IO.File.Exists(file)) System.IO.File.Delete(file); } catch { }
     }
 
     // Releases the single-instance mutex before spawning the new process (see App.RestartApp) so the

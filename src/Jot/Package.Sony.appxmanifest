@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 
+<!-- Sony flavor (-p:Flavor=Sony). SAME Partner Center account/publisher as the public app
+     ("Vineet sriram") but a SEPARATE reserved product ("Jot Sie") so it can ship to a Private
+     audience without touching the public Jot Transcribe listing. Identity Name/DisplayName below
+     MUST match the "Jot Sie" reservation in Partner Center exactly before Store upload — confirm
+     them on the product's Identity page (the Name may differ from the placeholder here). -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
@@ -12,14 +17,14 @@
   IgnorableNamespaces="uap uap2 uap3 uap10 desktop desktop6 rescap">
 
   <Identity
-    Name="Vineetsriram.JotTranscribe"
+    Name="Vineetsriram.JotSie"
     Publisher="CN=1269BFA0-02DC-4524-8A77-55C4EE9EADD4"
     Version="1.1.0.0" />
 
   <Properties>
-    <!-- Must match the reserved app name in Partner Center exactly. The friendly tile name
-         (VisualElements DisplayName below) stays "Jot" and is allowed to differ. -->
-    <DisplayName>Jot Transcribe</DisplayName>
+    <!-- Must match the reserved app name ("Jot Sie") in Partner Center exactly. The friendly tile
+         name (VisualElements DisplayName below) is allowed to differ. -->
+    <DisplayName>Jot Sie</DisplayName>
     <PublisherDisplayName>Vineet sriram</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -37,8 +42,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="Jot"
-        Description="Free, on-device dictation for Windows"
+        DisplayName="Jot Sie"
+        Description="On-device dictation with the PFB AI Gateway"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\MedTile.png"
         Square44x44Logo="Assets\AppList.png">

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>On-device dictation — engines &amp; what open source uses</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2rem 1rem 4rem; background: Canvas; color: CanvasText;
+         font: 15px/1.6 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 940px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 .3rem; }
+  h2 { font-size: 1.15rem; margin: 2.4rem 0 .6rem; border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, transparent); padding-bottom: .3rem; }
+  p.sub { color: color-mix(in srgb, CanvasText 60%, transparent); margin: 0 0 1rem; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: .4rem 0; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); vertical-align: top; white-space: nowrap; }
+  th { font-weight: 600; color: color-mix(in srgb, CanvasText 70%, transparent); }
+  td.wrap, th.wrap { white-space: normal; min-width: 150px; }
+  tr.us td { background: color-mix(in srgb, #f0b429 16%, transparent); }
+  .best { font-weight: 700; }
+  .note { font-size: 12.5px; color: color-mix(in srgb, CanvasText 55%, transparent);
+          border-left: 3px solid color-mix(in srgb, CanvasText 20%, transparent); padding: .1rem 0 .1rem .8rem; margin: .8rem 0; }
+  ul { padding-left: 1.15rem; } li { margin: .4rem 0; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+         background: color-mix(in srgb, CanvasText 8%, transparent); padding: .05rem .3rem; border-radius: 4px; }
+  a { color: #2563eb; }
+  .yes { color: #2e9e4f; font-weight: 600; } .no { color: color-mix(in srgb, CanvasText 45%, transparent); }
+  footer { margin-top: 2.5rem; font-size: 12px; color: color-mix(in srgb, CanvasText 50%, transparent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>On-device dictation: engines &amp; what open source uses</h1>
+  <p class="sub">A quick look at how open-source dictation apps do speech-to-text — model + CPU/GPU/NPU — plus a small hands-on benchmark of the engines relevant to Jot. Compiled 2026-07-23.</p>
+
+  <h2>1. Benchmark — the engines that matter for us</h2>
+  <p class="sub">Same 3 short English clips, one Windows PC, <strong>CPU only</strong>, model warmed (first-run load excluded). "RTF" = seconds of compute per second of audio (lower is faster).</p>
+  <div class="scroll">
+  <table>
+    <thead><tr>
+      <th class="wrap">Engine (quant)</th><th>Size</th><th>Speed (RTF)</th><th>vs realtime</th>
+      <th>Accuracy*</th><th>Punct/caps</th><th>Numbers</th><th>Streaming</th><th class="wrap">Multilingual</th><th>License</th>
+    </tr></thead>
+    <tbody>
+      <tr class="us">
+        <td class="wrap"><strong>Nemotron 3.5 (int4)</strong><br><span class="no">— Jot today</span></td>
+        <td>~750 MB</td><td>~0.48</td><td>~2× faster</td>
+        <td>perfect</td><td class="yes">yes</td><td>spoken ("twelve")</td><td class="yes">yes (cache-aware)</td>
+        <td class="wrap">yes</td><td>NVIDIA</td>
+      </tr>
+      <tr>
+        <td class="wrap"><strong>Parakeet&nbsp;v3 (int8)</strong><br><span class="no">— Handy's default</span></td>
+        <td>~500 MB</td><td class="best">~0.07</td><td class="best">~14× faster</td>
+        <td>perfect</td><td class="yes">yes</td><td>digits ("12")</td><td class="no">no (offline)†</td>
+        <td class="wrap">25 EU langs</td><td>CC-BY-4.0</td>
+      </tr>
+      <tr>
+        <td class="wrap"><strong>Whisper base (int8)</strong><br><span class="no">— common baseline</span></td>
+        <td>~150 MB</td><td>~0.11</td><td>~9× faster</td>
+        <td>perfect (clean)</td><td class="yes">yes</td><td>digits</td><td class="no">no</td>
+        <td class="wrap">99 langs</td><td>MIT</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note"><strong>Read this honestly.</strong> The clips are clean text-to-speech, which is <em>optimistic</em> and flattens accuracy differences — all three scored ~perfect. Real accented/noisy speech would separate the 600M models (Parakeet v3, Nemotron) from tiny Whisper-base. Both Parakeet and Whisper auto-convert numbers to digits (this made a spelled-out "twenty first" look like an error — it isn't). Nemotron was timed in batch mode, same as the others, so the speed comparison is fair — but note Jot actually runs Nemotron <em>streaming</em> for live captions. † Parakeet v3 here is offline; a streaming Parakeet exists via sherpa-onnx. Single run each on one CPU — treat as rough, not lab-grade.</p>
+  <p class="sub"><strong>Takeaway:</strong> on CPU, <strong>Parakeet v3 is ~7× faster than our Nemotron 3.5, smaller, just as accurate on this test, and CC-BY-4.0 (shippable).</strong> Nemotron's advantage is that we run it as a real streaming engine. A Parakeet-v3 move would want a streaming export (sherpa-onnx) to keep live captions.</p>
+
+  <h2>2. What the open-source dictation apps actually use</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr>
+      <th>App</th><th class="wrap">Model(s)</th><th class="wrap">Engine</th><th>CPU</th><th class="wrap">GPU (Windows)</th><th>NPU</th><th>License</th><th>UI</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><a href="https://github.com/cjpais/Handy">Handy</a></td><td class="wrap">Whisper, Parakeet v2/v3</td><td class="wrap">whisper.cpp + ONNX (transcribe-rs)</td><td class="yes">✓</td><td class="wrap">Vulkan (Whisper only); Parakeet <strong>CPU-only</strong></td><td class="no">—</td><td>MIT</td><td>Tauri/Rust</td></tr>
+      <tr><td><a href="https://github.com/thewh1teagle/vibe">Vibe</a></td><td class="wrap">Whisper, <strong>Nemotron 3.5</strong>, Parakeet v3</td><td class="wrap">whisper.cpp + ONNX</td><td class="yes">✓</td><td class="wrap">CUDA + Vulkan</td><td class="no">—</td><td>MIT</td><td>Tauri/Rust</td></tr>
+      <tr><td><a href="https://github.com/chidiwilliams/buzz">Buzz</a></td><td class="wrap">Whisper</td><td class="wrap">whisper.cpp + faster-whisper</td><td class="yes">✓</td><td class="wrap">CUDA + Vulkan</td><td class="no">—</td><td>MIT</td><td>Python/Qt</td></tr>
+      <tr><td><a href="https://github.com/EpicenterHQ/epicenter">Whispering</a></td><td class="wrap">Whisper, Parakeet, Moonshine, cloud</td><td class="wrap">transcribe-rs</td><td class="yes">✓</td><td class="wrap">Vulkan (Whisper); Parakeet CPU</td><td class="no">—</td><td>MIT</td><td>Tauri/Svelte</td></tr>
+      <tr><td><a href="https://github.com/Beingpax/VoiceInk">VoiceInk</a> (mac)</td><td class="wrap">Whisper, Parakeet v3</td><td class="wrap">whisper.cpp + FluidAudio</td><td class="yes">✓</td><td class="wrap">Metal</td><td class="yes">✓ ANE</td><td>GPL-3</td><td>Swift</td></tr>
+      <tr><td><a href="https://github.com/savbell/whisper-writer">WhisperWriter</a></td><td class="wrap">Whisper</td><td class="wrap">faster-whisper (CTranslate2)</td><td class="yes">✓</td><td class="wrap">CUDA only</td><td class="no">—</td><td>GPL-3</td><td>Python/PyQt</td></tr>
+      <tr><td><a href="https://github.com/ideasman42/nerd-dictation">nerd-dictation</a></td><td class="wrap">Vosk / Kaldi</td><td class="wrap">Vosk-API</td><td class="yes">✓</td><td class="wrap">—</td><td class="no">—</td><td>GPL-3</td><td>Python</td></tr>
+      <tr class="us"><td><strong>Jot</strong> (us)</td><td class="wrap">Nemotron 3.5 int4 / FP16</td><td class="wrap">ONNX Runtime</td><td class="yes">✓</td><td class="wrap"><strong>DirectML</strong> (FP16)</td><td class="no">—</td><td>closed</td><td>C#/WPF</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Underlying engines: <strong>whisper.cpp</strong> (CPU, CUDA, Metal, <strong>Vulkan</strong>, CoreML→ANE, OpenVINO, Ascend) is the broadest; <strong>faster-whisper</strong>/CTranslate2 is CPU + NVIDIA-CUDA only (no AMD/Vulkan/NPU); <strong>sherpa-onnx</strong> runs Parakeet/Whisper/Zipformer on ONNX Runtime with CPU/CUDA/CoreML/<strong>DirectML</strong> + embedded NPUs (QNN, RKNN, Ascend); <strong>FluidAudio</strong> runs Parakeet on the Apple Neural Engine.</p>
+
+  <h2>3. What we can learn</h2>
+  <ul>
+    <li><strong>Parakeet v3 is the field's rising default</strong> (Handy, Whispering, VoiceInk, Vibe) — and our benchmark shows why: fastest on CPU, small, accurate, permissive license. Worth seriously considering as Jot's engine (with a streaming export to keep live captions).</li>
+    <li><strong>On Windows, the field GPU-accelerates with Vulkan, not DirectML</strong> — and <strong>nobody GPU-accelerates Parakeet in shipping builds</strong> (Handy explicitly leaves it CPU-only). Jot's DirectML path is unusual; a Parakeet-on-GPU (or NPU) Jot would be ahead of the pack.</li>
+    <li><strong>NPU is Apple-only in practice.</strong> VoiceInk/FluidAudio run Parakeet on the Apple Neural Engine. No shipping <em>Windows</em> dictation app uses the NPU (QNN/OpenVINO are library-level, experimental). If Jot shipped NPU, it'd be close to first.</li>
+    <li><strong>Nemotron 3.5 is niche</strong> — only Vibe also ships it. Our benchmark suggests it's not obviously worth its size/speed cost over Parakeet v3 on CPU, unless its streaming quality is the deciding factor.</li>
+    <li><strong>Ideas worth borrowing:</strong> one interface over two engines (whisper.cpp for Whisper + ONNX for Parakeet, à la <code>transcribe-rs</code>); model download with a <em>manual mirror for firewall/corporate networks</em> (Handy); and configurable paste method + clipboard fallback — Handy uses synthetic input (enigo) with <code>paste_method</code>/<code>clipboard</code> settings, i.e. they hit the same paste problem we did and solved it the same way.</li>
+  </ul>
+
+  <footer>
+    Benchmark: onnx-asr (ONNX Runtime, CPU) for Parakeet v3 &amp; Whisper; Jot's own engine for Nemotron; 3 TTS clips, warmed, single run. Sources: repos linked above,
+    <a href="https://github.com/istupakov/onnx-asr">onnx-asr</a>,
+    <a href="https://github.com/k2-fsa/sherpa-onnx">sherpa-onnx</a>,
+    <a href="https://github.com/FluidInference/FluidAudio">FluidAudio</a>,
+    <a href="https://github.com/ggml-org/whisper.cpp">whisper.cpp</a>,
+    <a href="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3">Parakeet v3 (NVIDIA)</a>.
+  </footer>
+</main>
+</body>
+</html>

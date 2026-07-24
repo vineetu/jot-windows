@@ -17,6 +17,10 @@ namespace Jot.Controls;
 public partial class PillWindow : Window
 {
     private bool _userMoved;
+    // The window dictation began in. The pill anchors to ITS monitor for the whole session, so on a
+    // multi-monitor setup it appears where you're working — and doesn't hop monitors if focus drifts while
+    // captions stream in (Reposition runs on every caption update). Captured on entering Recording.
+    private IntPtr _anchorWindow;
     private bool _dragging;
     private Point _dragStart;
     private bool _expanded;             // is the transcript panel open?
@@ -157,6 +161,9 @@ public partial class PillWindow : Window
         switch (state)
         {
             case PillState.Recording:
+                // Capture the app being dictated into NOW (before the pill shows; it's WS_EX_NOACTIVATE so
+                // it never becomes foreground itself). The pill stays on this window's monitor all session.
+                _anchorWindow = GetForegroundWindow();
                 Dot.Fill = Res("JotRecordingBrush", Color.FromRgb(0xE8, 0x43, 0x3B));
                 Wave.LineBrush = Brushes.White;
                 Wave.Visibility = Visibility.Visible;
@@ -225,6 +232,7 @@ public partial class PillWindow : Window
         Wave.Active = false;
         Collapse();
         Hide();
+        _anchorWindow = IntPtr.Zero; // next session re-captures its own monitor
     }
 
     private void Reposition()
@@ -232,7 +240,8 @@ public partial class PillWindow : Window
         if (_userMoved || ActualWidth <= 0) return;
 
         IntPtr handle = new WindowInteropHelper(this).Handle;
-        IntPtr fg = GetForegroundWindow();
+        // Prefer the dictation-origin window (stable across the session); fall back to the live foreground.
+        IntPtr fg = _anchorWindow != IntPtr.Zero ? _anchorWindow : GetForegroundWindow();
         IntPtr mon = MonitorFromWindow(fg != IntPtr.Zero ? fg : handle, MONITOR_DEFAULTTONEAREST);
 
         var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };

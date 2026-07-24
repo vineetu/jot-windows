@@ -23,6 +23,8 @@ public static class TextInjector
     private const ushort SCAN_RETURN = 0x1C;
     internal const ushort SCAN_ALT = 0x38;
     private const ushort SCAN_SHIFT = 0x2A;
+    private const uint WM_PASTE = 0x0302;        // "paste" as a window MESSAGE, not a synthetic keystroke
+    private const uint SMTO_ABORTIFHUNG = 0x0002;
 
     /// <summary>The foreground window right now — capture this when recording starts so the
     /// transcript can be delivered back to the app the user was in, even if focus drifts.</summary>
@@ -42,57 +44,146 @@ public static class TextInjector
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
 
+    /// <summary>Outcome of a paste: it landed, or this PC blocks synthetic input so the transcript was left
+    /// on the clipboard for a manual Ctrl+V (the caller should tell the user).</summary>
+    public enum PasteResult { Pasted, CopiedToClipboard }
+
+    /// <summary>How to deliver the transcript (mirrors Handy's paste-method options). <c>Auto</c> = the smart
+    /// ladder (WM_PASTE → synthetic Ctrl+V if injection works → clipboard mode); <c>Type</c> = synthesise the
+    /// characters; <c>ShiftInsert</c> = the paste combo terminals honour; <c>Clipboard</c> = copy + prompt;
+    /// <c>None</c> = don't paste (save only).</summary>
+    public enum PasteMethod { Auto, CtrlV, ShiftInsert, Type, Clipboard, None }
+
+    /// <summary>Maps the persisted setting string to a <see cref="PasteMethod"/> (default Auto).</summary>
+    public static PasteMethod ParsePasteMethod(string? s) => s switch
+    {
+        "ctrl_v" => PasteMethod.CtrlV,
+        "shift_insert" => PasteMethod.ShiftInsert,
+        "type" => PasteMethod.Type,
+        "clipboard" => PasteMethod.Clipboard,
+        "none" => PasteMethod.None,
+        _ => PasteMethod.Auto,
+    };
+
     /// <param name="restoreTo">Window to refocus before pasting (the app dictation began in), or
     /// <see cref="IntPtr.Zero"/> to paste into whatever currently has focus.</param>
     /// <param name="keepInClipboard">When true, leave the transcript on the clipboard instead of
     /// restoring the user's previous clipboard contents.</param>
     /// <param name="pressEnter">When true, send Enter after the paste (handy for chat/search boxes).</param>
-    public static void PasteAtCursor(string text, IntPtr restoreTo = default,
-        bool keepInClipboard = false, bool pressEnter = false)
+    /// <param name="method">Delivery method (<see cref="PasteMethod"/>). Default <c>Auto</c> = the smart
+    /// ladder: WM_PASTE for editors → synthetic Ctrl+V if injection works → clipboard mode otherwise.</param>
+    public static PasteResult PasteAtCursor(string text, IntPtr restoreTo = default,
+        bool keepInClipboard = false, bool pressEnter = false, PasteMethod method = PasteMethod.Auto)
     {
-        if (string.IsNullOrEmpty(text)) return;
+        if (string.IsNullOrEmpty(text) || method == PasteMethod.None) return PasteResult.Pasted;
 
         // Land the paste in the app dictation began in, not the Jot window. Never re-target our own.
-        if (restoreTo != IntPtr.Zero && !IsOwnWindow(restoreTo))
+        bool restore = restoreTo != IntPtr.Zero && !IsOwnWindow(restoreTo);
+        bool focusOk = true;
+        if (restore)
         {
-            ForceForeground(restoreTo);
-            Thread.Sleep(40); // let the focus change settle before synthesising Ctrl+V
+            focusOk = ForceForeground(restoreTo);
+            Thread.Sleep(40); // let the focus change settle before pasting
+        }
+        Jot.Services.JotLog.Info(
+            $"paste: target={(restore ? DescribeWindow(restoreTo) : "current-focus")} " +
+            $"focusRestored={focusOk} foregroundNow={DescribeWindow(GetForegroundWindow())} method={method}");
+
+        // TYPE: no clipboard involved — synthesise the characters directly (works in some apps that reject a paste).
+        if (method == PasteMethod.Type)
+        {
+            ReleaseModifiers();
+            WaitForRealModifiersReleased();
+            SendUnicodeText(text);
+            if (pressEnter) { Thread.Sleep(60); SendEnter(); }
+            return PasteResult.Pasted;
         }
 
-        // Save the user's clipboard to restore later (text only), unless we're keeping the transcript.
-        string? saved = null;
-        if (!keepInClipboard)
+        // Clipboard-based methods: snapshot the user's ENTIRE clipboard (all formats) so a dictation never
+        // destroys a copied image/file list, then place our transcript. Restored after paste unless clipboard-mode.
+        System.Windows.DataObject? saved = keepInClipboard ? null : SnapshotClipboard();
+        bool clipOk = SetClipboardText(text);
+
+        IntPtr pasteTarget = restore ? restoreTo : GetForegroundWindow();
+        PasteResult result;
+        switch (method)
         {
-            try { if (Clipboard.ContainsText()) saved = Clipboard.GetText(); } catch { /* clipboard busy */ }
+            case PasteMethod.Clipboard:
+                Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=clipboard-only (user setting)");
+                result = PasteResult.CopiedToClipboard;
+                break;
+            case PasteMethod.CtrlV:
+                ReleaseModifiers(); WaitForRealModifiersReleased();
+                Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=Ctrl+V(forced eventsSent={SendCtrlV()}/4)");
+                result = PasteResult.Pasted;
+                break;
+            case PasteMethod.ShiftInsert:
+                ReleaseModifiers(); WaitForRealModifiersReleased();
+                SendShiftInsert();
+                Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=Shift+Insert");
+                result = PasteResult.Pasted;
+                break;
+            default: // Auto — the smart ladder
+                if (TryPasteViaMessage(pasteTarget))
+                {
+                    // WM_PASTE MESSAGE (not a keystroke) → survives corporate endpoint-security. Standard editors.
+                    Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=auto/WM_PASTE(message)");
+                    result = PasteResult.Pasted;
+                }
+                else if (SyntheticInputWorks())
+                {
+                    ReleaseModifiers(); WaitForRealModifiersReleased();
+                    Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=auto/Ctrl+V(SendInput eventsSent={SendCtrlV()}/4)");
+                    result = PasteResult.Pasted;
+                }
+                else
+                {
+                    // Injection blocked (corporate EDR) + target not WM_PASTE-able → clipboard mode + prompt.
+                    Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=auto/clipboard-only (synthetic input blocked on this PC)");
+                    result = PasteResult.CopiedToClipboard;
+                }
+                break;
         }
 
-        SetClipboardText(text);
-
-        ReleaseModifiers();               // synthetic key-up for any held hotkey modifier…
-        WaitForRealModifiersReleased();   // …then wait for the PHYSICAL keys to clear (paste-last is Ctrl+Alt+P):
-                                          // a synthetic up can't override a finger still on Ctrl+Alt, which would
-                                          // turn the paste into Ctrl+Alt+V. Returns ~immediately when nothing is held.
-        SendCtrlV();
-
-        // Delay before Enter so we don't submit before the paste lands.
-        if (pressEnter)
+        if (pressEnter && result == PasteResult.Pasted)
         {
             Thread.Sleep(60);
             SendEnter();
         }
 
-        // Restore after the paste lands; the delay avoids racing the target's paste handler.
-        if (!keepInClipboard)
+        // Restore the user's clipboard only when we actually pasted; in clipboard mode KEEP the transcript so
+        // the manual Ctrl+V has something to paste.
+        if (!keepInClipboard && result == PasteResult.Pasted)
         {
             Task.Delay(150).ContinueWith(_ =>
-            {
-                Application.Current?.Dispatcher.Invoke(() =>
-                {
-                    if (saved is not null) SetClipboardText(saved);
-                    else TryClear();
-                });
-            });
+                Application.Current?.Dispatcher.Invoke(() => RestoreClipboard(saved)));
         }
+
+        return result;
+    }
+
+    // One-time probe: does INJECTED keyboard input actually reach the input system here? Corporate
+    // endpoint-security silently drops synthetic keystrokes (and SendInput still returns success), so we can't
+    // tell from the paste itself. Inject a harmless key (F24) and check whether the input system registered it
+    // — GetAsyncKeyState is foreground-independent. Cached; probed once. Validated on a simulated EDR: a
+    // low-level hook that drops injected input makes this correctly return false.
+    private static bool? _injectionWorks;
+    public static bool SyntheticInputWorks()
+    {
+        if (_injectionWorks is bool cached) return cached;
+        bool works;
+        try
+        {
+            const byte VK_F24 = 0x87;
+            keybd_event(VK_F24, 0, 0, IntPtr.Zero);                 // inject DOWN
+            Thread.Sleep(15);
+            works = (GetAsyncKeyState(VK_F24) & 0x8000) != 0;       // did the input system register it?
+            keybd_event(VK_F24, 0, KEYEVENTF_KEYUP, IntPtr.Zero);   // inject UP
+        }
+        catch { works = true; } // never break paste over a probe failure — assume input works
+        _injectionWorks = works;
+        Jot.Services.JotLog.Info($"synthetic-input probe: injection {(works ? "WORKS" : "is BLOCKED -> clipboard-mode fallback")}");
+        return works;
     }
 
     /// <summary>
@@ -146,13 +237,14 @@ public static class TextInjector
         || (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
         || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
 
-    private static void SetClipboardText(string text)
+    private static bool SetClipboardText(string text)
     {
         for (int attempt = 0; attempt < 5; attempt++)
         {
-            try { Clipboard.SetText(text); return; }
+            try { Clipboard.SetText(text); return true; }
             catch { Thread.Sleep(20); } // clipboard is a shared global resource; retry briefly
         }
+        return false; // a clipboard manager/policy held it locked for all 5 tries — caller logs this
     }
 
     private static void TryClear()
@@ -160,9 +252,59 @@ public static class TextInjector
         try { Clipboard.Clear(); } catch { /* best effort */ }
     }
 
+    // Capture the WHOLE clipboard (every format) so a dictation restores it intact — not just plain text.
+    // Per-format best-effort: some formats (delay-rendered, stream/handle-backed) don't round-trip and are
+    // skipped rather than failing the snapshot. Returns null when the clipboard is empty/unreadable.
+    private static System.Windows.DataObject? SnapshotClipboard()
+    {
+        try
+        {
+            System.Windows.IDataObject? current = Clipboard.GetDataObject();
+            if (current is null) return null;
+            var copy = new System.Windows.DataObject();
+            bool any = false;
+            foreach (string fmt in current.GetFormats())
+            {
+                try
+                {
+                    object? data = current.GetData(fmt);
+                    if (data is not null) { copy.SetData(fmt, data); any = true; }
+                }
+                catch { /* a format that won't round-trip (delay-render/stream) — skip it */ }
+            }
+            return any ? copy : null;
+        }
+        catch { return null; }
+    }
+
+    // Put the user's captured clipboard back (copy:true persists it past our exit); if there was nothing to
+    // restore, clear our transcript so it doesn't linger.
+    private static void RestoreClipboard(System.Windows.DataObject? snapshot)
+    {
+        try
+        {
+            if (snapshot is not null) Clipboard.SetDataObject(snapshot, true);
+            else TryClear();
+        }
+        catch { /* best effort */ }
+    }
+
     // Ctrl+V by SCAN CODE, not virtual-key: some apps (terminals, games, Electron surfaces) only
     // honour scan-coded synthetic input.
-    private static void SendCtrlV() => SendKeyChord(SCAN_CONTROL, SCAN_V);
+    private static uint SendCtrlV() => SendKeyChord(SCAN_CONTROL, SCAN_V);
+
+    // Shift+Insert — the paste combo consoles/terminals honour when Ctrl+V doesn't. VK-based (Insert is an
+    // extended key that VK injection handles cleanly).
+    private static void SendShiftInsert()
+    {
+        const ushort VK_SHIFT = 0x10, VK_INSERT = 0x2D;
+        var inputs = new[]
+        {
+            VkInput(VK_SHIFT, keyUp: false), VkInput(VK_INSERT, keyUp: false),
+            VkInput(VK_INSERT, keyUp: true), VkInput(VK_SHIFT, keyUp: true),
+        };
+        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+    }
 
     /// <summary>Injects key-ups for Alt/Ctrl/Shift so a still-held global-hotkey modifier (e.g. the Alt
     /// of "Alt+/") doesn't corrupt the synthetic Ctrl+C/Ctrl+V we're about to send.</summary>
@@ -248,14 +390,14 @@ public static class TextInjector
         }
     }
 
-    internal static void SendKeyChord(params ushort[] scanCodes)
+    internal static uint SendKeyChord(params ushort[] scanCodes)
     {
         var inputs = new INPUT[scanCodes.Length * 2];
         for (int i = 0; i < scanCodes.Length; i++)
             inputs[i] = ScanInput(scanCodes[i], keyUp: false);
         for (int i = 0; i < scanCodes.Length; i++)
             inputs[scanCodes.Length + i] = ScanInput(scanCodes[scanCodes.Length - 1 - i], keyUp: true);
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>()); // events actually inserted (0 = blocked)
     }
 
     private static void SendEnter()
@@ -288,21 +430,72 @@ public static class TextInjector
     // A background process can't just call SetForegroundWindow (Windows foreground-lock blocks it,
     // silently). Attaching our input queue to the target window's thread lifts the lock long enough
     // to hand it focus — the standard workaround — so the synthetic Ctrl+V lands in the right app.
-    private static void ForceForeground(IntPtr hWnd)
+    private static bool ForceForeground(IntPtr hWnd)
     {
-        uint targetThread = GetWindowThreadProcessId(hWnd, out _);
-        uint thisThread = GetCurrentThreadId();
-        bool attached = targetThread != thisThread && AttachThreadInput(thisThread, targetThread, true);
-        try
+        // Retry a few times: the foreground-lock lift via AttachThreadInput can miss on the first try under
+        // load. Returns whether the target actually ended up foreground — false typically means the OS
+        // denied it (e.g. an elevated target window that a non-elevated Jot can't focus).
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            BringWindowToTop(hWnd);
-            SetForegroundWindow(hWnd);
+            uint targetThread = GetWindowThreadProcessId(hWnd, out _);
+            uint thisThread = GetCurrentThreadId();
+            bool attached = targetThread != thisThread && AttachThreadInput(thisThread, targetThread, true);
+            try
+            {
+                BringWindowToTop(hWnd);
+                SetForegroundWindow(hWnd);
+            }
+            finally
+            {
+                if (attached) AttachThreadInput(thisThread, targetThread, false);
+            }
+            if (GetForegroundWindow() == hWnd) return true;
+            Thread.Sleep(30);
         }
-        finally
-        {
-            if (attached) AttachThreadInput(thisThread, targetThread, false);
-        }
+        return GetForegroundWindow() == hWnd;
     }
+
+    // Deliver the clipboard via a WM_PASTE MESSAGE to the focused edit control instead of a synthetic Ctrl+V
+    // keystroke. A window message is NOT injected keyboard input, so it isn't dropped by the corporate
+    // endpoint-security / anti-keylogger filters that silently discard SendInput keystrokes — the real reason
+    // paste fails on locked-down machines (see docs/plans). Restricted to standard editable control classes
+    // (Notepad's editor is "Edit"), so every other app keeps the unchanged Ctrl+V behaviour. Returns true
+    // only when a WM_PASTE was actually delivered to an editable control.
+    internal static bool TryPasteViaMessage(IntPtr targetTopLevel)
+    {
+        IntPtr focus = FocusedControlOf(targetTopLevel);
+        if (focus == IntPtr.Zero || !IsPasteableEditControl(focus)) return false;
+        // SendMessageTimeout (not SendMessage) so a hung target can't block the UI thread; nonzero = delivered.
+        return SendMessageTimeout(focus, WM_PASTE, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 1000, out _) != IntPtr.Zero;
+    }
+
+    // The control that actually has keyboard focus inside the target window's GUI thread — the edit box, not
+    // the top-level frame. GetGUIThreadInfo reads another thread's focus without AttachThreadInput.
+    private static IntPtr FocusedControlOf(IntPtr topLevel)
+    {
+        IntPtr hwnd = topLevel != IntPtr.Zero ? topLevel : GetForegroundWindow();
+        if (hwnd == IntPtr.Zero) return IntPtr.Zero;
+        uint tid = GetWindowThreadProcessId(hwnd, out _);
+        var gti = new GUITHREADINFO { cbSize = Marshal.SizeOf<GUITHREADINFO>() };
+        return GetGUIThreadInfo(tid, ref gti) ? gti.hwndFocus : IntPtr.Zero;
+    }
+
+    // Standard Win32 editable controls that honour WM_PASTE (Notepad classic = "Edit"; WordPad/most editors
+    // = a RichEdit variant; Scintilla-based editors too). Anything else → let the caller fall back to Ctrl+V.
+    internal static bool IsPasteableEditControl(IntPtr hWnd)
+    {
+        var sb = new System.Text.StringBuilder(256);
+        if (GetClassName(hWnd, sb, sb.Capacity) == 0) return false;
+        return IsPasteableEditClass(sb.ToString());
+    }
+
+    /// <summary>Pure (testable) class-name check: does this window class honour WM_PASTE? Covers classic
+    /// Notepad ("Edit"), Windows 11 Notepad ("RichEditD2DPT") + WordPad ("RICHEDIT50W"), and Scintilla
+    /// editors. Everything else (browsers, WPF/WinUI/Electron surfaces) returns false → caller uses Ctrl+V.</summary>
+    public static bool IsPasteableEditClass(string cls) =>
+        cls.Equals("Edit", StringComparison.OrdinalIgnoreCase)
+        || cls.Contains("RichEdit", StringComparison.OrdinalIgnoreCase)
+        || cls.Contains("Scintilla", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsOwnWindow(IntPtr hWnd)
     {
@@ -331,8 +524,30 @@ public static class TextInjector
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentProcessId();
 
+    [DllImport("user32.dll")]
+    private static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam,
+        uint flags, uint timeout, out IntPtr result);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GUITHREADINFO
+    {
+        public int cbSize;
+        public uint flags;
+        public IntPtr hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
+        public int caretLeft, caretTop, caretRight, caretBottom;
+    }
+
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT

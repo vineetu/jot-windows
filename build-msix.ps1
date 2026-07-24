@@ -6,19 +6,33 @@
 # with -Register (no signing needed, Developer Mode must be on).
 #
 # Usage:
-#   .\build-msix.ps1              # publish + pack -> AppxPackages\*.msix
-#   .\build-msix.ps1 -Register    # also (re)register the loose layout for local testing
+#   .\build-msix.ps1                    # Public flavor: publish + pack -> AppxPackages\JotTranscribe_*.msix
+#   .\build-msix.ps1 -Flavor Sony       # Sony flavor (PFB gateway only) -> AppxPackages\JotSie_*.msix
+#   .\build-msix.ps1 -Register          # also (re)register the loose layout for local testing
 #
-# The package identity in src\Jot\Package.appxmanifest MUST match Partner Center:
+# Public identity (src\Jot\Package.appxmanifest) MUST match its Partner Center product:
 #   Name=Vineetsriram.JotTranscribe  Publisher=CN=1269BFA0-02DC-4524-8A77-55C4EE9EADD4
 #   PublisherDisplayName="Vineet sriram"  DisplayName="Jot Transcribe" (reserved name)
+# Sony identity (src\Jot\Package.Sony.appxmanifest) is a SEPARATE reserved product under the SAME
+# account: Name=Vineetsriram.JotSie  DisplayName="Jot Sie"  (same Publisher/PublisherDisplayName).
+# Confirm the Sony Name/DisplayName against the "Jot Sie" Partner Center reservation before upload.
 
-param([switch]$Register)
+param(
+    [ValidateSet('Public','Sony')][string]$Flavor = 'Public',
+    [switch]$Register)
 
 $ErrorActionPreference = "Stop"
 $repo = $PSScriptRoot
 $proj = Join-Path $repo "src\Jot\Jot.csproj"
-$manifestSrc = Join-Path $repo "src\Jot\Package.appxmanifest"
+
+$isSony = $Flavor -eq 'Sony'
+if ($isSony) {
+    $manifestSrc = Join-Path $repo "src\Jot\Package.Sony.appxmanifest"
+    $msixName = "JotSie"
+} else {
+    $manifestSrc = Join-Path $repo "src\Jot\Package.appxmanifest"
+    $msixName = "JotTranscribe"
+}
 $tfmDir = "net10.0-windows10.0.26100.0\win-x64"
 $pub = Join-Path $repo "src\Jot\bin\Release\$tfmDir\publish"
 $outDir = Join-Path $repo "AppxPackages"
@@ -36,9 +50,12 @@ if (-not $makeappx) { throw "makeappx.exe not found in the SDK build-tools NuGet
 
 Get-Process Jot -ErrorAction SilentlyContinue | Stop-Process -Force   # unlock Jot.exe
 
-Write-Host "==> publishing self-contained x64..." -ForegroundColor Cyan
+$flavorArgs = @()
+if ($isSony) { $flavorArgs += "-p:Flavor=Sony" }
+
+Write-Host "==> publishing self-contained x64 ($Flavor flavor)..." -ForegroundColor Cyan
 dotnet publish $proj -c Release -r win-x64 --self-contained true `
-    -p:GenerateAppxPackageOnBuild=false --verbosity quiet
+    -p:GenerateAppxPackageOnBuild=false @flavorArgs --verbosity quiet
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 
 # Read the version out of the manifest so the .msix filename matches.
@@ -53,7 +70,7 @@ $m = $m -replace '(Version="[\d.]+")\s*/>', '$1 ProcessorArchitecture="x64" />'
     (New-Object System.Text.UTF8Encoding($false)))
 
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$msix = Join-Path $outDir "JotTranscribe_${ver}_x64.msix"
+$msix = Join-Path $outDir "${msixName}_${ver}_x64.msix"
 Write-Host "==> packing $msix ..." -ForegroundColor Cyan
 & $makeappx pack /o /d $pub /p $msix | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed ($LASTEXITCODE)" }
@@ -63,5 +80,8 @@ Write-Host "==> built $msix ($mb MB)" -ForegroundColor Green
 if ($Register) {
     Write-Host "==> registering loose layout for local testing..." -ForegroundColor Cyan
     Add-AppxPackage -Register (Join-Path $pub "AppxManifest.xml")
-    Write-Host "==> registered. Launch: explorer shell:AppsFolder\Vineetsriram.JotTranscribe_xhkaqb0regjwm!jot" -ForegroundColor Green
+    $identityName = $mx.Package.Identity.Name
+    $pkg = Get-AppxPackage -Name $identityName | Select-Object -First 1
+    Write-Host "==> registered $($pkg.PackageFullName)." -ForegroundColor Green
+    Write-Host "==> Launch: explorer shell:AppsFolder\$($pkg.PackageFamilyName)!jot" -ForegroundColor Green
 }

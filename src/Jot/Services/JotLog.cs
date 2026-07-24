@@ -45,8 +45,7 @@ public static class JotLog
         return logs;
     }
 
-    private static string DefaultBase() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
+    private static string DefaultBase() => JotPaths.AppDataRoot;
 
     private static void Write(string level, string message)
     {

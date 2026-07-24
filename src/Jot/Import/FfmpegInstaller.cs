@@ -14,8 +14,7 @@ public sealed class FfmpegInstaller
     private const string DownloadUrl =
         "https://github.com/vineetu/jot-windows/releases/download/jot-deps-v1/ffmpeg.exe";
 
-    public static string InstallDir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot", "tools");
+    public static string InstallDir => Path.Combine(Jot.Services.JotPaths.AppDataRoot, "tools");
 
     public static string ExePath => Path.Combine(InstallDir, "ffmpeg.exe");
 

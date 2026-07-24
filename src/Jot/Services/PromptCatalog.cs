@@ -13,8 +13,7 @@ namespace Jot.Services;
 /// </summary>
 public sealed class PromptCatalog
 {
-    private static readonly string DefaultDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
+    private static readonly string DefaultDir = JotPaths.ConfigDir;
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
     // Instance-scoped so tests can point at a temp dir and never touch the real user's prompts.json.

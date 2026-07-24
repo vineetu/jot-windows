@@ -4,23 +4,35 @@ using Jot.Services.Abstractions;
 namespace Jot.Services;
 
 /// <summary>
-/// Resolves where Jot stores user data. Recordings + the transcript library live under the
-/// user-chosen <see cref="JotSettings.DataDirectory"/> (default <c>%LOCALAPPDATA%\Jot</c>); the
-/// small app config (settings.json) always stays in the default location.
+/// The single source of truth for where Jot stores everything. <see cref="AppDataRoot"/> is the one Jot
+/// root (packaged: the MSIX container that Windows auto-wipes on uninstall; unpackaged: <c>%LOCALAPPDATA%\Jot</c>);
+/// EVERY other location — settings, prompts, logs, tools, models, recordings, the credential store — is
+/// derived from it or from the user-chosen <see cref="JotSettings.DataDirectory"/>. Keeping it centralized
+/// is deliberate: a past move-location change broke cleanup because the root was recomputed in ~8 places.
 /// </summary>
 public static class JotPaths
 {
-    private static string LocalAppDataDir =>
+    /// <summary>The pre-container real per-user folder <c>%LOCALAPPDATA%\Jot</c>. Public so startup can
+    /// ADOPT it on an upgrade (existing data lives here) without moving files. Not the default anymore
+    /// under MSIX — <see cref="AppDataRoot"/> is.</summary>
+    public static string LegacyLocalAppDataDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
 
     /// <summary>
-    /// Default data folder: the standard Windows per-user location, <c>%LOCALAPPDATA%\Jot</c>. Always
-    /// present and writable for the current user — no drive guessing. A previous build auto-picked the
-    /// roomiest non-system drive (e.g. D:), which put the model somewhere unpredictable and could land on
-    /// a volume that isn't writable on an unfamiliar machine (a Store-cert failure vector). Users who want
-    /// a different drive set it explicitly via <see cref="JotSettings.DataDirectory"/> (Settings / wizard).
+    /// The one Jot data/config root. Under the Store (MSIX) build this is the package container, so an
+    /// uninstall removes every trace (settings, model, transcripts, keys) — MSIX runs no uninstall code, so
+    /// the container is the only auto-clean location. Unpackaged (dev/Velopack) it's <c>%LOCALAPPDATA%\Jot</c>.
+    /// Data can still be moved off this root to another drive via <see cref="JotSettings.DataDirectory"/>
+    /// (that folder is outside the container, so it must be erased in-app before uninstall — Settings warns).
     /// </summary>
-    public static string DefaultDataDir => LocalAppDataDir;
+    public static string AppDataRoot => PackagePaths.ContainerRoot ?? LegacyLocalAppDataDir;
+
+    /// <summary>The fixed config folder (settings.json, prompts.json, migration + wipe markers). Always the
+    /// root itself, never a moved data folder, so the record describing a move can't get moved mid-op.</summary>
+    public static string ConfigDir => AppDataRoot;
+
+    /// <summary>Default data folder when the user hasn't chosen one: the app data root (container/%LOCALAPPDATA%).</summary>
+    public static string DefaultDataDir => AppDataRoot;
 
     /// <summary>The effective data folder (user-chosen, or the default).</summary>
     public static string DataDir(JotSettings s) =>

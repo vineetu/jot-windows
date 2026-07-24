@@ -33,6 +33,10 @@ public sealed class JotSettings
     public bool AutoEnter { get; set; }
     public bool KeepInClipboard { get; set; }
     public bool ReturnToOrigin { get; set; }
+    // How Jot delivers the transcript — see Delivery.TextInjector.PasteMethod. "auto" (default) is the smart
+    // ladder (WM_PASTE → synthetic Ctrl+V if injection works → clipboard mode); other values: "ctrl_v",
+    // "shift_insert", "type" (synthesise characters), "clipboard" (copy + prompt), "none" (save only).
+    public string PasteMethod { get; set; } = "auto";
 
     // AI (no Apple Intelligence on Windows — user must pick a provider)
     public string AiProvider { get; set; } = "None"; // None | OpenAI | Anthropic | Gemini | Ollama
@@ -46,8 +50,12 @@ public sealed class JotSettings
     public bool SoundSuccess { get; set; } = true;
     public bool SoundError { get; set; } = true;
 
-    // Shortcuts (human-readable chord strings; parsed by HotkeyChord and registered by HotkeyManager)
-    public string ToggleRecordingHotkey { get; set; } = "Alt+Space";
+    // Shortcuts (human-readable chord strings; parsed by HotkeyChord and registered by HotkeyManager).
+    // NOTE: default toggle is Ctrl+Shift+Space, NOT Alt+Space — Alt+Space is the Windows window system-menu
+    // shortcut, so it steals focus from the app you're dictating into and the paste lands nowhere. (The
+    // Apps/Menu key is another great toggle — bare-key hook fully suppresses its native menu — but not every
+    // keyboard has one, so Ctrl+Shift+Space is the universal default.)
+    public string ToggleRecordingHotkey { get; set; } = "Ctrl+Shift+Space";
     public string CancelRecordingHotkey { get; set; } = "Escape"; // armed only while recording
     public string? PushToTalkHotkey { get; set; }
     public string PasteLastHotkey { get; set; } = "Ctrl+Alt+V"; // paste last transcript (rewrite or raw) at the cursor

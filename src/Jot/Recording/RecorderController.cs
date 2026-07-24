@@ -53,6 +53,7 @@ public sealed class RecorderController : IDisposable
     public event Action<string>? TranscriptReady;
     public event Action<string>? PartialTranscript;   // live-caption partial (background thread)
     public event Action<string, string>? Failed;      // (title, message)
+    public event Action<string, string>? Notice;      // (title, message) — info, e.g. "copied, press Ctrl+V"
     public event Action? NothingTranscribed;
     public event Action? Cancelled;                   // discard path (Cancel()); not wired to any key today
 
@@ -184,7 +185,13 @@ public sealed class RecorderController : IDisposable
                     // "Return to the app I started in": when off, paste into whatever's focused now
                     // (usually still that app — the pill never steals focus). When on, force it back.
                     IntPtr target = s.ReturnToOrigin ? _originWindow : IntPtr.Zero;
-                    TextInjector.PasteAtCursor(text, target, s.KeepInClipboard, s.AutoEnter);
+                    var pr = TextInjector.PasteAtCursor(text, target, s.KeepInClipboard, s.AutoEnter,
+                        TextInjector.ParsePasteMethod(s.PasteMethod));
+                    // This PC blocks synthetic input (corporate EDR) and the target wasn't a standard editor →
+                    // the transcript is on the clipboard; tell the user to paste it manually (a real Ctrl+V works).
+                    if (pr == TextInjector.PasteResult.CopiedToClipboard)
+                        Notice?.Invoke("Transcript copied — press Ctrl+V to paste",
+                            "This PC blocks apps from pasting for you, so Jot put the transcript on your clipboard.");
                 }
                 _sound.PlaySuccess();
                 TranscriptReady?.Invoke(text);

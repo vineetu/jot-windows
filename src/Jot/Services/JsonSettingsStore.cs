@@ -5,14 +5,14 @@ using Jot.Services.Abstractions;
 namespace Jot.Services;
 
 /// <summary>
-/// File-backed <see cref="ISettingsStore"/>: %LOCALAPPDATA%\Jot\settings.json. Loads once at
+/// File-backed <see cref="ISettingsStore"/>: <c>settings.json</c> in <see cref="JotPaths.ConfigDir"/>
+/// (the app data root — the MSIX container under the Store build, else %LOCALAPPDATA%\Jot). Loads once at
 /// startup, tolerates a missing/corrupt file by falling back to defaults, and writes the whole
 /// document on <see cref="Save"/> (the settings surface is tiny — no need for granular writes).
 /// </summary>
 public sealed class JsonSettingsStore : ISettingsStore
 {
-    private static readonly string Dir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Jot");
+    private static readonly string Dir = JotPaths.ConfigDir;
     private static readonly string FilePath = Path.Combine(Dir, "settings.json");
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
