@@ -19,7 +19,7 @@
   <Identity
     Name="Vineetsriram.JotSie"
     Publisher="CN=1269BFA0-02DC-4524-8A77-55C4EE9EADD4"
-    Version="1.1.0.0" />
+    Version="1.2.1.0" />
 
   <Properties>
     <!-- Must match the reserved app name ("Jot Sie") in Partner Center exactly. The friendly tile
