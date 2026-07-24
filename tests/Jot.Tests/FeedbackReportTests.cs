@@ -29,6 +29,18 @@ public class FeedbackReportTests
     }
 
     [Fact]
+    public void Scrub_FailsClosed_OnMultiLineTranscriptFragment()
+    {
+        // A newline-bearing transcript, read line-by-line, yields a first fragment with the opening
+        // quote but no closing quote. The redaction MUST fail closed (redact the rest), not open.
+        string firstFragment = "2026-07-24 13:00:00  INFO   SAVED: \"my secret first paragraph";
+        string scrubbed = FeedbackReport.Scrub(firstFragment, "vinee");
+        Assert.DoesNotContain("secret", scrubbed);
+        Assert.DoesNotContain("paragraph", scrubbed);
+        Assert.Contains("[redacted]", scrubbed);
+    }
+
+    [Fact]
     public void Scrub_HidesUsernameInPaths()
     {
         string line = @"data relocated from C:\Users\vinee\AppData\Local\Jot into the package container";

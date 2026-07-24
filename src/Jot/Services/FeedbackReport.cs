@@ -97,8 +97,12 @@ public static class FeedbackReport
         {
             int open = marker + "SAVED: ".Length;             // points at the opening quote
             int close = result.LastIndexOf('"');
-            if (close > open)
-                result = result[..(open + 1)] + $"[redacted {close - open - 1} chars]" + result[close..];
+            // Fail CLOSED: an opening quote with no closing quote on THIS physical line means a
+            // newline-bearing transcript got split by File.ReadLines — redact the whole remainder
+            // rather than ship raw speech (the old `if (close > open)`-only guard failed open here).
+            result = close > open
+                ? result[..(open + 1)] + $"[redacted {close - open - 1} chars]" + result[close..]
+                : result[..(open + 1)] + "[redacted]";
         }
 
         if (!string.IsNullOrEmpty(username))

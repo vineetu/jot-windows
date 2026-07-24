@@ -323,7 +323,10 @@ public sealed class RecorderController : IDisposable
 
     private static string TitleFrom(string transcript)
     {
-        string[] words = transcript.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        // Split on ALL whitespace incl. newlines: Nemotron emits paragraph breaks, and a newline inside
+        // the title would make the SAVED log line span multiple physical lines — which broke the
+        // feedback report's per-line transcript redaction (it failed open). Keep titles single-line.
+        string[] words = transcript.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) return "Dictation";
         string title = string.Join(' ', words.Take(6));
         return words.Length > 6 ? title + "…" : title;
