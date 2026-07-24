@@ -214,6 +214,25 @@
                                      Visibility="{Binding Download.IsDownloading, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </ctl:SettingRow>
+                <!-- Status surface for the AUTOMATIC GPU upgrade (GpuTierCoordinator fetches this model
+                     silently on capable machines). The manual button covers what the automatic path
+                     skips: metered connections and GPUs that look too weak to pre-fetch for. -->
+                <ctl:SettingRow Title="GPU model"
+                                Description="Optional faster engine for your graphics card (Nemotron 3.5 FP16, ~1.3 GB). On Auto, Jot downloads and speed-tests this by itself when your GPU qualifies — nothing to do here.">
+                    <StackPanel MinWidth="280">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}"
+                                           Visibility="{Binding GpuDownload.IsInstalled, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Text="{Binding GpuDownload.StatusText}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            <ui:Button Content="Download" Margin="12,0,0,0"
+                                       Command="{Binding GpuDownload.EnsureCommand}"
+                                       Visibility="{Binding GpuDownload.ShowButton, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+                        <ProgressBar Margin="0,8,0,0" Minimum="0" Maximum="100"
+                                     Value="{Binding GpuDownload.Progress}"
+                                     Visibility="{Binding GpuDownload.IsDownloading, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </ctl:SettingRow>
                 <ctl:SettingRow Title="Processing"
                                 Description="Auto picks the best engine for your hardware with a one-time speed test — you don't need to do anything. CPU works on every PC; GPU (DirectML) forces the graphics card. Applies after restart.">
                     <ComboBox MinWidth="180" ItemsSource="{Binding TranscriptionDevices}"

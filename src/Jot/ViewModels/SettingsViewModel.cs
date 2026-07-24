@@ -25,6 +25,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsStore _store;
     private readonly IThemeService _theme;
     private readonly ModelDownload _download;
+    private readonly GpuModelDownload _gpuDownload;
     private readonly DataFolderMigrator _migrator;
     private readonly ITranscriber _transcriber;
     private readonly IAiClient _ai;
@@ -103,6 +104,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Shared on-device model download — the SAME instance the setup wizard uses (one downloader,
     /// one progress/status surface). The Model row binds its status, progress bar and Download button here.</summary>
     public ModelDownload Download => _download;
+
+    /// <summary>The optional fp16 GPU model's download state — the SAME instance GpuTierCoordinator's
+    /// silent background fetch drives, so the "GPU model" row shows live progress either way. The manual
+    /// Download button exists for the cases the automatic path skips (metered connection, weak-looking GPU).</summary>
+    public GpuModelDownload GpuDownload => _gpuDownload;
 
     /// <summary>Moves the model + recordings + library when the Save location changes — the Save-location
     /// row binds its progress bar and status here. Shared singleton (also finishes interrupted moves on launch).</summary>
@@ -211,12 +217,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
-        ModelDownload download, DataFolderMigrator migrator,
+        ModelDownload download, GpuModelDownload gpuDownload, DataFolderMigrator migrator,
         ITranscriber transcriber, IAiClient ai, AiCredentials credentials, PfbAuth pfb, ISoundService sound)
     {
         _store = store;
         _theme = theme;
         _download = download;
+        _gpuDownload = gpuDownload;
         _migrator = migrator;
         _transcriber = transcriber;
         _ai = ai;

@@ -367,11 +367,13 @@ public partial class App : System.Windows.Application
         }
         else if (transcriber.IsModelInstalled) _ = Task.Run(transcriber.WarmUp);
 
-        // With Auto + fp16 present but no verdict for the CURRENT adapter+driver (fresh model, GPU swap,
-        // driver update), earn one in the background — the probe takes ~10 s cold and must never touch
-        // the boot path. The verdict applies at the NEXT engine construction; if it says GPU while we're
-        // running int4, one informational balloon says faster dictation is a restart away.
-        ScheduleGpuProbeIfNeeded();
+        // Zero-touch GPU adoption (Auto only): fetch the fp16 model silently when the GPU looks capable,
+        // benchmark it, cache the verdict — all in the background, never on the boot path. The verdict
+        // applies at the NEXT engine construction; if it says GPU while we're running int4, one
+        // informational balloon says faster dictation is a restart (or click) away.
+        var gpuTier = Services.GetRequiredService<GpuTierCoordinator>();
+        gpuTier.UpgradeReady += NotifyGpuUpgradeReady;
+        _ = Task.Run(gpuTier.RunAsync);
 
         // Enforce the retention window (delete old recordings) off the UI thread.
         _ = Task.Run(() => Services.GetRequiredService<RetentionCleaner>().Prune());
@@ -1300,45 +1302,6 @@ public partial class App : System.Windows.Application
         }
     }
 
-    /// <summary>
-    /// Background GPU-verdict upkeep for "Auto": probe when the fp16 model is present but the cached
-    /// verdict is missing or was earned on different hardware/driver. Saves the verdict for the NEXT
-    /// engine construction (the running engine is never hot-swapped) and — when the answer is "GPU"
-    /// while this launch runs int4 — shows the one informational upgrade balloon.
-    /// </summary>
-    private void ScheduleGpuProbeIfNeeded()
-    {
-        var store = Services.GetRequiredService<ISettingsStore>();
-        var s = store.Current;
-        if (!string.Equals(s.TranscriptionDevice, Transcription.TranscriptionDevices.Auto,
-                StringComparison.OrdinalIgnoreCase)) return; // explicit CPU/GPU: the user decided — no probing
-        var fp16Model = Services.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>();
-        if (!fp16Model.IsInstalled) return;                  // nothing to measure (E4's coordinator fetches first)
-        var adapter = Platform.GpuInfo.TryGetPrimaryAdapter();
-        if (adapter is null) return;                         // no DXGI identity → can't cache a verdict honestly
-        if (s.GpuProbeVerdict is not null && s.GpuProbeKey == adapter.CacheKey) return; // verdict is current
-
-        _ = Task.Run(() =>
-        {
-            var r = Transcription.GpuProbe.Run(fp16Model);
-            Dispatcher.Invoke(() =>
-            {
-                s.GpuProbeKey = adapter.CacheKey;
-                s.GpuProbeVerdict = r.GpuViable ? "GPU" : "CPU";
-                s.GpuProbeAvgChunkMs = r.AvgChunkMs;
-                s.GpuProbeReason = r.Reason;
-                store.Save();
-                JotLog.Info($"gpu probe: verdict={s.GpuProbeVerdict} ({r.Reason})");
-                if (r.GpuViable && !s.GpuUpgradeBalloonShown)
-                {
-                    s.GpuUpgradeBalloonShown = true;
-                    store.Save();
-                    NotifyGpuUpgradeReady();
-                }
-            });
-        });
-    }
-
     private static void RunProbeTest()
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-probetest.txt");
@@ -2144,6 +2107,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<Transcription.Nemotron.NemotronFp16ModelInstaller>();
         services.AddSingleton<ModelDownload>();   // shared model-download state (wizard + settings)
         services.AddSingleton<GpuModelDownload>(); // optional fp16 GPU model (background upgrade + settings row)
+        services.AddSingleton<GpuTierCoordinator>(); // zero-touch fetch→probe→verdict owner (Auto mode)
         services.AddSingleton<DataFolderMigrator>(); // moves data when the Save location changes; resumes on launch
         services.AddSingleton<RetentionCleaner>();
         services.AddSingleton<UsageStats>();
