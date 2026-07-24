@@ -197,6 +197,24 @@ public sealed class PillController
         ScheduleHide(3000);
     }
 
+    /// <summary>App-level transient notice (e.g. "Getting the speech engine ready…"). Safe from any
+    /// thread. A recording that starts meanwhile simply takes the pill over (state machine wins).</summary>
+    public void ShowNotice(string message, int hideAfterMs = 3000) => _dispatcher.BeginInvoke(() =>
+    {
+        if (_recorder.State != RecorderState.Idle) return; // never fight an active recording for the pill
+        _transient = true;
+        Pill.SetState(PillState.Notice, message);
+        ScheduleHide(hideAfterMs);
+    });
+
+    /// <summary>Dismisses a ShowNotice early (e.g. warm-up finished). No-op mid-recording.</summary>
+    public void HideNotice() => _dispatcher.BeginInvoke(() =>
+    {
+        if (_recorder.State != RecorderState.Idle || !_transient) return;
+        _transient = false;
+        _pill?.SetState(PillState.Hidden);
+    });
+
 
     private void StartElapsed()
     {

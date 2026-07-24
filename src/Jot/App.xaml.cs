@@ -386,10 +386,10 @@ public partial class App : System.Windows.Application
             _ = Task.Run(() =>
             {
                 migrator.ResumePending();
-                if (transcriber.IsModelInstalled) transcriber.WarmUp();
+                if (transcriber.IsModelInstalled) TimedWarmUp(transcriber);
             });
         }
-        else if (transcriber.IsModelInstalled) _ = Task.Run(transcriber.WarmUp);
+        else if (transcriber.IsModelInstalled) _ = Task.Run(() => TimedWarmUp(transcriber));
 
         // Zero-touch GPU adoption (Auto only): fetch the fp16 model silently when the GPU looks capable,
         // benchmark it, cache the verdict — all in the background, never on the boot path. The verdict
@@ -2547,6 +2547,30 @@ public partial class App : System.Windows.Application
             try { new Controls.DonationNudgeWindow().Show(); }
             catch (Exception ex) { JotLog.Error("donation nudge failed to show", ex); }
         });
+    }
+
+    /// <summary>Warm-up with timing in the log AND a user-visible pill notice while it drags on. The
+    /// fp16/DML engine's first warm-up compiles its DirectML graphs — many seconds of heavy GPU+CPU
+    /// work on some cards, which can make the whole desktop (and our UI) feel sluggish even though the
+    /// work is off the UI thread. The user asked for exactly this: never look hung, say what's
+    /// happening. The notice only appears if warm-up is still running after 1.5 s, so the quick int4
+    /// path never flashes it.</summary>
+    private void TimedWarmUp(ITranscriber transcriber)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        JotLog.Info("warm-up: starting");
+        var pill = Services.GetRequiredService<PillController>();
+        using var noticeCts = new CancellationTokenSource();
+        _ = Task.Delay(1500, noticeCts.Token).ContinueWith(t =>
+        {
+            if (!t.IsCanceled)
+                pill.ShowNotice("Getting the speech engine ready…", hideAfterMs: 60_000);
+        }, TaskScheduler.Default);
+        transcriber.WarmUp();
+        noticeCts.Cancel();
+        sw.Stop();
+        JotLog.Info($"warm-up: done in {sw.ElapsedMilliseconds} ms");
+        if (sw.ElapsedMilliseconds > 1500) pill.HideNotice();
     }
 
     private void Notify(string title, string message, Forms.ToolTipIcon icon)
