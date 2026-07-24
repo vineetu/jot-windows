@@ -14,7 +14,7 @@ public sealed record RecordingResult(float[] Samples, int SampleRate, string Wav
 /// </summary>
 public sealed class AudioRecorder : IDisposable
 {
-    private const int TargetSampleRate = 16000;
+    public const int TargetSampleRate = 16000; // public: LiveTranscription converts sample counts to seconds
 
     private WasapiCapture? _capture;
     private MemoryStream? _buffer;

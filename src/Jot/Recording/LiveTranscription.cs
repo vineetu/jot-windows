@@ -12,11 +12,14 @@ public sealed class LiveTranscription
     private readonly AudioRecorder _recorder;
     private readonly IStreamingTranscriber _transcriber;
     private readonly int _pollMs;
+    private readonly RealtimeGuard _guard;
 
     private CancellationTokenSource? _cts;
     private Task? _loop;
     private IStreamingSession? _session;
-    private int _consumed; // samples already fed to the session
+    private int _consumed;             // samples already fed to the session
+    private double _processingSeconds; // wall time spent inside Accept this session
+    private bool _degraded;            // streaming proved too slow — batch fallback owns the transcript
 
     /// <summary>Raised on a background thread with the transcript so far.</summary>
     public event Action<string>? PartialReady;
@@ -26,12 +29,22 @@ public sealed class LiveTranscription
         _recorder = recorder;
         _transcriber = transcriber;
         _pollMs = pollMs;
+        // JOT_DEGRADE_RTF (debug/testing only): lowers ALL the guard's gates so the degrade WIRING can
+        // be exercised on a fast machine (a fast machine can never form a real backlog, so only the
+        // production thresholds — unit-tested — would otherwise ever fire). e.g. 0.01.
+        _guard = double.TryParse(Environment.GetEnvironmentVariable("JOT_DEGRADE_RTF"),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+                out double v) && v > 0
+            ? new RealtimeGuard(minAudioSeconds: 1.0, rtfThreshold: v, minBacklogSeconds: 0.05)
+            : new RealtimeGuard();
     }
 
     public void Start()
     {
         _session = _transcriber.OpenStream();
         _consumed = 0;
+        _processingSeconds = 0;
+        _degraded = false;
         _cts = new CancellationTokenSource();
         _loop = Task.Run(() => LoopAsync(_cts.Token));
     }
@@ -47,11 +60,31 @@ public sealed class LiveTranscription
 
     private void FeedNew()
     {
+        if (_degraded) return; // batch fallback owns this utterance now
         float[]? all = _recorder.SnapshotSamples();
         if (all is null || all.Length <= _consumed) return;
         float[] delta = all[_consumed..];
+
+        // On a machine that can't stream in realtime, each Accept takes longer than the audio it feeds,
+        // so the un-fed delta grows every poll — that growth IS the backlog the guard watches.
+        double backlogSeconds = delta.Length / (double)AudioRecorder.TargetSampleRate;
+        double fedSeconds = _consumed / (double)AudioRecorder.TargetSampleRate;
+        if (_guard.ShouldDegrade(fedSeconds, _processingSeconds, backlogSeconds))
+        {
+            _degraded = true;
+            _session = null; // FinishAsync now returns "" → RecorderController's batch fallback delivers
+            Services.JotLog.Info(
+                $"live streaming can't keep up (fed {fedSeconds:0.0}s, spent {_processingSeconds:0.0}s, " +
+                $"backlog {backlogSeconds:0.0}s) — degrading to batch transcription");
+            _cts?.Cancel();
+            return;
+        }
+
         _consumed = all.Length;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         string partial = _session!.Accept(delta);
+        sw.Stop();
+        _processingSeconds += sw.Elapsed.TotalSeconds;
         if (partial.Length > 0) PartialReady?.Invoke(partial);
     }
 
