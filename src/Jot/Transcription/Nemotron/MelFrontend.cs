@@ -32,26 +32,57 @@ internal sealed class MelFrontend
     }
 
     /// <summary>Returns log-mel features as time-major rows: <c>result[frame][mel]</c>.</summary>
-    public float[][] Compute(float[] samples)
+    public float[][] Compute(float[] samples) => ComputeFrom(samples, 0);
+
+    /// <summary>Total frame count <see cref="Compute"/> produces for a sample count (2·pad == n_fft,
+    /// so a non-empty signal always yields 1 + n/hop frames).</summary>
+    public static int FrameCount(int sampleCount) =>
+        sampleCount <= 0 ? 0 : 1 + sampleCount / Hop;
+
+    /// <summary>How many leading frames are FINAL for a growing signal of this length: a frame whose
+    /// STFT window ends before the right reflect-pad begins can never change when more audio arrives
+    /// (preemphasis looks backward only; the left pad is fixed). Everything at or past this index is
+    /// perturbed by the moving end-pad and must be recomputed — this is the same physics behind the
+    /// engines' EndPadGuardFrames.</summary>
+    public static int StableFrameLimit(int sampleCount)
     {
-        // 1. Preemphasis on the raw signal.
-        var y = new double[samples.Length];
-        if (samples.Length > 0) y[0] = samples[0];
-        for (int i = 1; i < samples.Length; i++) y[i] = samples[i] - Preemph * samples[i - 1];
+        int usable = sampleCount - NFft / 2;                 // window must end by pad + n
+        if (usable < 0) return 0;
+        return Math.Min(usable / Hop + 1, FrameCount(sampleCount));
+    }
 
-        // 2. Reflect-pad by n_fft/2 both sides (torch.stft center=True).
-        double[] padded = ReflectPad(y, NFft / 2);
+    /// <summary>
+    /// Frames <c>[fromFrame..)</c> of the FULL signal — byte-identical math to <see cref="Compute"/>
+    /// (same per-element double ops), but O(suffix) instead of O(everything): the padded signal is
+    /// addressed virtually, so nothing before the requested frames is touched. This is what makes
+    /// streaming mel incremental (see StreamingMel): pollers recompute only the volatile tail.
+    /// </summary>
+    public float[][] ComputeFrom(float[] samples, int fromFrame)
+    {
+        int n = samples.Length;
+        int frames = FrameCount(n);
+        if (n == 0 || fromFrame >= frames) return [];
 
-        int frames = padded.Length >= NFft ? 1 + (padded.Length - NFft) / Hop : 0;
-        var mel = new float[frames][];
+        const int Pad = NFft / 2;
+        // Virtual padded[i]: left reflect | preemphasized signal | right reflect — index math mirrors
+        // ReflectPad exactly (outp[pad-1-k] = y[min(k+1, n-1)]; outp[pad+n+k] = y[max(n-2-k, 0)]).
+        double YAt(int j) => j <= 0 ? samples[0] : samples[j] - Preemph * samples[j - 1];
+        double Padded(int i)
+        {
+            if (i < Pad) return YAt(Math.Min(Pad - i, n - 1));
+            if (i < Pad + n) return YAt(i - Pad);
+            return YAt(Math.Max(n - 2 - (i - Pad - n), 0));
+        }
+
+        var mel = new float[frames - fromFrame][];
         var re = new double[NFft];
         var im = new double[NFft];
         var power = new double[NBins];
 
-        for (int f = 0; f < frames; f++)
+        for (int f = fromFrame; f < frames; f++)
         {
             int off = f * Hop;
-            for (int n = 0; n < NFft; n++) { re[n] = padded[off + n] * _window[n]; im[n] = 0.0; }
+            for (int i = 0; i < NFft; i++) { re[i] = Padded(off + i) * _window[i]; im[i] = 0.0; }
             Fft(re, im);
             for (int k = 0; k < NBins; k++) power[k] = re[k] * re[k] + im[k] * im[k];
 
@@ -63,7 +94,7 @@ internal sealed class MelFrontend
                 for (int k = 0; k < NBins; k++) acc += w[k] * power[k];
                 row[m] = (float)Math.Log(acc + LogGuard);
             }
-            mel[f] = row;
+            mel[f - fromFrame] = row;
         }
         return mel;
     }
@@ -86,19 +117,6 @@ internal sealed class MelFrontend
             for (int m = 0; m < NMels; m++) fm[m * frames + f] = row[m];
         }
         return fm;
-    }
-
-    private static double[] ReflectPad(double[] y, int pad)
-    {
-        int n = y.Length;
-        var outp = new double[n + 2 * pad];
-        Array.Copy(y, 0, outp, pad, n);
-        for (int i = 0; i < pad; i++)
-        {
-            outp[pad - 1 - i] = y[Math.Min(i + 1, n - 1)];          // left reflect (no edge repeat)
-            outp[pad + n + i] = y[Math.Max(n - 2 - i, 0)];          // right reflect
-        }
-        return outp;
     }
 
     private static double[] BuildWindow()

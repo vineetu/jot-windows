@@ -134,11 +134,14 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
         private bool _primed;
         private int _fedChunks;
 
+        private readonly StreamingMel _sm;
+
         internal Session(NemotronFp16Transcriber t)
         {
             _t = t;
             _langMask = new float[NumPrompts];
             _langMask[_t._langSlot] = 1.0f;
+            _sm = new StreamingMel(t._mel); // per-session: caches this utterance's finalized mel frames
         }
 
         /// <summary>Feeds new 16 kHz mono samples; returns the transcript so far. Cheap to call often.</summary>
@@ -148,7 +151,9 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
             lock (_t._inferenceGate)
             {
                 Prime();
-                float[] mel = _t._mel.ComputeFeatureMajor(_audio.ToArray(), out int total);
+                float[][] tm = _sm.Update(_audio.ToArray()); // incremental — only the tail is recomputed
+                int total = tm.Length;
+                float[] mel = StreamingMel.ToFeatureMajor(tm);
                 // Only process chunks whose 32 frames are all clear of the moving end-pad zone.
                 int stableFrames = total - EndPadGuardFrames;
                 int stableChunks = stableFrames > 0 ? stableFrames / ChunkMel : 0;
@@ -165,7 +170,9 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
             lock (_t._inferenceGate)
             {
                 Prime();
-                float[] mel = _t._mel.ComputeFeatureMajor(_audio.ToArray(), out int total);
+                float[][] tmF = _sm.Update(_audio.ToArray());
+                int total = tmF.Length;
+                float[] mel = StreamingMel.ToFeatureMajor(tmF);
                 if (total > 0)
                 {
                     int chunks = (total + ChunkMel - 1) / ChunkMel;

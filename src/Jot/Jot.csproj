@@ -25,6 +25,11 @@
     <Flavor Condition="'$(Flavor)' == ''">Public</Flavor>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Tests exercise internal engine pieces (MelFrontend/StreamingMel byte-exactness). -->
+    <InternalsVisibleTo Include="Jot.Tests" />
+  </ItemGroup>
+
   <!-- Flavor gate: defines the SONY compile symbol used by Services/Ai/PfbGateway.cs, PfbAuth.cs
        and BuildFlavor.cs to include the Sony-only providers, gateway URLs, and self-test. -->
   <PropertyGroup Condition="'$(Flavor)' == 'Sony'">

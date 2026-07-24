@@ -1491,17 +1491,32 @@ public partial class App : System.Windows.Application
             int chunk = WavAudio.SampleRate * 300 / 1000;
             string lastPartial = "";
             int partials = 0;
+            var acceptSw = new System.Diagnostics.Stopwatch();
+            double acceptTotalMs = 0, acceptMaxMs = 0, lastTenthAvgMs = 0;
+            int calls = 0, lastTenthCalls = 0;
+            int tenthStart = (samples.Length / chunk) * 9 / 10; // the LAST 10% of calls — where O(n) mel recompute hurt
             for (int i = 0; i < samples.Length; i += chunk)
             {
                 int n = Math.Min(chunk, samples.Length - i);
                 var slice = new float[n];
                 Array.Copy(samples, i, slice, 0, n);
+                acceptSw.Restart();
                 string p = session.Accept(slice);
+                acceptSw.Stop();
+                acceptTotalMs += acceptSw.Elapsed.TotalMilliseconds;
+                acceptMaxMs = Math.Max(acceptMaxMs, acceptSw.Elapsed.TotalMilliseconds);
+                if (calls >= tenthStart) { lastTenthAvgMs += acceptSw.Elapsed.TotalMilliseconds; lastTenthCalls++; }
+                calls++;
                 if (p.Length > 0 && p != lastPartial) { lastPartial = p; partials++; }
             }
+            var finishSw = System.Diagnostics.Stopwatch.StartNew();
             string final = session.Finish().Trim();
+            finishSw.Stop();
+            if (lastTenthCalls > 0) lastTenthAvgMs /= lastTenthCalls;
             System.IO.File.WriteAllText(outPath,
                 $"OK\nbackend={backend}\npartialsSeen={partials}\nlastPartialLen={lastPartial.Length}\n" +
+                $"accept_total_ms={acceptTotalMs:0} accept_max_ms={acceptMaxMs:0} accept_lastTenth_avg_ms={lastTenthAvgMs:0}\n" +
+                $"finish_ms={finishSw.ElapsedMilliseconds}\n" +
                 $"finalLen={final.Length}\nFINAL={final}\n");
         }
         catch (Exception ex)

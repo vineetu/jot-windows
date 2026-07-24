@@ -117,10 +117,13 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
         private readonly long _langId; // snapshot at open — a Settings change mid-utterance must not
                                        // flip conditioning against a cache built under the old language
 
+        private readonly StreamingMel _sm;
+
         internal Session(NemotronTranscriber t)
         {
             _t = t;
             _langId = t._langId;
+            _sm = new StreamingMel(t._mel); // per-session: caches this utterance's finalized mel frames
         }
 
         /// <summary>Dev-only (--langprobe): raw token ids INCLUDING the &lt;xx-YY&gt; language tag the
@@ -134,7 +137,7 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
             lock (_t._inferenceGate)
             {
                 Prime();
-                float[][] mel = _t._mel.Compute(_audio.ToArray());
+                float[][] mel = _sm.Update(_audio.ToArray()); // incremental — only the tail is recomputed
                 int total = mel.Length;
                 // Only process chunks whose frames are all clear of the end-pad zone.
                 int stableFrames = total - EndPadGuardFrames;
@@ -151,7 +154,7 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
             lock (_t._inferenceGate)
             {
                 Prime();
-                float[][] mel = _t._mel.Compute(_audio.ToArray());
+                float[][] mel = _sm.Update(_audio.ToArray());
                 int total = mel.Length;
                 if (total > 0)
                 {
