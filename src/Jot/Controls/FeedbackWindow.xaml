@@ -3,7 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="Send feedback"
-                 Width="500" Height="420" MinWidth="380" MinHeight="320"
+                 Width="540" Height="560" MinWidth="420" MinHeight="420"
                  WindowStartupLocation="CenterOwner"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
@@ -13,6 +13,8 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -29,10 +31,20 @@
                     VerticalScrollBarVisibility="Auto"
                     PlaceholderText="Your feedback…" />
 
-        <TextBlock Grid.Row="3" x:Name="StatusText" Margin="20,0,20,4" TextWrapping="Wrap"
+        <!-- Diagnostics are OPT-IN and fully previewed: what you see in the box below is exactly what
+             gets appended — dictated text redacted, username scrubbed (FeedbackReport). -->
+        <CheckBox Grid.Row="3" x:Name="AttachDiagnostics" Margin="20,2,20,0"
+                  Content="Attach diagnostics (hardware + recent activity — preview below)"
+                  Checked="OnAttachToggled" Unchecked="OnAttachToggled" />
+        <TextBox Grid.Row="4" x:Name="DiagnosticsPreview" Margin="20,6,20,0" Height="140"
+                 Visibility="Collapsed" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                 TextWrapping="NoWrap" />
+
+        <TextBlock Grid.Row="5" x:Name="StatusText" Margin="20,6,20,4" TextWrapping="Wrap"
                    Visibility="Collapsed" />
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="20,8,20,16">
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="20,8,20,16">
             <ui:Button x:Name="SendButton" Content="Send" Appearance="Primary" Margin="0,0,8,0"
                        Click="OnSend" />
             <ui:Button x:Name="CloseButton" Content="Close" Click="OnClose" />

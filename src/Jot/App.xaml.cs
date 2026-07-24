@@ -369,6 +369,16 @@ public partial class App : System.Windows.Application
         var settingsForLog = Services.GetRequiredService<ISettingsStore>();
         JotLog.Initialize(() => JotPaths.DataDir(settingsForLog.Current));
         JotLog.Info("Jot starting");
+        // One env line per launch: the exact facts a feedback report / remote diagnosis needs first.
+        try
+        {
+            var gpuId = Platform.GpuInfo.TryGetPrimaryAdapter();
+            JotLog.Info($"env: app {typeof(App).Assembly.GetName().Version} ({BuildFlavor.Name}, " +
+                $"packaged={PackagePaths.IsPackaged}), {Environment.OSVersion.VersionString}, " +
+                $"cpu x{Environment.ProcessorCount}, ram {GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024.0 * 1024 * 1024):0.0} GB, " +
+                $"gpu {(gpuId is null ? "none" : $"{gpuId.Description} drv {Platform.GpuInfo.FormatDriverVersion(gpuId.UmdDriverVersion)}")}");
+        }
+        catch { /* env line is best-effort */ }
         _recorder = Services.GetRequiredService<RecorderController>();
         _rewrite = Services.GetRequiredService<Rewrite.RewriteController>();
         Services.GetRequiredService<PillController>().Attach(); // status pill now owns pipeline feedback
@@ -436,7 +446,7 @@ public partial class App : System.Windows.Application
         // `--tour` force-shows the one-time first-run quick tour (for testing/screenshots), ignoring the flag.
         if (e.Args.Contains("--tour")) { new Controls.QuickTourWindow().Show(); }
         // `--feedbackdemo` shows the feedback composer (does not auto-send).
-        if (e.Args.Contains("--feedbackdemo")) { new Controls.FeedbackWindow().Show(); }
+        if (e.Args.Contains("--feedbackdemo")) { new Controls.FeedbackWindow(attachDiagnostics: true).Show(); }
         // Setup wizard: forced with `--wizard`, or on a normal (no-arg) launch when setup is incomplete OR
         // the speech model is missing. Re-showing whenever the model is absent (not just on first run)
         // recovers any state where a user reached the app without a usable model — closing the wizard early,
@@ -2551,6 +2561,17 @@ public partial class App : System.Windows.Application
         // Clipboard-mode fallback (this PC blocks automatic paste) — surface the "press Ctrl+V" hint.
         _recorder.Notice += (title, msg) => Notify(title, msg, Forms.ToolTipIcon.Info);
 
+        // A transcription failure is exactly when we want the user's report (with diagnostics attached):
+        // the pill already shows the error; this balloon offers the next step. Click → feedback window
+        // with diagnostics pre-checked. At most once per launch — an error loop must not balloon-spam.
+        _recorder.Failed += (_, _) =>
+        {
+            if (_feedbackOfferShown) return;
+            _feedbackOfferShown = true;
+            OfferFeedbackBalloon("Something went wrong",
+                "Click here to send feedback with diagnostics — it helps fix this for everyone.");
+        };
+
         // After a dictation, check whether it's time for the one-time "you've saved ~1h" donation nudge.
         _recorder.TranscriptReady += _ => MaybeShowDonationNudge();
     }
@@ -2604,6 +2625,29 @@ public partial class App : System.Windows.Application
 
     private void Notify(string title, string message, Forms.ToolTipIcon icon)
         => _tray?.ShowBalloonTip(2500, title, message, icon);
+
+    private bool _feedbackOfferShown; // once per launch — never balloon-spam a failing pipeline
+
+    /// <summary>Balloon whose click opens the feedback window with diagnostics pre-attached.
+    /// Handlers detach on click AND close so a later unrelated balloon can't open it.</summary>
+    private void OfferFeedbackBalloon(string title, string message)
+    {
+        if (_tray is null) return;
+        void Detach()
+        {
+            _tray!.BalloonTipClicked -= OnClick;
+            _tray.BalloonTipClosed -= OnClosed;
+        }
+        void OnClick(object? sender, EventArgs e)
+        {
+            Detach();
+            new Controls.FeedbackWindow(attachDiagnostics: true).Show();
+        }
+        void OnClosed(object? sender, EventArgs e) => Detach();
+        _tray.BalloonTipClicked += OnClick;
+        _tray.BalloonTipClosed += OnClosed;
+        _tray.ShowBalloonTip(6000, title, message, Forms.ToolTipIcon.Warning);
+    }
 
     /// <summary>The one informational "GPU tier ready" balloon. Clicking it restarts Jot on the spot
     /// (idle only — never yank an active recording); ignoring it is fine, the engine switches whenever

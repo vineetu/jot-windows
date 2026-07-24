@@ -7,8 +7,11 @@
         <StackPanel MaxWidth="800">
             <TextBlock Text="Help" Style="{DynamicResource TitleTextBlockStyle}" Margin="0,0,0,4" />
 
-            <ui:Button Content="Show the quick tour" Icon="{ui:SymbolIcon Info24}" Margin="0,10,0,0"
-                       Click="OnShowTour" />
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <ui:Button Content="Show the quick tour" Icon="{ui:SymbolIcon Info24}" Click="OnShowTour" />
+                <ui:Button Content="Send feedback" Icon="{ui:SymbolIcon PersonFeedback24}" Margin="8,0,0,0"
+                           Click="OnSendFeedback" />
+            </StackPanel>
 
             <TextBlock Text="Basics" Style="{DynamicResource SubtitleTextBlockStyle}" Margin="0,16,0,8" />
             <ui:CardExpander Icon="{ui:SymbolIcon Mic24}" Margin="0,0,0,6">

@@ -120,6 +120,9 @@ public sealed class RecorderController : IDisposable
     private DateTime _holdPressedAt;
     private const int TapToToggleMs = 250; // a quick tap converts the press into a normal toggle-on
 
+    private const int SlowStopMs = 5_000;  // stop→delivery beyond this reads as "hung" to a user
+    private bool _slowStopNoticeShown;     // the slow-stop feedback nudge fires at most once per launch
+
     /// <summary>Push-to-talk key DOWN. Idle → start recording (hold begins). Already recording (toggle
     /// or a previous tap) → stop + deliver, exactly like the toggle chord. Transcribing → ignored.</summary>
     public void PressToStart()
@@ -187,6 +190,7 @@ public sealed class RecorderController : IDisposable
         DisarmStopHotkey();
         SetState(RecorderState.Transcribing);
         _sound.PlayStop();
+        var stopSw = System.Diagnostics.Stopwatch.StartNew(); // hotkey-release → text delivered
         try
         {
             string recordingsDir = JotPaths.RecordingsDir(_settings.Current);
@@ -247,6 +251,17 @@ public sealed class RecorderController : IDisposable
                 }
                 _sound.PlaySuccess();
                 TranscriptReady?.Invoke(text);
+            }
+
+            // Stop-to-delivered wall time in the log every run; the feedback nudge only when it's
+            // painful, and only once per launch (a struggling machine must not get nagged per stop).
+            stopSw.Stop();
+            Log($"stop-to-delivery {stopSw.ElapsedMilliseconds} ms");
+            if (stopSw.ElapsedMilliseconds > SlowStopMs && !_slowStopNoticeShown)
+            {
+                _slowStopNoticeShown = true;
+                Notice?.Invoke("That took longer than usual",
+                    "If transcription keeps feeling slow, use Send feedback (Help page) so we can see why.");
             }
         }
         catch (Exception ex)

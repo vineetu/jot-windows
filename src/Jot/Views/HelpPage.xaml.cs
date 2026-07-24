@@ -21,4 +21,9 @@ public partial class HelpPage : Page
 
     // Re-open the first-run quick tour on demand — doesn't reset the one-time flag, just shows it again.
     private void OnShowTour(object sender, System.Windows.RoutedEventArgs e) => new Controls.QuickTourWindow().Show();
+
+    // Diagnostics pre-checked here: someone reaching for feedback from Help usually has a problem worth
+    // the report (they can untick it — and the full text is previewed either way).
+    private void OnSendFeedback(object sender, System.Windows.RoutedEventArgs e)
+        => new Controls.FeedbackWindow(attachDiagnostics: true).Show();
 }

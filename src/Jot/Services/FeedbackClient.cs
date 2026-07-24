@@ -15,6 +15,12 @@ public sealed class FeedbackClient
 {
     private const string Endpoint = "https://jot-donations.ideaflow.page/feedback";
 
+    // TRAP: the server WHITELISTS platform to 'ios' | 'macos' — verified live 2026-07-24 (HTTP 400
+    // "Platform must be 'ios' or 'macos'" for anything else), which silently broke Windows feedback
+    // since day one. Until the backend learns "windows", send a whitelisted value and carry the real
+    // platform in the message prefix below. Flip this to "windows" the moment the server accepts it.
+    private const string PlatformField = "macos";
+
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
 
     /// <summary>Submit one message. Returns the server-assigned id, or throws
@@ -22,7 +28,8 @@ public sealed class FeedbackClient
     public async Task<int> SendAsync(string message, CancellationToken ct = default)
     {
         string version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "?";
-        var payload = new FeedbackRequest("windows", version, message);
+        // "[windows 1.2.1]" prefix = the real platform, server-side filterable, survives the whitelist shim.
+        var payload = new FeedbackRequest(PlatformField, version, $"[windows {version}] {message}");
         string json = JsonSerializer.Serialize(payload);
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");

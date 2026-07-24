@@ -15,7 +15,9 @@ public static class JotLog
 {
     private static Func<string>? _dataDirProvider;
     private static readonly object _gate = new();
-    private const long MaxBytes = 2 * 1024 * 1024; // roll at ~2 MB so the log can't grow unbounded
+    // Roll at 256 KB: a couple hundred KB of decision-level lines is DAYS of history, and small logs
+    // keep the feedback report's tail meaningful. One previous generation survives (jot.log.1).
+    private const long MaxBytes = 256 * 1024;
 
     /// <summary>Wire the log to the current data directory. Call once at startup.</summary>
     public static void Initialize(Func<string> dataDirProvider) => _dataDirProvider = dataDirProvider;
