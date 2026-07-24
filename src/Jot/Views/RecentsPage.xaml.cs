@@ -13,6 +13,9 @@ public partial class RecentsPage : Page
         DataContext = App.Services.GetRequiredService<RecentsViewModel>();
     }
 
+    // Re-open the first-run quick tour on demand from the homepage — same window, no flag reset.
+    private void OnShowTour(object sender, RoutedEventArgs e) => new Controls.QuickTourWindow().Show();
+
     private async void OnBrowseClick(object sender, RoutedEventArgs e)
     {
         var dlg = new Microsoft.Win32.OpenFileDialog

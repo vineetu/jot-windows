@@ -433,6 +433,8 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--pickerdemo")) RunPickerDemo();
         // `--donatedemo` shows the donate popup (fetches the live donations summary).
         if (e.Args.Contains("--donatedemo")) { new Controls.DonationsWindow().Show(); }
+        // `--tour` force-shows the one-time first-run quick tour (for testing/screenshots), ignoring the flag.
+        if (e.Args.Contains("--tour")) { new Controls.QuickTourWindow().Show(); }
         // `--feedbackdemo` shows the feedback composer (does not auto-send).
         if (e.Args.Contains("--feedbackdemo")) { new Controls.FeedbackWindow().Show(); }
         // Setup wizard: forced with `--wizard`, or on a normal (no-arg) launch when setup is incomplete OR
@@ -2505,6 +2507,16 @@ public partial class App : System.Windows.Application
     private void ShowWizard()
     {
         var wizard = new Views.SetupWizardWindow();
+        // After the wizard closes with setup actually complete, teach the essentials once. Single decision
+        // point (QuickTourWindow.ShouldShowAfterWizard) reads the flags the wizard just set — so a re-run
+        // (--wizard) or a model-missing re-show never re-fires the tour once it's been seen.
+        wizard.Closed += (_, _) =>
+        {
+            var s = Services.GetRequiredService<ISettingsStore>().Current;
+            if (Controls.QuickTourWindow.ShouldShowAfterWizard(s))
+                try { new Controls.QuickTourWindow().Show(); }
+                catch (Exception ex) { JotLog.Error("quick tour failed to show", ex); }
+        };
         wizard.Show();
         wizard.Activate();
     }

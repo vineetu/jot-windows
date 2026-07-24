@@ -84,6 +84,10 @@ public sealed class JotSettings
     // shows a tip for the first few opens (DirectionTipOpens), until the user tries it (DirectionTipDone).
     public bool DirectionTipDone { get; set; }
     public int DirectionTipOpens { get; set; }
+
+    // One-time "quick tour" shown once, right after the setup wizard closes with setup complete. Re-runnable
+    // from Help without resetting this. Existing upgraders never see the wizard, so they never see the tour.
+    public bool FirstRunTipsDone { get; set; }
 }
 
 /// <summary>Loads, exposes, and persists <see cref="JotSettings"/>; raises <see cref="Changed"/> after a save.</summary>

@@ -45,6 +45,9 @@
                         </InlineUIContainer>
                         <Run Text="anywhere, speak, and it's pasted at your cursor." />
                     </TextBlock>
+                    <ui:Button Content="Quick tour" Icon="{ui:SymbolIcon Info24}" Appearance="Transparent"
+                               Padding="6,2" Margin="0,6,0,0" HorizontalAlignment="Left"
+                               ToolTip="Show the quick tour again" Click="OnShowTour" />
                 </StackPanel>
             </Grid>
 

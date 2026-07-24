@@ -18,4 +18,7 @@ public partial class HelpPage : Page
             DictateChord.Text = HotkeyChord.Display(settings.Current.ToggleRecordingHotkey);
         };
     }
+
+    // Re-open the first-run quick tour on demand — doesn't reset the one-time flag, just shows it again.
+    private void OnShowTour(object sender, System.Windows.RoutedEventArgs e) => new Controls.QuickTourWindow().Show();
 }

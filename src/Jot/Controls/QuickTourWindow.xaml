@@ -1,0 +1,32 @@
+<ui:FluentWindow x:Class="Jot.Controls.QuickTourWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Welcome to Jot"
+                 Icon="pack://application:,,,/Assets/jot.ico"
+                 Width="480" SizeToContent="Height" ResizeMode="NoResize"
+                 WindowStartupLocation="CenterScreen" Topmost="True" ShowInTaskbar="False"
+                 ExtendsContentIntoTitleBar="True" WindowBackdropType="Mica" WindowCornerPreference="Round">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" ShowMaximize="False" ShowMinimize="False" Title="Welcome to Jot" />
+
+        <StackPanel Grid.Row="1" Margin="24,8,24,20">
+            <TextBlock Text="A quick tour" Style="{DynamicResource SubtitleTextBlockStyle}" FontWeight="SemiBold" />
+            <TextBlock Margin="0,4,0,4" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="A few things and you're off — no setup needed." />
+
+            <!-- Cards are built in code from QuickTourWindow.Cards (the declarative showcase list) so adding a
+                 future card is a one-line change there, with no XAML/window plumbing. -->
+            <StackPanel x:Name="CardHost" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+                <ui:Button Content="Got it" Appearance="Primary" MinWidth="96" Click="OnGotIt" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>
