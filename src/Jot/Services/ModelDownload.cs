@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Jot.Transcription;
 using Jot.Transcription.Nemotron;
 
 namespace Jot.Services;
@@ -7,21 +8,29 @@ namespace Jot.Services;
 /// <summary>
 /// The one observable driver for the on-device model download, shared by BOTH the setup wizard and the
 /// Settings page — so there is a single download path and a single progress/status surface, never two
-/// copies to drift. Backed by <see cref="NemotronModelInstaller"/> (the actual downloader); registered as
-/// a singleton so a download started in one place is reflected wherever it's bound.
+/// copies to drift. Backed by an <see cref="IModelInstaller"/> (the actual downloader); registered as
+/// a singleton so a download started in one place is reflected wherever it's bound. The base class is
+/// the required int4 model; <see cref="GpuModelDownload"/> derives for the optional fp16 GPU model.
 /// </summary>
-public sealed partial class ModelDownload : ObservableObject
+public partial class ModelDownload : ObservableObject
 {
     public const string InstalledText = "Nemotron 3.5 · Installed";
     public const string NotInstalledText = "Not installed (~754 MB)";
 
-    private readonly NemotronModelInstaller _installer;
+    private readonly IModelInstaller _installer;
+    private readonly string _installedText;
+    private readonly string _notInstalledText;
 
     public ModelDownload(NemotronModelInstaller installer)
+        : this(installer, InstalledText, NotInstalledText) { }
+
+    protected ModelDownload(IModelInstaller installer, string installedText, string notInstalledText)
     {
         _installer = installer;
+        _installedText = installedText;
+        _notInstalledText = notInstalledText;
         _isInstalled = installer.IsInstalled;
-        _statusText = _isInstalled ? InstalledText : NotInstalledText;
+        _statusText = _isInstalled ? _installedText : _notInstalledText;
     }
 
     [ObservableProperty] private bool _isInstalled;
@@ -39,7 +48,7 @@ public sealed partial class ModelDownload : ObservableObject
     {
         if (IsDownloading) return;
         IsInstalled = _installer.IsInstalled;
-        StatusText = IsInstalled ? InstalledText : NotInstalledText;
+        StatusText = IsInstalled ? _installedText : _notInstalledText;
     }
 
     [RelayCommand]
@@ -54,17 +63,17 @@ public sealed partial class ModelDownload : ObservableObject
         if (IsInstalled || IsDownloading) return IsInstalled;
         IsDownloading = true;
         Progress = 0;
-        StatusText = NemotronModelInstaller.DescribeProgress(0);
+        StatusText = _installer.Manifest.DescribeProgress(0);
         try
         {
             var progress = new Progress<double>(f =>
             {
                 Progress = f * 100;
-                StatusText = NemotronModelInstaller.DescribeProgress(f);
+                StatusText = _installer.Manifest.DescribeProgress(f);
             });
             await _installer.EnsureInstalledAsync(progress);
             IsInstalled = true;
-            StatusText = InstalledText;
+            StatusText = _installedText;
         }
         catch (Exception ex)
         {

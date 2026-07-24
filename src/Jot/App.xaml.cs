@@ -129,6 +129,17 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // `--installfp16 [dir]` downloads the optional fp16 GPU model headless → %TEMP%\jot-installfp16.txt.
+        int installFp16Arg = Array.IndexOf(e.Args, "--installfp16");
+        if (installFp16Arg >= 0)
+        {
+            string? fp16Dir = installFp16Arg + 1 < e.Args.Length && !e.Args[installFp16Arg + 1].StartsWith("--")
+                ? e.Args[installFp16Arg + 1] : null;
+            RunHeadlessInstallFp16(fp16Dir);
+            Shutdown();
+            return;
+        }
+
         // `--ffmpegtest <wav>` proves FfmpegInstaller's lazy download fetches a working ffmpeg.exe and
         // decodes a non-wav format end-to-end → %TEMP%\jot-ffmpegtest.txt.
         int ffmpegTestArg = Array.IndexOf(e.Args, "--ffmpegtest");
@@ -165,11 +176,20 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // `--fp16test <wav> [--dml]` runs the real Nemotron FP16 engine on DirectML (or CPU) → %TEMP%\jot-fp16test.txt.
+        // `--fp16test <wav> [--dml] [--hybrid]` runs the real Nemotron FP16 engine → %TEMP%\jot-fp16test.txt.
+        // --hybrid pins decoder+joint to CPU (encoder stays on the chosen backend) for the placement A/B.
         int fp16Arg = Array.IndexOf(e.Args, "--fp16test");
         if (fp16Arg >= 0 && fp16Arg + 1 < e.Args.Length)
         {
-            RunFp16Test(e.Args[fp16Arg + 1], e.Args.Contains("--dml"));
+            RunFp16Test(e.Args[fp16Arg + 1], e.Args.Contains("--dml"), e.Args.Contains("--hybrid"));
+            Shutdown();
+            return;
+        }
+
+        // `--probetest` runs the GPU identity + fp16/DML benchmark probe → %TEMP%\jot-probetest.txt.
+        if (e.Args.Contains("--probetest"))
+        {
+            RunProbeTest();
             Shutdown();
             return;
         }
@@ -1230,7 +1250,7 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private static void RunFp16Test(string wavPath, bool useDml)
+    private static void RunFp16Test(string wavPath, bool useDml, bool hybrid = false)
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-fp16test.txt");
         try
@@ -1245,7 +1265,8 @@ public partial class App : System.Windows.Application
             var factory = new Transcription.Onnx.OnnxSessionFactory();
             string fallback = "";
             factory.BackendFallback += m => fallback += m + " | ";
-            using var transcriber = new Transcription.Nemotron.NemotronFp16Transcriber(model, factory, backend);
+            using var transcriber = new Transcription.Nemotron.NemotronFp16Transcriber(model, factory, backend,
+                hybrid ? Transcription.Onnx.ComputeBackend.Cpu : null);
             float[] samples = WavAudio.ReadMono16k(wavPath);
 
             // First pass warms the model (session load + graph optimisation + kernel priming).
@@ -1260,7 +1281,7 @@ public partial class App : System.Windows.Application
 
             double seconds = samples.Length / (double)WavAudio.SampleRate;
             System.IO.File.WriteAllText(outPath,
-                $"OK\nbackend={backend}\nDML_FELL_BACK_TO_CPU={(fallback.Length > 0)}\nfallbackMsg={fallback}\n" +
+                $"OK\nbackend={backend}\nhybrid={hybrid}\nDML_FELL_BACK_TO_CPU={(fallback.Length > 0)}\nfallbackMsg={fallback}\n" +
                 $"audio_s={seconds:0.00}\ncold_ms={loadTimer.ElapsedMilliseconds}\nwarm_ms={sw.ElapsedMilliseconds}\n" +
                 $"TEXT={text}\n");
         }
@@ -1268,6 +1289,47 @@ public partial class App : System.Windows.Application
         {
             System.IO.File.WriteAllText(outPath, $"ERROR backend={(useDml ? "DirectML" : "CPU")}\n{ex}\n");
         }
+    }
+
+    private static void RunProbeTest()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-probetest.txt");
+        var sb = new System.Text.StringBuilder();
+        try
+        {
+            var id = Platform.GpuInfo.TryGetPrimaryAdapter();
+            if (id is null)
+            {
+                sb.AppendLine("adapter=NONE (DXGI enumeration failed)");
+            }
+            else
+            {
+                sb.AppendLine($"adapter={id.Description}");
+                sb.AppendLine($"vendor=0x{id.VendorId:X4} device=0x{id.DeviceId:X4}");
+                sb.AppendLine($"vram_gb={id.DedicatedVideoMemoryBytes / (1024.0 * 1024 * 1024):0.0}");
+                sb.AppendLine($"driver={Platform.GpuInfo.FormatDriverVersion(id.UmdDriverVersion)}");
+                sb.AppendLine($"software={id.IsSoftwareAdapter}");
+                sb.AppendLine($"looksCapable={id.LooksCapable}");
+                sb.AppendLine($"cacheKey={id.CacheKey}");
+            }
+
+            var model = new Transcription.Nemotron.NemotronFp16Model();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var r = Transcription.GpuProbe.Run(model);
+            sw.Stop();
+            sb.AppendLine($"probe_total_ms={sw.ElapsedMilliseconds}");
+            sb.AppendLine($"gpuViable={r.GpuViable}");
+            sb.AppendLine($"avgChunkMs={r.AvgChunkMs:0.0}");
+            sb.AppendLine($"maxAcceptMs={r.MaxAcceptMs:0.0}");
+            sb.AppendLine($"reason={r.Reason}");
+            sb.AppendLine($"TEXT={r.Transcript}");
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine("ERROR");
+            sb.AppendLine(ex.ToString());
+        }
+        System.IO.File.WriteAllText(outPath, sb.ToString());
     }
 
     private static void RunDmlDiag()
@@ -1350,6 +1412,25 @@ public partial class App : System.Windows.Application
             var installer = new Transcription.Nemotron.NemotronModelInstaller(model);
             Task.Run(() => installer.EnsureInstalledAsync()).GetAwaiter().GetResult();
             System.IO.File.WriteAllText(outPath, $"OK installed={model.IsInstalled}\n");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
+        }
+    }
+
+    private static void RunHeadlessInstallFp16(string? dir)
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-installfp16.txt");
+        try
+        {
+            var model = new Transcription.Nemotron.NemotronFp16Model(dir);
+            var installer = new Transcription.Nemotron.NemotronFp16ModelInstaller(model);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            Task.Run(() => installer.EnsureInstalledAsync()).GetAwaiter().GetResult();
+            sw.Stop();
+            System.IO.File.WriteAllText(outPath,
+                $"OK installed={model.IsInstalled} dir={model.Directory} ms={sw.ElapsedMilliseconds}\n");
         }
         catch (Exception ex)
         {
@@ -2009,9 +2090,12 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ParakeetModelInstaller>();
         services.AddSingleton<Transcription.Nemotron.NemotronModel>(sp =>
             new Transcription.Nemotron.NemotronModel(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
-        services.AddSingleton<Transcription.Nemotron.NemotronFp16Model>();
+        services.AddSingleton<Transcription.Nemotron.NemotronFp16Model>(sp =>
+            new Transcription.Nemotron.NemotronFp16Model(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
         services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>();
+        services.AddSingleton<Transcription.Nemotron.NemotronFp16ModelInstaller>();
         services.AddSingleton<ModelDownload>();   // shared model-download state (wizard + settings)
+        services.AddSingleton<GpuModelDownload>(); // optional fp16 GPU model (background upgrade + settings row)
         services.AddSingleton<DataFolderMigrator>(); // moves data when the Save location changes; resumes on launch
         services.AddSingleton<RetentionCleaner>();
         services.AddSingleton<UsageStats>();

@@ -46,6 +46,7 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
     private readonly NemotronFp16Model _model;
     private readonly OnnxSessionFactory _factory;
     private readonly ComputeBackend _backend;
+    private readonly ComputeBackend _decoderJointBackend;
     private readonly MelFrontend _mel = new();
     private readonly object _loadGate = new();
     private readonly object _inferenceGate = new();  // the ONNX sessions can't Run() concurrently
@@ -60,11 +61,17 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
     public NemotronFp16Transcriber(
         NemotronFp16Model model,
         OnnxSessionFactory factory,
-        ComputeBackend backend = ComputeBackend.DirectML)
+        ComputeBackend backend = ComputeBackend.DirectML,
+        ComputeBackend? decoderJointBackend = null)
     {
         _model = model;
         _factory = factory;
         _backend = backend;
+        // Measured on RX 5700 XT (2026-07-24, --fp16test --dml vs --dml --hybrid, 6.33 s clip): all-DML
+        // warm = 974 ms, hybrid (decoder+joint on CPU) = 2111 ms — the per-frame GPU→CPU copy of encoder
+        // output costs far more than it saves, so all-DML stays the default. The knob remains for
+        // future hardware where the tradeoff flips.
+        _decoderJointBackend = decoderJointBackend ?? backend;
     }
 
     public bool IsModelInstalled => _model.IsInstalled;
@@ -318,10 +325,11 @@ public sealed class NemotronFp16Transcriber : ITranscriber, IStreamingTranscribe
             try
             {
                 // The DirectML-safe encoder (Split→Slice) runs on the requested backend (DirectML for GPU).
-                // decoder + joint are correct on DirectML as-is, so they share the backend.
+                // decoder + joint are correct on DirectML as-is and share the backend by default; a caller
+                // can pin them to CPU (hybrid) to skip per-symbol GPU dispatch in the greedy loop.
                 _encoder = _factory.Create(_model.Encoder, _backend);
-                _decoder = _factory.Create(_model.Decoder, _backend);
-                _joint = _factory.Create(_model.Joint, _backend);
+                _decoder = _factory.Create(_model.Decoder, _decoderJointBackend);
+                _joint = _factory.Create(_model.Joint, _decoderJointBackend);
                 _vocab = LoadVocab(_model.Vocab);
                 _loaded = true;
             }
