@@ -363,6 +363,8 @@ public partial class App : System.Windows.Application
         StartupMigration.MigrateTranscriptionDevice(Services.GetRequiredService<ISettingsStore>());
         // One-time display-name→locale-code language upgrade ("English"→"en-US"), before ApplyLanguage.
         StartupMigration.MigrateLanguageSetting(Services.GetRequiredService<ISettingsStore>());
+        // One-time Alt+Space→Ctrl+Shift+Space toggle rescue, before SetupHotkeys registers chords.
+        StartupMigration.MigrateToggleHotkey(Services.GetRequiredService<ISettingsStore>());
         // Route all logging into the user's chosen data folder (D5) via the single activity log (D4).
         var settingsForLog = Services.GetRequiredService<ISettingsStore>();
         JotLog.Initialize(() => JotPaths.DataDir(settingsForLog.Current));

@@ -136,6 +136,21 @@ public static class StartupMigration
         store.Save();
     }
 
+    /// <summary>One-time toggle-hotkey rescue: builds before 2026-07-23 DEFAULTED to Alt+Space, which
+    /// Windows owns (system menu / focus steal) — users who simply kept that default carry it in
+    /// settings.json forever. Move exactly "Alt+Space" to the current Ctrl+Shift+Space default once;
+    /// the marker keeps a later DELIBERATE re-pick of Alt+Space sticky. Any other custom chord is
+    /// untouched (it was a real choice).</summary>
+    public static void MigrateToggleHotkey(ISettingsStore store)
+    {
+        var s = store.Current;
+        if (s.ToggleHotkeyMigrated) return;
+        if (s.ToggleRecordingHotkey == "Alt+Space")
+            s.ToggleRecordingHotkey = "Ctrl+Shift+Space";
+        s.ToggleHotkeyMigrated = true;
+        store.Save();
+    }
+
     /// <summary>One-time language-setting upgrade: older builds stored display names ("English",
     /// "Norwegian"); the picker now keys on locale codes ("en-US", "nb-NO"). Normalize preserves each
     /// name's exact prompt slot; unknown values become en-US (same fallback the engine applies anyway).
