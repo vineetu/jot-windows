@@ -23,10 +23,20 @@ public static class LanguageCode
         ["Slovenian"] = "sl", ["Hebrew"] = "he", ["Norwegian"] = "nb",
     };
 
-    /// <summary>Base ISO code for a display name, or "" when unmapped / null / "None".</summary>
+    /// <summary>Base ISO code for a stored language value — legacy display name ("German") or locale
+    /// code ("de-DE"/"pt-BR" → "de"/"pt"). "auto" and anything unmapped return "" so the cleanup
+    /// orchestrator's byte-identity path kicks in (never guess a language for text surgery).</summary>
     public static string ToIso(string? displayName)
     {
         if (string.IsNullOrWhiteSpace(displayName)) return "";
-        return Map.TryGetValue(displayName.Trim(), out string? iso) ? iso : "";
+        string key = displayName.Trim();
+        if (Map.TryGetValue(key, out string? iso)) return iso;
+        // Locale-code form: base subtag before the '-'. Only 2-3 letter alpha subtags qualify — "auto",
+        // "None" and junk fall through to "".
+        int dash = key.IndexOf('-');
+        string baseTag = dash > 0 ? key[..dash] : key;
+        if (baseTag.Length is 2 or 3 && baseTag.All(char.IsAsciiLetter) && !key.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            return baseTag.ToLowerInvariant();
+        return "";
     }
 }

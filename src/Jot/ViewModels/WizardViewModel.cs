@@ -23,8 +23,8 @@ public sealed partial class WizardViewModel : ObservableObject
     private readonly ISettingsStore _store;
     private readonly ModelDownload _download;
 
-    public string[] Languages { get; } =
-        ["English", "Spanish", "French", "German", "Italian", "Portuguese", "Japanese"];
+    // Same grouped locale list as Settings (shared builder — the two pickers can never drift).
+    public System.Windows.Data.ListCollectionView LanguageOptions { get; } = LanguagePicker.BuildView();
     public ObservableCollection<AudioInputDevice> InputDevices { get; } = new();
 
     [ObservableProperty] private int _stepIndex;
@@ -39,7 +39,7 @@ public sealed partial class WizardViewModel : ObservableObject
         _store = store;
         _download = download;
         _download.Refresh();                       // reflect current on-disk state
-        _language = store.Current.Language;
+        _language = Jot.Transcription.Nemotron.NemotronLocales.Normalize(store.Current.Language);
         _dataDirectory = JotPaths.DataDir(store.Current);
         LoadDevices();
         // The primary button doubles as the download trigger + progress readout, so re-evaluate it as the

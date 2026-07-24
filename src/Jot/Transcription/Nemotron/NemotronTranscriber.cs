@@ -114,8 +114,18 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
         private float[] _g = [];
         private bool _primed;
         private int _fedChunks;
+        private readonly long _langId; // snapshot at open — a Settings change mid-utterance must not
+                                       // flip conditioning against a cache built under the old language
 
-        internal Session(NemotronTranscriber t) => _t = t;
+        internal Session(NemotronTranscriber t)
+        {
+            _t = t;
+            _langId = t._langId;
+        }
+
+        /// <summary>Dev-only (--langprobe): raw token ids INCLUDING the &lt;xx-YY&gt; language tag the
+        /// model emits, which the normal detok strips.</summary>
+        public IReadOnlyList<int> Tokens => _tokens;
 
         /// <summary>Feeds new 16 kHz mono samples; returns the transcript so far. Cheap to call often.</summary>
         public string Accept(float[] newSamples)
@@ -174,7 +184,7 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
                 Array.Copy(mel[src], 0, window, wf * MelFrontend.NMels, MelFrontend.NMels);
             }
 
-            (float[] enc, int encLen) = _t.RunEncoder(window, valid, _cacheChannel, _cacheTime, ref _cacheLen);
+            (float[] enc, int encLen) = _t.RunEncoder(window, valid, _langId, _cacheChannel, _cacheTime, ref _cacheLen);
             for (int ti = 0; ti < encLen; ti++)
             {
                 var frame = new float[Hidden];
@@ -193,14 +203,14 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
     // encoder: one cache-aware chunk (updates the caches in place)
 
     private (float[] enc, int encLen) RunEncoder(
-        float[] window, int validFrames, float[] cacheChannel, float[] cacheTime, ref long cacheLen)
+        float[] window, int validFrames, long sessionLangId, float[] cacheChannel, float[] cacheTime, ref long cacheLen)
     {
         var audioSignal = new DenseTensor<float>(window, [1, WindowFrames, MelFrontend.NMels]); // time-major
         var length = new DenseTensor<long>(new[] { (long)validFrames }, [1]);
         var chCache = new DenseTensor<float>(cacheChannel, [1, EncLayers, ChannelCache, Hidden]);
         var tCache = new DenseTensor<float>(cacheTime, [1, EncLayers, Hidden, TimeCache]);
         var chLen = new DenseTensor<long>(new[] { cacheLen }, [1]);
-        var langId = new DenseTensor<long>(new[] { _langId }, [1]);
+        var langId = new DenseTensor<long>(new[] { sessionLangId }, [1]); // the SESSION's language, not the live field
 
         var inputs = new List<NamedOnnxValue>
         {
@@ -265,6 +275,10 @@ public sealed class NemotronTranscriber : ITranscriber, IStreamingTranscriber, I
     }
 
     // detok
+
+    /// <summary>Dev-only (--langprobe): the raw vocab piece for a token id, including &lt;xx-YY&gt;
+    /// specials that <see cref="Detokenize"/> strips. Empty for out-of-range ids.</summary>
+    public string Piece(int id) => id >= 0 && id < _vocab.Length ? _vocab[id] : "";
 
     private string Detokenize(IReadOnlyList<int> tokens)
     {

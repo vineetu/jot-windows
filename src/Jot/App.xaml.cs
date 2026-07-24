@@ -167,11 +167,24 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // `--nemotest <wav> [--dml]` runs the real Nemotron engine on CPU or DirectML.
+        // `--nemotest <wav> [--dml] [--lang <code>]` runs the real Nemotron engine on CPU or DirectML,
+        // optionally conditioned on a locale code ("es-ES", "auto") or legacy name ("Spanish").
         int nemoArg = Array.IndexOf(e.Args, "--nemotest");
         if (nemoArg >= 0 && nemoArg + 1 < e.Args.Length)
         {
-            RunNemoTest(e.Args[nemoArg + 1], e.Args.Contains("--dml"));
+            int langArg = Array.IndexOf(e.Args, "--lang");
+            string? lang = langArg >= 0 && langArg + 1 < e.Args.Length ? e.Args[langArg + 1] : null;
+            RunNemoTest(e.Args[nemoArg + 1], e.Args.Contains("--dml"), lang);
+            Shutdown();
+            return;
+        }
+
+        // `--langprobe <wav>` transcribes the clip once per supported locale slot on the int4 engine and
+        // logs the raw <xx-YY> tag the model emits → %TEMP%\jot-langprobe.txt (slot-map ground truth).
+        int langProbeArg = Array.IndexOf(e.Args, "--langprobe");
+        if (langProbeArg >= 0 && langProbeArg + 1 < e.Args.Length)
+        {
+            RunLangProbe(e.Args[langProbeArg + 1]);
             Shutdown();
             return;
         }
@@ -339,6 +352,8 @@ public partial class App : System.Windows.Application
         // One-time "CPU"→"Auto" device upgrade — must run BEFORE the ITranscriber singleton is resolved
         // below, or the old default would pick the engine one last time.
         StartupMigration.MigrateTranscriptionDevice(Services.GetRequiredService<ISettingsStore>());
+        // One-time display-name→locale-code language upgrade ("English"→"en-US"), before ApplyLanguage.
+        StartupMigration.MigrateLanguageSetting(Services.GetRequiredService<ISettingsStore>());
         // Route all logging into the user's chosen data folder (D5) via the single activity log (D4).
         var settingsForLog = Services.GetRequiredService<ISettingsStore>();
         JotLog.Initialize(() => JotPaths.DataDir(settingsForLog.Current));
@@ -1230,7 +1245,7 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private static void RunNemoTest(string wavPath, bool useDml)
+    private static void RunNemoTest(string wavPath, bool useDml, string? langCode = null)
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-nemotest.txt");
         try
@@ -1246,6 +1261,11 @@ public partial class App : System.Windows.Application
             string fallback = "";
             factory.BackendFallback += m => fallback += m + " | ";
             using var transcriber = new Transcription.Nemotron.NemotronTranscriber(model, factory, backend);
+            if (langCode is not null)
+            {
+                Transcription.Nemotron.NemotronLocales.TryGetSlot(langCode, out long slot);
+                transcriber.SetLanguageId(slot);
+            }
             float[] samples = WavAudio.ReadMono16k(wavPath);
             var sw = System.Diagnostics.Stopwatch.StartNew();
             string text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
@@ -1428,6 +1448,45 @@ public partial class App : System.Windows.Application
         {
             System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
         }
+    }
+
+    private static void RunLangProbe(string wavPath)
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-langprobe.txt");
+        var sb = new System.Text.StringBuilder();
+        try
+        {
+            var model = new Transcription.Nemotron.NemotronModel();
+            if (!model.IsInstalled)
+            {
+                System.IO.File.WriteAllText(outPath, $"MODEL NOT INSTALLED at {model.Directory}\n");
+                return;
+            }
+            var factory = new Transcription.Onnx.OnnxSessionFactory();
+            using var t = new Transcription.Nemotron.NemotronTranscriber(
+                model, factory, Transcription.Onnx.ComputeBackend.Cpu);
+            // First ~3 s is plenty: the language tag is emitted at the start of the token stream.
+            float[] all = WavAudio.ReadMono16k(wavPath);
+            float[] samples = all.Length > 3 * WavAudio.SampleRate ? all[..(3 * WavAudio.SampleRate)] : all;
+
+            foreach (var locale in Transcription.Nemotron.NemotronLocales.All)
+            {
+                t.SetLanguageId(locale.Slot);         // sessions snapshot at open — one per locale
+                var session = t.OpenStream();
+                session.Accept(samples);
+                string text = session.Finish();
+                // The raw pieces include the <xx-YY> tag Detokenize strips — that's the ground truth.
+                string rawHead = string.Join(" ",
+                    session.Tokens.Take(4).Select(id => t.Piece(id)));
+                sb.AppendLine($"{locale.Code,-6} slot={locale.Slot,3}  raw=[{rawHead}]  text={text}");
+            }
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine("ERROR");
+            sb.AppendLine(ex.ToString());
+        }
+        System.IO.File.WriteAllText(outPath, sb.ToString());
     }
 
     private static void RunHeadlessInstallFp16(string? dir)

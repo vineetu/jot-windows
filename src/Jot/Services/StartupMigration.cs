@@ -136,6 +136,18 @@ public static class StartupMigration
         store.Save();
     }
 
+    /// <summary>One-time language-setting upgrade: older builds stored display names ("English",
+    /// "Norwegian"); the picker now keys on locale codes ("en-US", "nb-NO"). Normalize preserves each
+    /// name's exact prompt slot; unknown values become en-US (same fallback the engine applies anyway).
+    /// Idempotent — normalizing a code is a no-op, so no marker is needed.</summary>
+    public static void MigrateLanguageSetting(ISettingsStore store)
+    {
+        string normalized = Transcription.Nemotron.NemotronLocales.Normalize(store.Current.Language);
+        if (normalized == store.Current.Language) return;
+        store.Current.Language = normalized;
+        store.Save();
+    }
+
     private static bool HasData(string dir) =>
         Directory.Exists(Path.Combine(dir, "models")) || File.Exists(Path.Combine(dir, "library.json"));
 

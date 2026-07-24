@@ -35,9 +35,21 @@
                           ItemsSource="{Binding InputDevices}"
                           SelectedItem="{Binding SelectedDevice, Mode=TwoWay}" />
             </ctl:SettingRow>
-            <ctl:SettingRow Title="Language" Description="The spoken language Jot transcribes. English is the most accurate; other languages vary.">
-                <ComboBox MinWidth="150" ItemsSource="{Binding Languages}"
-                          SelectedItem="{Binding Language, Mode=TwoWay}" />
+            <ctl:SettingRow Title="Language" Description="The spoken language Jot transcribes. Auto detect works, but picking your language is more accurate.">
+                <ComboBox MinWidth="230" ItemsSource="{Binding LanguageOptions}"
+                          DisplayMemberPath="Label" SelectedValuePath="Code"
+                          SelectedValue="{Binding Language, Mode=TwoWay}">
+                    <ComboBox.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Opacity="0.55"
+                                               Margin="10,6,0,2" />
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ComboBox.GroupStyle>
+                </ComboBox>
             </ctl:SettingRow>
             <!-- AI: bring-your-own provider for optional rewrite, shown in the basic section;
                  only the model/base-URL overrides stay advanced. -->

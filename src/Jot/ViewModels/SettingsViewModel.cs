@@ -38,15 +38,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private const string RunValue = "Jot";
 
     public Array ThemeModes { get; } = Enum.GetValues(typeof(AppThemeMode));
-    // Languages supported by the Nemotron 3.5 multilingual engine. English is the default and most accurate.
-    public string[] Languages { get; } =
-    [
-        "English", "Arabic", "Bulgarian", "Chinese", "Croatian", "Czech", "Danish", "Dutch",
-        "Estonian", "Finnish", "French", "German", "Greek", "Hebrew", "Hindi", "Hungarian",
-        "Italian", "Japanese", "Korean", "Latvian", "Lithuanian", "Norwegian", "Polish",
-        "Portuguese", "Romanian", "Russian", "Slovak", "Slovenian", "Spanish", "Swedish",
-        "Turkish", "Ukrainian", "Vietnamese",
-    ];
+    // All 40 model-card locales + Auto detect, grouped by quality tier (shared builder with the wizard).
+    public System.Windows.Data.ListCollectionView LanguageOptions { get; } = LanguagePicker.BuildView();
     // Provider list is build-flavor dependent: public/Store gets bring-your-own cloud, Sony gets only PFB.
     public string[] Providers { get; } = BuildFlavor.AiProviders;
 
@@ -238,7 +231,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _retention = DaysToLabel(S.RetentionDays);
         _dataDirectory = JotPaths.DataDir(S);
         _returnToOrigin = S.ReturnToOrigin;
-        _language = S.Language;
+        _language = NemotronLocales.Normalize(S.Language); // legacy names → codes so the picker matches
         _transcriptionDevice = S.TranscriptionDevice;
         _liveCaptions = S.LiveCaptions;
         _offlineCleanupEnabled = S.OfflineCleanupEnabled;
@@ -268,14 +261,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         RefreshAiModels();
     }
 
-    /// <summary>Applies the stored language to the engine. Called at startup and on change.</summary>
+    /// <summary>Applies the stored language (locale code, or a legacy display name) to the engine.
+    /// Called at startup and on change; takes effect on the NEXT dictation (sessions snapshot it).</summary>
     public static void ApplyLanguage(ITranscriber transcriber, string language)
     {
-        long id = NemotronLanguages.TryGetId(language, out long lid) ? lid : 0;
+        NemotronLocales.TryGetSlot(language, out long slot); // unknown → en-US, never a wrong guess
         if (transcriber is NemotronTranscriber n)
-            n.SetLanguageId(id);
+            n.SetLanguageId(slot);
         else if (transcriber is NemotronFp16Transcriber f)
-            f.SetLanguageSlot(id);   // English = 0 in both maps
+            f.SetLanguageSlot(slot);   // same slot space in both exports (languages.json)
     }
 
     private void LoadDevices()

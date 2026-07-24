@@ -50,8 +50,20 @@
             <!-- 3 Language -->
             <StackPanel VerticalAlignment="Center"
                         Visibility="{Binding StepIndex, Converter={StaticResource IndexToVis}, ConverterParameter=3}">
-                <ComboBox Width="220" HorizontalAlignment="Left" ItemsSource="{Binding Languages}"
-                          SelectedItem="{Binding Language, Mode=TwoWay}" />
+                <ComboBox Width="260" HorizontalAlignment="Left" ItemsSource="{Binding LanguageOptions}"
+                          DisplayMemberPath="Label" SelectedValuePath="Code"
+                          SelectedValue="{Binding Language, Mode=TwoWay}">
+                    <ComboBox.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Opacity="0.55"
+                                               Margin="10,6,0,2" />
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ComboBox.GroupStyle>
+                </ComboBox>
                 <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                     <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}"
                                    Visibility="{Binding Download.IsInstalled, Converter={StaticResource BoolToVis}}" />
