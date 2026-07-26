@@ -35,8 +35,8 @@ public interface ITextVocabularySpotter
 /// <see cref="VocabularyGate.PlausibilityCeiling"/> (0.45) from the term, and this accepts at roughly
 /// 0.20-0.25, so the acoustic spotter's entire marginal APPLY value is the band between the two.
 /// MEASURED on 1041 FLEURS clips: of 214 chances the engine missed, 101 sit at or under 0.30 (this
-/// path's home), 51 in the 0.30-0.45 band (the spotter's, 30 vs 7 recoveries) and 61 beyond 0.45,
-/// where the spotter still HEARS 34 of them and the gate applies exactly none. See
+/// path's home, and this path wins it 72-65), 51 in the 0.30-0.45 band (the spotter's, 30 vs 7) and
+/// 61 beyond 0.45, where the spotter still HEARS 35 of them and the gate applies exactly none. See
 /// <c>docs/plans/vocabulary-corrector-vs-spotter.md</c>.
 /// </summary>
 public sealed class VocabularyCorrector : ITextVocabularySpotter

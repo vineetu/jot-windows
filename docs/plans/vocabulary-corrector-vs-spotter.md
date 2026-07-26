@@ -21,8 +21,8 @@ corrector's, and they live in different places.** On 1041 clips of real human sp
 |---|---|---|
 | baseline (no vocabulary) | 0 % | 0 |
 | **model-free corrector** | **36.9 %** | 0.93 |
-| **CTC spotter** (132 MB, English) | **43.9 %** | 0.67 |
-| both | 50.0 % | 1.24 |
+| **CTC spotter** (132 MB, English) | **44.4 %** | 0.71 |
+| both | 49.5 % | 1.24 |
 
 *(155-term stress list. On a realistic 25-term list: corrector 34.1 % / 0.27, spotter 42.4 % / 0.00,
 both 48.2 % / 0.27.)*
@@ -36,9 +36,15 @@ in the 20 gate languages that will never have a spotter, at 0.27 false applies p
 zero bytes.** Today those languages recover 0 %. That is what shipped.
 
 **And the single most useful number in the whole experiment is neither of the above:** 61 of 214
-missed terms (29 %) sit further than 0.45 from anything the engine wrote. The spotter *hears* 34 of
+missed terms (29 %) sit further than 0.45 from anything the engine wrote. The spotter *hears* 35 of
 them. The gate applies **zero**. No checkpoint, in any language, changes that — it is our own
 plausibility ceiling, and it is now the largest identified pool of unrecovered value.
+
+> **Which spotter build.** The headline table is the spotter *after* commit `904b4df` (the casing
+> variants fix). It was re-run for exactly that reason. The fix is worth **+0.5 points** here
+> (43.9 → 44.4 %) despite being worth 32 points of raw DP recall on Title-Case terms, because the
+> extra detections it unlocks land mostly in the far band the gate refuses anyway — which is the
+> best available independent evidence that the ceiling, not detection, is now the binding constraint.
 
 ---
 
@@ -126,8 +132,8 @@ arm          WER%  opportunities  recovered  recall%   spottable-recall%   appli
 ### all-155 terms (150 spottable by the CTC checkpoint's BPE)
 baseline    10.44            214          0     0.0                0.0         0     0          0             0        0.00
 corrector   10.08            214         79    36.9               36.9       104    83         21             0        0.93
-spotter     10.03            214         94    43.9               46.3       116   101         13             2        0.67
-both         9.98            214        107    50.0               50.7       142   114         26             2        1.24
+spotter     10.03            214         95    44.4               46.8       118   102         14             2        0.71
+both         9.98            214        106    49.5               50.2       141   113         26             2        1.24
 
 ### focused-25 terms (24 spottable)
 baseline    10.44             85          0     0.0                0.0         0     0          0             0        0.00
@@ -157,22 +163,26 @@ window of the baseline transcript to the term — i.e. how far off the engine ac
 
 | band | opportunities | corrector detects | spotter detects | **corrector recovers** | **spotter recovers** | both recovers |
 |---|---|---|---|---|---|---|
-| **A** ≤ 0.20 | 66 | 63 | 59 | **47** | 42 | 47 |
+| **A** ≤ 0.20 | 66 | 63 | 61 | **47** | 43 | 46 |
 | **B** 0.20–0.30 | 35 | 30 | 27 | **25** | 22 | 29 |
 | **C** 0.30–0.45 | 51 | 8 | 37 | 7 | **30** | 31 |
-| **D** > 0.45 | 61 | 0 | 34 | **0** | **0** | 0 |
+| **D** > 0.45 | 61 | 0 | 35 | **0** | **0** | 0 |
 | — no anchor | 1 | 0 | — | 0 | 0 | 0 |
 
 Read it in three lines:
 
-* **Near band (A+B, 101 chances): the corrector wins**, 72 recoveries to the spotter's 64. A textual
+* **Near band (A+B, 101 chances): the corrector wins**, 72 recoveries to the spotter's 65. A textual
   rule is simply better than acoustics at `Sandarbans` → `Sundarbans` and `Upsala` → `Uppsala`.
 * **Mid band (C, 51 chances): this is the spotter's entire marginal value**, 30 recoveries to 7. This
   is `Gowry` → `Gourley`, `Jucklin` → `Jelinek`, `Toky Net` → `TogiNet` — too far for a textual
   threshold that is safe, close enough for the gate to allow once acoustics vouch for it.
-* **Far band (D, 61 chances — 29 % of everything): dead for both.** The spotter hears 34 of them; the
+* **Far band (D, 61 chances — 29 % of everything): dead for both.** The spotter hears 35 of them; the
   gate's 0.45 plausibility ceiling refuses every one, so they surface only as `spot-unplaced` log
   lines. `Sun Darwins` → `Sundarbans`, `Lylone` → `Slalom`, `Jo Spisa` → `Geospiza`.
+
+Note the "both" arm is 1 recovery *below* the sum implies, and A is where it loses: acoustic-wins-per-
+term means an extra acoustic detection can displace a textual one that the gate would have placed
+better. Merging two detection sources is not free even when both are right.
 
 The far band is the finding worth carrying forward. **It is larger than the spotter's entire marginal
 band, it is already being detected, and unlocking it costs no model at all** — it needs the ceiling to
@@ -198,8 +208,8 @@ price, which is the cleanest possible statement of what the acoustic model actua
 
 | | corrector | spotter |
 |---|---|---|
-| Latency, 155 terms | **p50 0.49 ms**, p95 0.80, max 11.4 | **p50 454 ms**, p95 605, max 1115 |
-| Latency, 25 terms | **p50 0.07 ms**, p95 0.10 | (unchanged — dominated by the encoder) |
+| Latency, 155 terms | **p50 0.50 ms**, p95 0.78, max 11.1 | **p50 415 ms**, p95 510, max 719 |
+| Latency, 25 terms | **p50 0.06 ms**, p95 0.10 | (unchanged — dominated by the encoder) |
 | Memory | none beyond the transcript | +283 MB CPU / +116 MB DirectML working set |
 | Disk | 0 | 131.7 MB, downloaded on enable |
 | Languages reachable | **21** (every common-word list) | 2 today, ≤ 16 of 40 ever |
@@ -220,7 +230,8 @@ Neither was hypothesised; both fell out of reading the false applies.
    `Falkland's` → `Falkland`). Fixed by a fourth WINDOWS-DIVERGENCE guard in `ApplyFromDetections`
    that blocks — leaving a reviewable row — when the span carries an apostrophe the term and its
    aliases do not. One-directional: a term that *has* an apostrophe still corrects a span that lost
-   it. This moved the shipping spotter from 0.89 to **0.67** false applies per 1000 words.
+   it. This moved the shipping spotter from 0.89 to **0.67** false applies per 1000 words (measured
+   on the pre-`904b4df` spotter build; the post-casing-fix build sits at 0.71 with the guard in).
    Cover: `tests/Jot.Tests/Vocabulary/DetectionPathInflectionTests.cs`.
 
 2. **The corrector let a wider window eat an adjacent token.** `George W` won the two-word slot for

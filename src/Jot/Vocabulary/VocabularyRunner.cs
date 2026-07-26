@@ -171,7 +171,8 @@ public sealed class VocabularyRunner
     /// the textual path recovers 34–37 % of the terms the engine got wrong at 0.27 false applies per
     /// 1000 words on a realistic 25-term list. That is the whole feature for 20 languages where the
     /// alternative is nothing at all. It is deliberately NOT stacked on top of the spotter in English —
-    /// there it bought +5.8 points of recall for +6 false applies, and precision wins that trade.
+    /// there it bought +5.8 points of recall for +6 false applies (against the spotter's ZERO), and
+    /// precision wins that trade.
     /// </summary>
     public static VocabularyMode ModeFor(string? language)
     {
