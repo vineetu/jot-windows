@@ -404,6 +404,10 @@ public static class VocabularyGate
     /// Regression cover: <c>Jot.Tests/Vocabulary/DetectionPathDedupTests.cs</c>. It is the only thing
     /// that will notice if these guards are deleted.
     /// </summary>
+    /// <param name="inflectionGuard">SHIPPING VALUE IS TRUE and no product code passes anything else.
+    /// It exists so E7's harness can score the guard's own counterfactual arm — the same transcripts,
+    /// the same corpus, the same process — instead of comparing against a number from a previous run
+    /// of a previous build. Same reason <see cref="VocabularyCorrector"/> exposes its distance.</param>
     public static Result ApplyFromDetections(
         string originalTranscript,
         IReadOnlyList<Detection> detections,
@@ -411,7 +415,8 @@ public static class VocabularyGate
         ICommonWordsProvider commonWords,
         string? commonWordsResource = "common-words",
         IReadOnlyList<OverrideEntry>? overrides = null,
-        IDiagnosticsSink? diagnostics = null)
+        IDiagnosticsSink? diagnostics = null,
+        bool inflectionGuard = true)
     {
         diagnostics ??= NoopDiagnosticsSink.Instance;
         overrides ??= [];
@@ -615,6 +620,24 @@ public static class VocabularyGate
                     new Dictionary<string, string> { ["reason"] = "span carries an apostrophe the term has not" });
             }
 
+            // ── WINDOWS DIVERGENCE (defect 5 — `пирамид` → `Пирамида`). The SUFFIX shape of defect 4,
+            // and the reason it needed its own guard: the apostrophe above is the one inflection our
+            // skeleton happens to erase, and outside English the endings are letters.
+            //
+            // MEASURED on 9500 more FLEURS clips in 19 languages (E6): the corrector's worst failure
+            // class is a correctly-transcribed inflected form flattened into a term's citation form,
+            // and the brake cannot see it because the brake is a TYPE lookup over a 24 000-entry list
+            // that lists the lemma and not the form. See IsInflectionOfCommonWord for the two
+            // conditions and for the class it deliberately does NOT reach.
+            bool inflectedCommon = inflectionGuard &&
+                IsInflectionOfCommonWord(originalWord, det.Term, commonWordSet);
+            if (inflectedCommon)
+            {
+                diagnostics.Record(DiagnosticsCategory.VocabularyGate,
+                    $"inflected-common {originalWord} → {det.Term}",
+                    new Dictionary<string, string> { ["reason"] = "span is an inflected form of an everyday word" });
+            }
+
             // Identity no-op: the spotter fires on the audio whether or not the decoder already wrote
             // the term correctly. Skip so we never emit a spurious "Vikram → Vikram".
             //
@@ -656,7 +679,7 @@ public static class VocabularyGate
                 overrides, det.Aliases, commonWordSet);
             // A span whose identity is unsafe is force-blocked and is never a live-ask candidate —
             // the same treatment Apply gives an alignment-blocked proposal.
-            if ((alignmentBlocked || dedupAmbiguous || inflectionAmbiguous) && d.Pass)
+            if ((alignmentBlocked || dedupAmbiguous || inflectionAmbiguous || inflectedCommon) && d.Pass)
                 d = d with { Pass = false, Label = "BLOCK", AskCandidate = false };
 
             diagnostics.Record(DiagnosticsCategory.VocabularyGate,
@@ -1136,6 +1159,68 @@ public static class VocabularyGate
     /// </summary>
     public static bool IsCommonSpan(string span, IReadOnlySet<string> commonWords) =>
         SplitWords(Normalize(span)).Any(w => commonWords.Contains(CorrectionKey.Lowercased(w)));
+
+    /// <summary>Shortest shared stem that counts as "the same word, differently ended". Below four
+    /// scalars a shared head is a coincidence, not a paradigm.</summary>
+    public const int InflectionMinStem = 4;
+
+    /// <summary>Longest divergent tail on EITHER side. Past three the two words are not one word
+    /// with two endings, they are two words — and blocking those is where the recall goes.</summary>
+    public const int InflectionMaxTail = 3;
+
+    /// <summary>
+    /// THE INFLECTION GUARD (E7). Is this span an inflected form of an EVERYDAY word that the term
+    /// differs from only in its ending — i.e. ordinary language the engine got right, not a
+    /// mis-hearing of the user's term?
+    ///
+    /// Two conditions, and the conjunction is the whole design. MEASURED on E6's 1207 applied
+    /// corrections across 20 languages, where each half alone is a bad trade and together they are
+    /// not:
+    ///
+    ///  1. STRUCTURAL — span and term share a stem of <see cref="InflectionMinStem"/>+ scalars and
+    ///     diverge only in a tail of at most <see cref="InflectionMaxTail"/> on either side. Necessary
+    ///     and nowhere near sufficient: every one of E6's 29 measured overwrites has this shape, and
+    ///     so do 266 correct corrections. Alone it selects a population 22 % false against a 17 % base
+    ///     rate — a recall cut wearing a safety hat.
+    ///  2. LEXICAL — the span is an everyday word minus its final character
+    ///     (<see cref="CommonWordStems"/>). This is the half that discriminates, and it is the direct
+    ///     repair of what E6 diagnosed: the brake is a TYPE lookup, so `пирамид` walks past it while
+    ///     `пирамиды` is right there in the list.
+    ///
+    /// Together, on E6's corpus: 21 rows, 17 of them false applies — 70 % against a 17 % base rate,
+    /// a 4x lift — and INERT on E5's English corpus, which it neither helps nor harms.
+    ///
+    /// WHAT IT DELIBERATELY DOES NOT REACH, so nobody re-derives it hopefully later: a span that is a
+    /// PROPER NOUN in another case — `Аризона` against the term `Аризоны`, `Fatima` against `Fatimě`,
+    /// `Версали` against `Версаче` — is absent from the frequency list at any truncation, so condition
+    /// 2 is false and the guard stays out of the way. That is the answer, not an omission.
+    /// Structurally those rows are indistinguishable from `Аризоне` → `Аризоны`, which is CORRECT and
+    /// was measured in the same corpus from the same term; no threshold separates them, and a guard
+    /// that fired on the shape alone deletes more real corrections than corruptions (measured: 30
+    /// correct for 33 false). Only a lexicon of inflected proper nouns would close that, and we ship
+    /// none.
+    ///
+    /// Single-word span and single-word term only: a multi-word term never reaches the brake anyway
+    /// (Decide step 2), and every overwrite E6 measured is one word against one word.
+    /// </summary>
+    public static bool IsInflectionOfCommonWord(string span, string term, IReadOnlySet<string> commonWords)
+    {
+        if (span.AsSpan().ContainsAny(' ', '\t', '\n') || term.Contains(' ')) return false;
+
+        Rune[] heard = Skeleton(span);
+        Rune[] wanted = Skeleton(term);
+        if (heard.Length == 0 || wanted.Length == 0) return false;
+
+        int stem = 0;
+        while (stem < heard.Length && stem < wanted.Length && heard[stem] == wanted[stem]) stem++;
+        if (stem < InflectionMinStem) return false;
+        if (heard.Length - stem > InflectionMaxTail || wanted.Length - stem > InflectionMaxTail) return false;
+        // Same skeleton = a casing/punctuation difference, not an inflection; the identity no-op and
+        // the apostrophe guard already own that row and they say different things about it.
+        if (heard.Length == wanted.Length && stem == heard.Length) return false;
+
+        return CommonWordStems.IsEverydayWordMinusItsEnding(commonWords, heard);
+    }
 
     // MARK: - Plausibility
 

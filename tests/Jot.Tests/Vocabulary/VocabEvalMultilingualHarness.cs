@@ -275,9 +275,9 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
     private sealed class Tally
     {
         public int RefWords, Errors, Opportunities, Recovered, Tp, FpAbsent, FpOver;
-        public int Blocked, BrakeStopped, CeilingStopped, OtherStopped;
-        public int BrakeStoppedBad, CeilingStoppedBad, OtherStoppedBad;
-        public int BrakeStoppedGood, Unplaced;
+        public int Blocked, BrakeStopped, CeilingStopped, OtherStopped, GuardStopped;
+        public int BrakeStoppedBad, CeilingStoppedBad, OtherStoppedBad, GuardStoppedBad;
+        public int BrakeStoppedGood, GuardStoppedGood, Unplaced;
 
         public int Applied => Tp + FpAbsent + FpOver;
         public int FalseApplies => FpAbsent + FpOver;
@@ -297,7 +297,7 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
     /// </summary>
     private static Tally Score(
         List<Hypothesis> hyps, string[] termTexts, string? resource, double cap, bool brake,
-        StringBuilder? rows = null, string label = "")
+        StringBuilder? rows = null, string label = "", bool guard = true)
     {
         List<VocabularyTerm> terms = [.. termTexts.Select(t => new VocabularyTerm { Text = t })];
         var corrector = new VocabularyCorrector();
@@ -316,7 +316,7 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
             IReadOnlyList<VocabularyGate.Detection> dets =
                 corrector.Spot(h.Text, terms, h.Seconds, cap);
             VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
-                h.Text, dets, h.Seconds, provider, brake ? resource : null);
+                h.Text, dets, h.Seconds, provider, brake ? resource : null, inflectionGuard: guard);
 
             string[] outWords = VocabEvalScoring.Words(r.Text);
             tally.RefWords += refWords.Length;
@@ -351,6 +351,9 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
                 string reason =
                     VocabularyGate.Gap(p.OriginalWord, p.Term, al) > VocabularyGate.PlausibilityCeiling ? "ceiling"
                     : VocabularyGate.IsCommonSpan(p.OriginalWord, commonSet) ? "brake"
+                    // E7's guard is charged only what the brake did NOT already stop — it is an
+                    // EXTENSION of the brake, and double-counting the overlap would overstate it.
+                    : guard && VocabularyGate.IsInflectionOfCommonWord(p.OriginalWord, p.Term, commonSet) ? "guard"
                     : "other";
                 tally.Blocked++;
                 bool bad = verdict != "TP";
@@ -360,6 +363,10 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
                     case "brake":
                         tally.BrakeStopped++;
                         if (bad) tally.BrakeStoppedBad++; else tally.BrakeStoppedGood++;
+                        break;
+                    case "guard":
+                        tally.GuardStopped++;
+                        if (bad) tally.GuardStoppedBad++; else tally.GuardStoppedGood++;
                         break;
                     default: tally.OtherStopped++; if (bad) tally.OtherStoppedBad++; break;
                 }
@@ -453,7 +460,12 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
             "advRecall\tadvApplied\tadvFp\tadvFp1k\tadvBrakeSaves1k\tadvBrakeOffFp1k\tadvFpOver\tfpOver\t" +
             "advGap\tbaseWer\tadvWer\n");
         var sweep = new StringBuilder(
-            "lang\tcap\trecall\tapplied\tfp\tfp1k\tadvRecall\tadvApplied\tadvFp\tadvFp1k\n");
+            "lang\tcap\tguard\trecall\tapplied\tfp\tfp1k\tadvRecall\tadvApplied\tadvFp\tadvFp1k\n");
+        // E7's before/after, one row per language per arm, produced in the SAME process from the SAME
+        // transcripts as the "after" — the only comparison that is not a build-to-build one.
+        var e7 = new StringBuilder(
+            "lang\tarm\trecallOff\trecallOn\toppOff\tfpOff\tfpOn\tfp1kOff\tfp1kOn\tfpOverOff\tfpOverOn\t" +
+            "guardBlocks\tguardBad\tguardGood\n");
         var rows = new StringBuilder("lang\tarm\toutcome\tverdict\toriginal\tterm\n");
 
         foreach (Lang lang in new[] { English }.Concat(Languages))
@@ -498,19 +510,49 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
             Tally adv = Score(hyps, adversarial, resource, VocabularyLimits.NoLimit, brake: true,
                               rows, $"{lang.Iso}-adversarial");
             Tally advNoBrake = Score(hyps, adversarial, resource, VocabularyLimits.NoLimit, brake: false);
+
+            // E7 counterfactual: the guard OFF, everything else identical.
+            // Rows for BOTH arms: "what the guard blocked" is only readable next to "what would have
+            // happened without it", and one of those two is not re-derivable from the other.
+            Tally shippedNoGuard = Score(hyps, focused, resource, VocabularyLimits.NoLimit, brake: true,
+                                         rows, $"{lang.Iso}-focused-noguard", guard: false);
+            Tally advNoGuard = Score(hyps, adversarial, resource, VocabularyLimits.NoLimit, brake: true,
+                                     rows, $"{lang.Iso}-adversarial-noguard", guard: false);
+            foreach ((string arm, Tally off, Tally on) in new[]
+            {
+                ("realistic", shippedNoGuard, shipped),
+                ("adversarial", advNoGuard, adv),
+            })
+            {
+                e7.AppendLine(string.Join('\t', lang.Iso, arm,
+                    off.Recall.ToString("F1", CultureInfo.InvariantCulture),
+                    on.Recall.ToString("F1", CultureInfo.InvariantCulture),
+                    on.Opportunities, off.FalseApplies, on.FalseApplies,
+                    off.Fp1k.ToString("F2", CultureInfo.InvariantCulture),
+                    on.Fp1k.ToString("F2", CultureInfo.InvariantCulture),
+                    off.FpOver, on.FpOver,
+                    on.GuardStopped, on.GuardStoppedBad, on.GuardStoppedGood));
+            }
             (double token, double type, int types) = Coverage(hyps.Select(h => h.Reference), common);
             double meanLen = focused.Length == 0 ? 0 : focused.Average(t => t.Length);
             double advLen = adversarial.Length == 0 ? 0 : adversarial.Average(t => t.Length);
 
             foreach (double cap in Caps)
             {
-                Tally t = Score(hyps, focused, resource, cap, brake: true);
-                Tally a = Score(hyps, adversarial, resource, cap, brake: true);
-                sweep.AppendLine(string.Join('\t', lang.Iso, cap.ToString("F2", CultureInfo.InvariantCulture),
-                    t.Recall.ToString("F1", CultureInfo.InvariantCulture), t.Applied, t.FalseApplies,
-                    t.Fp1k.ToString("F2", CultureInfo.InvariantCulture),
-                    a.Recall.ToString("F1", CultureInfo.InvariantCulture), a.Applied, a.FalseApplies,
-                    a.Fp1k.ToString("F2", CultureInfo.InvariantCulture)));
+                // Both guard arms, because E6 chose six languages' acceptance distances from a sweep
+                // the guard did not exist for — whether any of them can be loosened again is read off
+                // the pair, not asserted.
+                foreach (bool g in new[] { false, true })
+                {
+                    Tally t = Score(hyps, focused, resource, cap, brake: true, guard: g);
+                    Tally a = Score(hyps, adversarial, resource, cap, brake: true, guard: g);
+                    sweep.AppendLine(string.Join('\t', lang.Iso, cap.ToString("F2", CultureInfo.InvariantCulture),
+                        g ? "on" : "off",
+                        t.Recall.ToString("F1", CultureInfo.InvariantCulture), t.Applied, t.FalseApplies,
+                        t.Fp1k.ToString("F2", CultureInfo.InvariantCulture),
+                        a.Recall.ToString("F1", CultureInfo.InvariantCulture), a.Applied, a.FalseApplies,
+                        a.Fp1k.ToString("F2", CultureInfo.InvariantCulture)));
+                }
             }
 
             summary.AppendLine(string.Join('\t', lang.Iso, hyps.Count, shipped.RefWords,
@@ -546,7 +588,14 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
                           $"({shipped.BrakeSaves1k:F2}/1k by direct attribution)");
             sb.AppendLine($"  blocks           ceiling {shipped.CeilingStopped} (bad {shipped.CeilingStoppedBad})  " +
                           $"brake {shipped.BrakeStopped} (bad {shipped.BrakeStoppedBad}, cost-good {shipped.BrakeStoppedGood})  " +
+                          $"guard {shipped.GuardStopped} (bad {shipped.GuardStoppedBad}, cost-good {shipped.GuardStoppedGood})  " +
                           $"other {shipped.OtherStopped}  unplaced {shipped.Unplaced}");
+            sb.AppendLine($"  E7 guard off→on  realistic recall {shippedNoGuard.Recall:F1} → {shipped.Recall:F1} %  " +
+                          $"FP/1k {shippedNoGuard.Fp1k:F2} → {shipped.Fp1k:F2}  " +
+                          $"(overwrote {shippedNoGuard.FpOver} → {shipped.FpOver})   |   " +
+                          $"adversarial recall {advNoGuard.Recall:F1} → {adv.Recall:F1} %  " +
+                          $"FP/1k {advNoGuard.Fp1k:F2} → {adv.Fp1k:F2}  " +
+                          $"(overwrote {advNoGuard.FpOver} → {adv.FpOver})");
             sb.AppendLine($"  all-{all.Length,-5}       opp {stress.Opportunities}  recall {stress.Recall:F1} %  " +
                           $"FP/1k {stress.Fp1k:F2}   brake off {stressNoBrake.Fp1k:F2}");
             sb.AppendLine($"  adversarial-25   mean len {advLen:F1}  mean gap {advGap:F3}  opp {adv.Opportunities}  recall {adv.Recall:F1} %  " +
@@ -564,6 +613,8 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
         File.WriteAllText(Path.Combine(Out, "ml-summary.tsv"), summary.ToString());
         File.WriteAllText(Path.Combine(Out, "ml-sweep.tsv"), sweep.ToString());
         File.WriteAllText(Path.Combine(Out, "ml-rows.tsv"), rows.ToString());
+        File.WriteAllText(Path.Combine(Out, "ml-e7-guard.tsv"), e7.ToString());
+        output.WriteLine(e7.ToString());
         output.WriteLine(sb.ToString());
         output.WriteLine(summary.ToString());
         output.WriteLine(sweep.ToString());
