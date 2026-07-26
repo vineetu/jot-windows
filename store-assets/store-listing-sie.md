@@ -30,6 +30,10 @@ sign-in they won't have).
 >    Your words are typed at the cursor.
 >
 > Notes:
+> • Custom vocabulary (new, experimental) needs NO reviewer action. It is OFF by default and plays
+>   no part in the dictation test above. If enabled it asks before downloading a small extra
+>   on-device model (~126 MB) from our own GitHub release; declining leaves dictation fully
+>   working. It needs no AI service and no sign-in, and is English-only.
 > • Microphone access is required; Windows prompts on first use — please Allow.
 > • The download resumes/retries automatically and the app never crashes on network failure.
 > • The optional "Rewrite with…" feature is OFF by default and requires signing in to the
@@ -67,6 +71,16 @@ WHY JOT
 • Instant — GPU-accelerated (DirectML) with a CPU fallback that's still real-time.
 • A live caption pill shows a waveform and your words as you speak.
 
+YOUR OWN WORDS (EXPERIMENTAL)
+• Teach Jot the names, products and jargon it keeps getting wrong. Add a term, and Jot listens
+  for it in your speech and fixes the spelling as you dictate.
+• Fix a word once and teach it at the same time: select the wrong word in a transcript,
+  right-click, and add it to your vocabulary.
+• Fully on-device — it uses a small extra model, downloaded once (about 126 MB) when you turn
+  the feature on. It needs no AI service and no sign-in.
+• Careful by design: Jot will not overwrite an everyday word it already got right.
+• Experimental, and works when you dictate in English. Other languages are unaffected.
+
 MORE
 • Transcribe existing audio or video files — just drop them in.
 • Searchable history of everything you've dictated, kept locally.
@@ -84,6 +98,7 @@ GPU-accelerated (DirectML) with a real-time CPU fallback
 Live caption pill with waveform while you speak
 Transcribe your own audio and video files
 Local, searchable dictation history
+Custom vocabulary: teach Jot your names, products and jargon (experimental, English)
 
 ## Search terms / keywords (up to 7, not shown to users)
 dictation, speech to text, voice typing, transcription, offline stt, voice to text, private
@@ -108,7 +123,9 @@ your device. Audio is processed locally and is never uploaded, streamed, or stor
 - Jot itself collects NO personal data and includes NO telemetry or analytics.
 - Audio and transcripts stay on the device (local files only).
 - Network usage is limited to: (1) a one-time speech-model download on first run; (2) an optional
-  media-decoder (FFmpeg) download only if you import audio/video files; (3) the OPTIONAL rewrite
+  media-decoder (FFmpeg) download only if you import audio/video files; (2b) an optional
+  vocabulary-model download (~126 MB), ONLY if you enable custom vocabulary — it is a model
+  download only, no data is sent; (3) the OPTIONAL rewrite
   feature — ONLY if you enable it and sign in — sends the transcript text you choose to rewrite to
   your organization's approved AI service, under that organization's terms.
 - Answer the questionnaire as: does NOT collect data. (The optional rewrite path shares text with

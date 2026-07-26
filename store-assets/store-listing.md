@@ -28,6 +28,10 @@ past. Microsoft explicitly asks for "any steps required to access hidden or lock
 >    then press it again to stop. Your words are typed at the cursor.
 >
 > Notes:
+> • **Custom vocabulary (new, experimental) needs NO reviewer action.** It is OFF by default and
+>   plays no part in the dictation test above. If you do switch it on, Jot asks before downloading
+>   a small extra on-device model (~126 MB) from our own GitHub release; declining leaves dictation
+>   fully working. It is English-only and the app states this on the setting itself.
 > • Microphone access is required; Windows prompts on first use — please Allow.
 > • The download resumes/retries automatically if interrupted, and the app never crashes on a network
 >   failure — it shows a clear message and can be retried.
@@ -88,6 +92,16 @@ REWRITE & TRANSFORM (OPTIONAL)
   on-device, or add your own OpenAI, Anthropic, or Google Gemini API key. Core dictation
   never needs any of this.
 
+YOUR OWN WORDS (EXPERIMENTAL)
+• Teach Jot the names, products and jargon it keeps getting wrong. Add a term, and Jot
+  listens for it in your speech and fixes the spelling as you dictate.
+• Fix a word once and teach it at the same time: select the wrong word in a transcript,
+  right-click, and add it to your vocabulary.
+• It runs entirely on your PC too — it uses a small extra on-device model, downloaded once
+  (about 126 MB) when you turn the feature on. Nothing is sent anywhere.
+• Careful by design: Jot will not overwrite an everyday word it already got right.
+• Experimental, and works when you dictate in English. Other languages are unaffected.
+
 MORE
 • Transcribe existing audio or video files — just drop them in.
 • Searchable history of everything you've dictated, kept locally: replay the audio, tag it,
@@ -109,6 +123,7 @@ Live caption pill with waveform while you speak
 "Rewrite with…" palette: 33 prompts — shorten, bulletize, translate, and more
 Speak your rewrite instruction instead of picking a prompt
 Optional AI rewrite (bring your own key, or run Ollama locally)
+Custom vocabulary: teach Jot your names, products and jargon (experimental, English)
 Transcribe your own audio and video files
 Local, searchable dictation history with playback
 Free — no account, no ads, no telemetry
@@ -135,6 +150,8 @@ your device. Audio is processed locally and is never uploaded, streamed, or stor
 - Audio and transcripts stay on the device (local files only).
 - Network usage is limited to: (1) a one-time speech-model download on first run;
   (2) an optional media-decoder (FFmpeg) download only if you import audio/video files;
+  (2b) an optional vocabulary-model download (~126 MB), ONLY if you enable custom vocabulary —
+  a model download only; no audio, transcript or term ever leaves the device;
   (3) OPTIONAL AI clean-up / rewrite — ONLY if you enable it AND supply your own provider
   key. In that case the transcript text you choose to rewrite is sent to the third-party AI
   provider you selected (OpenAI, Anthropic, Google, or your local Ollama), under your own
