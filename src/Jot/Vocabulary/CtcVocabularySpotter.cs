@@ -143,9 +143,15 @@ public sealed class CtcVocabularySpotter : IVocabularySpotter, IDisposable
             // Re-tested inside the lock: Unload/Dispose can free the artifacts between the load above
             // and here, and a null deref on the UI thread would take the window down.
             if (_tokenizer is null || _tokens is null) return TermSpottability.Unknown;
-            return _tokenizer.IsSpottable(VocabularyStore.SanitizeTerm(term), _tokens)
-                ? TermSpottability.Ok
-                : TermSpottability.Unsupported;
+
+            // ASKS THE QUESTION THE ENGINE ASKS. The badge means "the spotter can look for this", and
+            // since the casing fix the spotter looks for every form in CtcSpotForms.Expand — so testing
+            // only the typed spelling would put the UI and the DP on different definitions of Ok, which
+            // is the same class of quiet drift the whole vocabulary subsystem keeps producing.
+            string clean = VocabularyStore.SanitizeTerm(term);
+            foreach (string form in CtcSpotForms.Expand(clean))
+                if (_tokenizer.IsSpottable(form, _tokens)) return TermSpottability.Ok;
+            return TermSpottability.Unsupported;
         }
     }
 
@@ -226,29 +232,85 @@ public sealed class CtcVocabularySpotter : IVocabularySpotter, IDisposable
     // MARK: - Queries
 
     /// <summary>
-    /// One query per surface form: the term's own spelling AND each alias. Spotting aliases is not
-    /// belt-and-braces — it is the documented Mac/iOS bug. "Sri Ram" spoken tokenizes nothing like
-    /// "Sriram" written, so searching only the canonical spelling misses the exact case the user added
-    /// the term for. All forms report back under the canonical term, and the DP suppresses overlapping
-    /// hits per TERM so two forms matching the same audio yield one detection.
+    /// Ceiling on the queries ONE term may contribute, casing variants included.
+    ///
+    /// A budget, not a taste: every query is another O(frames x tokens) lane in the DP, and the list cap
+    /// is 200 terms. MEASURED by <c>CtcCasingTests.English_CasingVariantsCostIsBounded</c> at 60 s of
+    /// audio — 200 plain queries 20.5 ms, 600 casing-expanded queries 73.7 ms — so ~0.12 ms per query
+    /// per minute of speech. At this ceiling the worst case a user can construct is 200 x 12 = 2400
+    /// queries ≈ 290 ms, which is inside the post-stop pass and nowhere near <c>SlowStopMs</c>.
+    ///
+    /// The as-typed forms are NEVER dropped to make room (see <see cref="BuildQueries"/>), so this can
+    /// only ever cut a casing variant — it cannot regress a term that used to be found.
+    /// </summary>
+    private const int MaxQueriesPerTerm = 12;
+
+    /// <summary>
+    /// One query per surface form: the term's own spelling, each alias, and the CASING VARIANTS of both.
+    ///
+    /// ALIASES are not belt-and-braces — they are the documented Mac/iOS bug. "Sri Ram" spoken tokenizes
+    /// nothing like "Sriram" written, so searching only the canonical spelling misses the exact case the
+    /// user added the term for.
+    ///
+    /// CASING is the same class of bug found one layer down, and it was live in the shipped English
+    /// path (see <see cref="CtcSpotForms"/>). parakeet-tdt_ctc-110m is a punctuation-and-capitalisation
+    /// model, so `Migration` and `migration` are DIFFERENT id sequences and the DP searches for exactly
+    /// what it is handed. MEASURED on 65 words of real speech, recall at the shipped −3.0 threshold:
+    ///
+    ///     typed as the model emitted it   65/65   median −0.05
+    ///     all lowercase                   63/65   median −0.05
+    ///     Title Case                      44/65   median −2.26     <- 32 points of silent loss
+    ///     ALL UPPERCASE                    0/65   median −8.06     <- total, silent loss
+    ///     best of all four                65/65   median −0.05
+    ///
+    /// Nothing warned, nothing logged, and the shipped tests never saw it because every one of them
+    /// typed its terms the way the model happens to render a proper noun.
+    ///
+    /// Two invariants this must keep:
+    ///   * ALL forms report back under <c>term.Text</c> — the spelling the user typed is what the gate
+    ///     pastes, so a variant reporting its own casing would put "OKTA" in the sentence.
+    ///   * As-typed forms are emitted FIRST and are exempt from <see cref="MaxQueriesPerTerm"/>, so the
+    ///     expansion is strictly additive to what shipped.
+    /// The DP suppresses overlapping hits per TERM, so several forms matching the same audio still yield
+    /// one detection — at the best of their scores, which is the whole point.
     /// </summary>
     private IReadOnlyList<CtcSpotQuery> BuildQueries(IReadOnlyList<VocabularyTerm> terms)
     {
-        var queries = new List<CtcSpotQuery>(terms.Count * 2);
+        var queries = new List<CtcSpotQuery>(terms.Count * 4);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (VocabularyTerm term in terms)
         {
             string text = VocabularyStore.SanitizeTerm(term.Text);
             if (text.Length == 0) continue;
 
             IReadOnlyList<string> aliases = VocabularyStore.FeedAliases(term);
-            var seen = new HashSet<string>(StringComparer.Ordinal);
+            string[] surfaces = [text, .. aliases.Select(VocabularyStore.SanitizeTerm)];
 
-            foreach (string form in new[] { text }.Concat(aliases.Select(VocabularyStore.SanitizeTerm)))
+            seen.Clear();
+            int added = 0;
+
+            // Pass 1 — exactly what shipped, so the fix cannot take a detection away.
+            foreach (string form in surfaces)
+                if (TryAdd(form)) added++;
+
+            // Pass 2 — the casing variants, term's own first, alias variants after. Budgeted.
+            foreach (string surface in surfaces)
             {
-                if (form.Length < VocabularyTermRules.MinTermLength || !seen.Add(form)) continue;
+                if (added >= MaxQueriesPerTerm) break;
+                foreach (string form in CtcSpotForms.Expand(surface))
+                {
+                    if (added >= MaxQueriesPerTerm) break;
+                    if (TryAdd(form)) added++;
+                }
+            }
+
+            bool TryAdd(string form)
+            {
+                if (form.Length < VocabularyTermRules.MinTermLength || !seen.Add(form)) return false;
                 int[] ids = Encode(form);
-                if (ids.Length == 0) continue;
+                if (ids.Length == 0) return false;
                 queries.Add(new CtcSpotQuery(term.Text, aliases, ids));
+                return true;
             }
         }
         return queries;

@@ -832,6 +832,41 @@ that this is *new* is wrong (F3): our English tokenizer does the same for 13/13 
 English path is already exposed to it; nothing in this measurement suggests English recall is
 suffering, but the assumption behind that should be re-checked rather than inherited.
 
+### 13.7a RE-CHECKED, AND ENGLISH WAS SUFFERING — fixed 2026-07-25
+
+The paragraph above ends "should be re-checked rather than inherited". It was, against the installed
+English checkpoint and the `jot-ctc-spike` audio (`tests/Jot.Tests/Vocabulary/CtcCasingTests.cs`).
+English **was** losing recall, silently. Corpus: 65 words greedy-decoded out of real speech, each
+used as a term spelled the way the model emitted it, then re-typed in each casing.
+
+| term typed as | recall @ −3.0 | median | p10 | worst |
+|---|---|---|---|---|
+| as the model emitted it | **65/65** (100 %) | −0.05 | −0.20 | −0.93 |
+| all lowercase | 63/65 (96.9 %) | −0.05 | −1.16 | −4.54 |
+| Title Case | **44/65 (67.7 %)** | −2.26 | −5.61 | −8.79 |
+| ALL UPPERCASE | **0/65 (0 %)** | −8.06 | −9.06 | −12.69 |
+| best of all four (the fix) | **65/65** (100 %) | −0.05 | −0.20 | −0.93 |
+
+So the English cost is **−32 pp for Title Case and −100 pp for ALL CAPS** — the same trap as German,
+just entered from a different direction. It hid because the model renders proper nouns capitalised
+and every shipped test typed its terms that way (`Nemotron`, `Okta`, `Claude Code`); the direction
+that hurts English most is a term the model renders *lowercase* mid-sentence being typed `Kubernetes`
+or `OKTA`.
+
+**Fix:** `CtcSpotForms.Expand` — as-typed, lowercase, per-word Title, ALL CAPS, and (multi-word)
+sentence case, deduped, ≤ 5 forms per surface. `CtcVocabularySpotter.BuildQueries` emits the
+as-typed forms first and unconditionally (so the expansion is strictly additive), then variants
+under a 12-query-per-term budget, all reporting under the canonical term. `CheckTerm` asks the same
+question so the spottability badge cannot disagree with the DP.
+
+**Cost, measured:** 200 terms over 60 s of audio, 20.5 ms → 73.7 ms of DP (3 forms/term after
+dedup); ~4 % of the 1176 ms DirectML pass. **False positives, measured:** 0 → 0 over 4 decoy clips;
+the strongest false candidate moved −5.69 → −5.15, still 2.1 nats below the threshold. Planted-term
+recall went 5/6 → **6/6** and the band gap is 3.81 nats. The threshold was **not** touched.
+
+This also **closes E2 for English** and removes it from phase 2b's per-language work: the mechanism
+is language-agnostic, so a future German/Portuguese router inherits it rather than re-implementing.
+
 ## 13.8 The tokenizer verdict, per language
 
 Verified by reading real token inventories and running the Python `sentencepiece` oracle, not by
