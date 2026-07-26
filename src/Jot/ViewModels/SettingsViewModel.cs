@@ -685,11 +685,41 @@ public sealed partial class SettingsViewModel : ObservableObject
         ? "Custom vocabulary needs a language, not Auto detect."
         : $"Custom vocabulary doesn't cover {LanguageLabel(Language)} yet.";
 
-    public string VocabularyLanguageMessage => VocabularyLanguageIsAuto
-        ? "Your language is set to Auto detect, so Jot can't tell which language you're speaking. " +
-          "Pick one in Settings → Language to use your terms. Your list is saved either way."
-        : $"Jot has no everyday-word list for {LanguageLabel(Language)}, and without one it can't tell " +
-          "your term from an ordinary word — so it leaves your dictations alone. Your list is saved.";
+    /// <summary>
+    /// THREE reasons, because there are three, and giving the wrong one is its own kind of lying.
+    /// Auto detect has no resolved language; most blocked languages have no everyday-word list at all;
+    /// and Slovenian HAS one that E6 measured too weak to protect anyone
+    /// (docs/plans/vocabulary-brake-per-language.md — 1.72 false applies per 1000 words, and the only
+    /// setting that fixed it recovered one missed term in six). Telling that user "Jot has no
+    /// everyday-word list for Slovenian" would be false, and the shape of false that gets fixed by
+    /// someone shipping the list we already have.
+    /// </summary>
+    public string VocabularyLanguageMessage => BlockedMessage(Language);
+
+    /// <summary>
+    /// STATIC so it can be tested. The bar it feeds is a WPF-UI <c>InfoBar</c>, whose Title and Message
+    /// are not exposed to UI Automation at all — verified by walking the live window's 182 elements —
+    /// so the running app cannot answer "does it give the right reason?" and nothing else would.
+    /// </summary>
+    public static string BlockedMessage(string? language)
+    {
+        string locale = NemotronLocales.Normalize(language);
+        if (locale.Equals(NemotronLocales.AutoCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Your language is set to Auto detect, so Jot can't tell which language you're " +
+                   "speaking. Pick one in Settings → Language to use your terms. Your list is saved " +
+                   "either way.";
+        }
+        // A language with a list that E6 cut is NOT a language with no list, and saying so would be
+        // the kind of false that gets "fixed" by someone shipping the list we already have.
+        return EmbeddedCommonWordsProvider.ResourceFor(locale) is not null
+            ? $"Jot can't yet tell your terms apart from ordinary {LanguageLabel(locale)} words " +
+              "reliably enough to be safe — it would risk changing words you said correctly — so it " +
+              "leaves your dictations alone. Your list is saved."
+            : $"Jot has no everyday-word list for {LanguageLabel(locale)}, and without one it can't " +
+              "tell your term from an ordinary word — so it leaves your dictations alone. Your list " +
+              "is saved.";
+    }
 
     /// <summary>The badge next to the section title. It has to state the limit for the users the
     /// feature DOES work for, because the InfoBar above only appears when it doesn't.</summary>

@@ -754,7 +754,7 @@ public static class VocabularyGate
             if (wordConfidence.TryGetValue(w, out float c) && (measured is null || c < measured)) measured = c;
         }
         float confidence = measured ?? LowConfidence;
-        bool isCommon = baseWords.Any(w => commonWords.Contains(CorrectionKey.Lowercased(w)));
+        bool isCommon = IsCommonSpan(@base, commonWords);
         // Genuine acoustic uncertainty: a MEASURED confidence between "shaky" and "sure".
         // Unknown confidence (common for the OOV names this feature targets) is NOT unsure, so
         // it doesn't over-prioritise asks.
@@ -1128,6 +1128,14 @@ public static class VocabularyGate
     /// need to know whether the gate would accept a span BEFORE proposing it.</summary>
     public static double Gap(string heard, string term, IReadOnlyList<string> aliases) =>
         PlausibilityGap(Normalize(heard), term, aliases);
+
+    /// <summary>
+    /// THE over-correction brake, step (4): does this span contain an everyday word? Public because
+    /// E6 measures how much of the gate's safety this one predicate is carrying in each language, and
+    /// a harness that re-derives it would be measuring its own copy, not the shipped rule.
+    /// </summary>
+    public static bool IsCommonSpan(string span, IReadOnlySet<string> commonWords) =>
+        SplitWords(Normalize(span)).Any(w => commonWords.Contains(CorrectionKey.Lowercased(w)));
 
     // MARK: - Plausibility
 

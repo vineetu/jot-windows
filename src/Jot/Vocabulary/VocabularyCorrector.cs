@@ -14,10 +14,14 @@ public interface ITextVocabularySpotter
 {
     /// <param name="totalAudioDuration">Only to encode WHERE a match sits, in the time axis the gate
     /// places detections on. Zero is legal and simply drops the positional hint.</param>
+    /// <param name="language">The locale being dictated in, because how loose this may be is a
+    /// PER-LANGUAGE question (E6: <c>docs/plans/vocabulary-brake-per-language.md</c>). Null means "no
+    /// language known" and gets the safest setting, not the loosest.</param>
     IReadOnlyList<VocabularyGate.Detection> Spot(
         string transcript,
         IReadOnlyList<VocabularyTerm> terms,
         double totalAudioDuration,
+        string? language = null,
         CancellationToken ct = default);
 }
 
@@ -63,10 +67,26 @@ public sealed class VocabularyCorrector : ITextVocabularySpotter
             ? 0
             : (skeletonLength + CharactersPerEdit - 1) / CharactersPerEdit;
 
+    /// <summary>The shipping entry point: resolve the language's acceptance distance
+    /// (<see cref="VocabularyLimits"/>) and spot at it.</summary>
     public IReadOnlyList<VocabularyGate.Detection> Spot(
         string transcript,
         IReadOnlyList<VocabularyTerm> terms,
         double totalAudioDuration,
+        string? language = null,
+        CancellationToken ct = default) =>
+        Spot(transcript, terms, totalAudioDuration, VocabularyLimits.TextualMaxDistance(language), ct);
+
+    /// <summary>
+    /// The same spot with the language's ceiling passed in explicitly, so E6's sweep measures the
+    /// SHIPPING code path with only the resolved number varying — one mechanism, not a second one that
+    /// can drift from it.
+    /// </summary>
+    public IReadOnlyList<VocabularyGate.Detection> Spot(
+        string transcript,
+        IReadOnlyList<VocabularyTerm> terms,
+        double totalAudioDuration,
+        double maxDistance,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(transcript) || terms.Count == 0) return [];
@@ -103,6 +123,12 @@ public sealed class VocabularyCorrector : ITextVocabularySpotter
 
                     double normalized =
                         (double)edits / Math.Max(window.Skeleton.Length, form.Skeleton.Length);
+                    // The per-language brake (E6). The edit budget alone lets a 6-character term match
+                    // at 0.33, and in a language whose frequency list does not cover running text the
+                    // gate has nothing behind that. Applied HERE rather than as a tighter gate ceiling
+                    // because the gate's 0.45 never binds on this path — the corrector is already
+                    // tighter than it — so tightening the ceiling would change nothing.
+                    if (normalized > maxDistance) continue;
                     var key = (i, w);
                     if (!best.TryGetValue(key, out Match current))
                     {

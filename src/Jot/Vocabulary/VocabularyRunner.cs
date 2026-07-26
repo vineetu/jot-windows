@@ -164,23 +164,33 @@ public sealed class VocabularyRunner
     }
 
     /// <summary>
-    /// D5, re-derived per language. English gets the acoustic spotter; every other language with a
-    /// frequency list gets the textual corrector; the rest stay off.
+    /// D5, re-derived per language. English gets the acoustic spotter; a language the corrector was
+    /// MEASURED safe in gets the corrector; the rest stay off.
     ///
-    /// MEASURED before widening this (1041 FLEURS clips, docs/plans/vocabulary-corrector-vs-spotter.md):
-    /// the textual path recovers 34–37 % of the terms the engine got wrong at 0.27 false applies per
-    /// 1000 words on a realistic 25-term list. That is the whole feature for 20 languages where the
-    /// alternative is nothing at all. It is deliberately NOT stacked on top of the spotter in English —
-    /// there it bought +5.8 points of recall for +6 false applies (against the spotter's ZERO), and
-    /// precision wins that trade.
+    /// MEASURED (1041 FLEURS clips, docs/plans/vocabulary-corrector-vs-spotter.md): the textual path
+    /// recovers 34–37 % of the terms the engine got wrong at 0.27 false applies per 1000 words on a
+    /// realistic 25-term list. It is deliberately NOT stacked on top of the spotter in English — there
+    /// it bought +5.8 points of recall for +6 false applies (against the spotter's ZERO), and precision
+    /// wins that trade.
+    ///
+    /// MEASURED AGAIN, per language (9500 more clips, docs/plans/vocabulary-brake-per-language.md),
+    /// because all of the above was English and the corrector's only safety net outside its own
+    /// threshold is a frequency list whose coverage varies from 88.8 % of types to 56.9 %. Eighteen of
+    /// the nineteen reachable languages clear a 1.0-false-applies-per-1000-words budget, six of them
+    /// only after tightening; Slovenian does not clear it at any setting worth shipping and is Off.
+    ///
+    /// TWO conditions, not one, and they are different claims: a list must EXIST (no list ⇒ no brake ⇒
+    /// the shipped `lista → Lisa` incident with the safety net removed), and the measurement must say
+    /// the list is strong enough to be worth having.
     /// </summary>
     public static VocabularyMode ModeFor(string? language)
     {
         string locale = NemotronLocales.Normalize(language);
         if (locale.StartsWith("en", StringComparison.OrdinalIgnoreCase)) return VocabularyMode.Acoustic;
-        return EmbeddedCommonWordsProvider.ResourceFor(locale) is null
-            ? VocabularyMode.Off
-            : VocabularyMode.Textual;
+        return EmbeddedCommonWordsProvider.ResourceFor(locale) is not null
+               && VocabularyLimits.TextualShips(locale)
+            ? VocabularyMode.Textual
+            : VocabularyMode.Off;
     }
 
     /// <summary>Whether the ACOUSTIC spotter may run — still the English-only question, and still what
@@ -235,7 +245,7 @@ public sealed class VocabularyRunner
         IReadOnlyList<VocabularyGate.Detection> detections =
             Mode == VocabularyMode.Acoustic && _spotter.IsReady
                 ? _spotter.Spot(samples, sampleRate, terms, ct)
-                : _corrector?.Spot(text, terms, duration.TotalSeconds, ct) ?? [];
+                : _corrector?.Spot(text, terms, duration.TotalSeconds, _settings.Current.Language, ct) ?? [];
         if (detections.Count == 0) return Outcome.Unchanged(text);
 
         ct.ThrowIfCancellationRequested();

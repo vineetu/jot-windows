@@ -417,6 +417,16 @@ its own [I]) elsewhere until measured. **Experiment E6 quantifies which bucket e
 needs no audio and no model, and costs about half a day.** It is the cheapest safety work available
 and it should be done regardless of which architecture option is chosen.
 
+> **E6 RAN — 2026-07-26, [`vocabulary-brake-per-language.md`](vocabulary-brake-per-language.md).** It
+> needed audio after all (10 000 clips), and it says this section is **right about the mechanism and
+> wrong twice about the conclusion**. (1) A per-language `PlausibilityCeiling` would have done
+> nothing: the ceiling fired **zero** times in any of the 20 languages, because the corrector already
+> proposes at ≤ 0.33 and the gate only refuses above 0.45. The shipped knob is the corrector's own
+> acceptance distance. (2) The bucket table's bottom row is wrong where it is most confident:
+> **Finnish and Hungarian are among the safest measured** (0.00 and 0.34 false applies per 1000
+> words) even though their brakes are the weakest — agglutination starves the frequency list *and*
+> makes the words too long to collide. The languages that actually failed are **sl, ru, bg, el**.
+
 ### 7.6 What already transfers, unchanged
 
 Learned overrides (step 0), the multi-word self-gate (step 2), `CorrectionStore`, `AskPolicy`,

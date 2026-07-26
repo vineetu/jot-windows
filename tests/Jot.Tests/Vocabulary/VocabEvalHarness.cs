@@ -390,16 +390,8 @@ public class VocabEvalHarness(ITestOutputHelper output)
         return [.. acoustic, .. textual.Where(d => !claimed.Contains(d.Term))];
     }
 
-    /// <summary>
-    /// What one applied correction was: <c>TP</c> when the term really was spoken and the span it
-    /// replaced is not itself a word of the reference; <c>FP-absent</c> when the term was never said at
-    /// all; <c>FP-overwrote</c> when the term WAS said but we replaced text the engine had already got
-    /// right — the failure the gate exists to prevent, and the one worth counting separately.
-    /// </summary>
     private static string Classify(string[] refWords, Applied a) =>
-        !Contains(refWords, a.Term) ? "FP-absent"
-        : Contains(refWords, a.Original) ? "FP-overwrote"
-        : "TP";
+        VocabEvalScoring.Classify(refWords, a.Term, a.Original);
 
     private sealed class Arm(string name)
     {
@@ -442,54 +434,18 @@ public class VocabEvalHarness(ITestOutputHelper output)
     }
 
     // MARK: - Text measures
+    //
+    // SHARED with the per-language harness (E6) on purpose — its whole job is comparing a language's
+    // false-apply rate against the English baseline below, and two harnesses that fold text
+    // differently are not comparing anything. See VocabEvalScoring.
 
-    private static string[] Words(string text) =>
-        [.. text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-              .Select(w => new string([.. w.Where(char.IsLetterOrDigit)]).ToLowerInvariant())
-              .Where(w => w.Length > 0)];
+    private static string[] Words(string text) => VocabEvalScoring.Words(text);
 
-    /// <summary>Whole-word (or word-window) containment on the same fold the gate keys on.</summary>
-    private static bool Contains(string[] words, string phrase)
-    {
-        string[] want = Words(phrase);
-        if (want.Length == 0) return false;
-        for (int i = 0; i + want.Length <= words.Length; i++)
-        {
-            bool all = true;
-            for (int k = 0; k < want.Length && all; k++) all = words[i + k] == want[k];
-            if (all) return true;
-        }
-        return false;
-    }
+    private static bool Contains(string[] words, string phrase) => VocabEvalScoring.Contains(words, phrase);
 
-    /// <summary>How far the closest thing the engine actually wrote is from the term, on the gate's own
-    /// axis — the number that says whether a miss was reachable at all.</summary>
-    private static double NearestGap(string[] hypWords, string term)
-    {
-        double best = double.MaxValue;
-        for (int w = 1; w <= 2; w++)
-        {
-            for (int i = 0; i + w <= hypWords.Length; i++)
-                best = Math.Min(best, VocabularyGate.Gap(string.Join(' ', hypWords[i..(i + w)]), term, []));
-        }
-        return best;
-    }
+    private static double NearestGap(string[] hypWords, string term) =>
+        VocabEvalScoring.NearestGap(hypWords, term);
 
-    private static int WordErrors(string[] reference, string[] hypothesis)
-    {
-        int[] prev = new int[hypothesis.Length + 1];
-        int[] cur = new int[hypothesis.Length + 1];
-        for (int j = 0; j <= hypothesis.Length; j++) prev[j] = j;
-        for (int i = 1; i <= reference.Length; i++)
-        {
-            cur[0] = i;
-            for (int j = 1; j <= hypothesis.Length; j++)
-            {
-                int cost = reference[i - 1] == hypothesis[j - 1] ? 0 : 1;
-                cur[j] = Math.Min(Math.Min(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + cost);
-            }
-            (prev, cur) = (cur, prev);
-        }
-        return prev[hypothesis.Length];
-    }
+    private static int WordErrors(string[] reference, string[] hypothesis) =>
+        VocabEvalScoring.WordErrors(reference, hypothesis);
 }

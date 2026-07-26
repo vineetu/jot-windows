@@ -33,7 +33,8 @@ sign-in they won't have).
 > • Custom vocabulary (new, experimental) needs NO reviewer action. It is OFF by default and plays
 >   no part in the dictation test above. If enabled it asks before downloading a small extra
 >   on-device model (~126 MB) from our own GitHub release; declining leaves dictation fully
->   working. It needs no AI service and no sign-in, and is English-only.
+>   working. It needs no AI service and no sign-in. It covers English (what the extra model is for)
+>   plus 18 other languages by spelling only, and the app states which on the setting itself.
 > • Microphone access is required; Windows prompts on first use — please Allow.
 > • The download resumes/retries automatically and the app never crashes on network failure.
 > • The optional "Rewrite with…" feature is OFF by default and requires signing in to the
@@ -79,7 +80,9 @@ YOUR OWN WORDS (EXPERIMENTAL)
 • Fully on-device — it uses a small extra model, downloaded once (about 126 MB) when you turn
   the feature on. It needs no AI service and no sign-in.
 • Careful by design: Jot will not overwrite an everyday word it already got right.
-• Experimental, and works when you dictate in English. Other languages are unaffected.
+• Experimental. In English Jot also listens for your terms in the audio; in 18 more languages
+  it corrects near-miss spellings. Other languages are unaffected, and the app says which
+  you are in.
 
 MORE
 • Transcribe existing audio or video files — just drop them in.
@@ -98,7 +101,7 @@ GPU-accelerated (DirectML) with a real-time CPU fallback
 Live caption pill with waveform while you speak
 Transcribe your own audio and video files
 Local, searchable dictation history
-Custom vocabulary: teach Jot your names, products and jargon (experimental, English)
+Custom vocabulary: teach Jot your names, products and jargon (experimental, 19 languages)
 
 ## Search terms / keywords (up to 7, not shown to users)
 dictation, speech to text, voice typing, transcription, offline stt, voice to text, private

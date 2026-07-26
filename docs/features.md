@@ -387,8 +387,16 @@ toggle is switched on, and the Vocabulary section carries its own download row (
 for anyone who declines or wants it later. Until the model is present, switching the toggle on saves your
 terms and changes nothing — the section says so, and dictation is never affected either way.
 
-One honest limit remains: it applies only when the language is set to **English** (not auto-detect). Two
-Help tours cover it — **Custom vocabulary** and **Fix a word** (the right-click gesture on a transcript).
+One honest limit remains, and it is now per language. In **English** Jot hears the term in the audio
+(that is what the extra model does). In **18 other languages** — Bulgarian, Czech, Danish, Dutch,
+Finnish, French, German, Greek, Hungarian, Italian, Polish, Portuguese, Romanian, Russian, Slovak,
+Spanish, Swedish, Ukrainian — it corrects near-miss *spellings* only, with no download; the section
+badge and the Vocabulary page both say so. Anywhere else, including auto-detect, it does nothing and
+says that too. The list is not a guess: each of those languages was measured on real speech for how
+often it would corrupt a word the transcriber already got right
+([E6](plans/vocabulary-brake-per-language.md)), and Slovenian was dropped for failing it. Two Help
+tours cover the feature — **Custom vocabulary** and **Fix a word** (the right-click gesture on a
+transcript).
 
 ---
 

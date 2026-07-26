@@ -40,14 +40,16 @@ public class VocabularyModeTests
     private sealed class CountingCorrector : ITextVocabularySpotter
     {
         public int Calls;
+        public string? Language;                    // what the runner told us we are dictating in
         private readonly VocabularyCorrector _inner = new();
 
         public IReadOnlyList<VocabularyGate.Detection> Spot(
             string transcript, IReadOnlyList<VocabularyTerm> terms, double totalAudioDuration,
-            CancellationToken ct = default)
+            string? language = null, CancellationToken ct = default)
         {
             Calls++;
-            return _inner.Spot(transcript, terms, totalAudioDuration, ct);
+            Language = language;
+            return _inner.Spot(transcript, terms, totalAudioDuration, language, ct);
         }
     }
 
@@ -83,6 +85,9 @@ public class VocabularyModeTests
     // No frequency list ⇒ no brake ⇒ off. CJK is doubly out: VocabularyGate.SplitWords splits on a
     // space, so a Chinese transcript is one "word" and placement collapses.
     [InlineData("auto", VocabularyRunner.VocabularyMode.Off)]
+    // HAS a list, and still off: E6 measured 1.72 false applies per 1000 words there and no setting
+    // fixed it without collapsing recall (docs/plans/vocabulary-brake-per-language.md).
+    [InlineData("sl-SI", VocabularyRunner.VocabularyMode.Off)]
     [InlineData("ja-JP", VocabularyRunner.VocabularyMode.Off)]
     [InlineData("zh-CN", VocabularyRunner.VocabularyMode.Off)]
     [InlineData("ko-KR", VocabularyRunner.VocabularyMode.Off)]
@@ -125,6 +130,24 @@ public class VocabularyModeTests
         Assert.Equal(1, corrector.Calls);
         // The English checkpoint must never be asked about Spanish audio.
         Assert.Equal(0, spotter.Calls);
+    }
+
+    /// <summary>
+    /// The wiring E6 depends on: the corrector's acceptance distance is PER LANGUAGE, and it can only
+    /// be per language if the runner actually tells it which one. Russian ships at 0.20 and Spanish at
+    /// the English setting; a runner that passed null would silently give every language the
+    /// unmeasured default and nothing else in the suite would notice.
+    /// </summary>
+    [Fact]
+    public void TheRunnerTellsTheCorrectorWhichLanguageItIs()
+    {
+        (VocabularyRunner runner, _, CountingCorrector corrector) =
+            Build("ru-RU", spotterReady: false, "Nemotron");
+
+        runner.Run("модель нейmotron здесь", [], 16000, TimeSpan.FromSeconds(3));
+
+        Assert.Equal("ru-RU", corrector.Language);
+        Assert.Equal(0.20, VocabularyLimits.TextualMaxDistance(corrector.Language));
     }
 
     /// <summary>THE regression this whole gate exists for. Spanish "lista" is one edit from the term

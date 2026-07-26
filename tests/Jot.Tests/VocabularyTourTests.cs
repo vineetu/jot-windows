@@ -25,13 +25,24 @@ public class VocabularyTourTests
         Assert.Same(TourCatalog.AddToVocabulary, TourCatalog.ById("ADD-TO-VOCABULARY"));
     }
 
+    /// <summary>
+    /// CHANGED by E6 (docs/plans/vocabulary-brake-per-language.md). This used to assert the card said
+    /// "English" and "Experimental", which was the whole honest limit while the feature was English
+    /// only. It is not any more — the corrector ships in 18 more languages, and a card that still said
+    /// "English only" would be the lie. So the assertion moves with the claim: state that it is
+    /// experimental, state the count the shipped table actually has, and state that the non-English
+    /// languages get SPELLING matching rather than the acoustic path.
+    /// </summary>
     [Fact]
-    public void VocabularyTour_StatesBothHonestLimits()
+    public void VocabularyTour_StatesTheHonestLimits()
     {
-        string body = string.Concat(TourCatalog.Vocabulary.Cards.Select(c => c.Body(new JotSettings())))
-                    + TourCatalog.Vocabulary.Cards[2].Title;
-        Assert.Contains("English", body);
+        string body = string.Concat(TourCatalog.Vocabulary.Cards.Select(c => c.Title + " " + c.Body(new JotSettings())));
         Assert.Contains("Experimental", body);
+        Assert.Contains("English", body);
+        Assert.Contains("spellings", body);
+        // Never a hardcoded language count either: the number on the card has to be the number in the
+        // measured table, or the Store listing and this card drift apart silently.
+        Assert.Contains($"{Jot.Vocabulary.VocabularyLimits.Languages.Count} languages", body);
     }
 
     [Fact]

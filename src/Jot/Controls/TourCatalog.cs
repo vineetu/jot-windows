@@ -127,8 +127,16 @@ internal static class TourCatalog
             new TourCard(SymbolRegular.ArrowDownload24, "One extra download",
                 _ => $"Jot asks before fetching a {Services.CtcModelDownload.SizeMb} MB model. Like everything " +
                      "else, it stays on this PC."),
-            new TourCard(SymbolRegular.Beaker24, "Experimental, English only",
-                _ => "Your terms apply when your language is English. Other languages are left untouched."),
+            // The honest limit, and it stopped being "English only" when E6 measured the model-free
+            // corrector in 18 more languages (docs/plans/vocabulary-brake-per-language.md). The count
+            // is pinned by VocabularyLimitsTests, so a language leaving the set makes this card wrong
+            // somewhere that fails a build rather than somewhere a user finds it.
+            new TourCard(SymbolRegular.Beaker24, "Experimental, and not every language",
+                _ => $"Your terms work in {Jot.Vocabulary.VocabularyLimits.Languages.Count} languages. In " +
+                     "English Jot listens for them in the audio; in the other " +
+                     $"{Jot.Vocabulary.VocabularyLimits.Languages.Count - 1} it corrects near-miss " +
+                     "spellings instead. Anything else is left untouched, and Settings says which " +
+                     "you are in."),
         });
 
     /// <summary>Add-to-Vocabulary tour — the right-click gesture on a recording's transcript, which is

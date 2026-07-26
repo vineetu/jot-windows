@@ -251,7 +251,7 @@ Together these took the corrector from 38 false applies to 21, and **FP-overwrot
 | mode | languages | source |
 |---|---|---|
 | **Acoustic** | en-US, en-GB | CTC spotter; corrector deliberately NOT stacked on it |
-| **Textual** | the other 20 with a common-word list (bg cs da de el es fi fr hu it nl pl pt ro ru sk sl sr sv uk) | `VocabularyCorrector` |
+| **Textual** | ~~the other 20 with a common-word list~~ → **18**, per language, since E6 (bg cs da de el es fi fr hu it nl pl pt ro ru sk sv uk; six of them at a tighter acceptance distance) | `VocabularyCorrector` |
 | **Off** | everything else, and Auto detect | nothing |
 
 Three deliberate choices, each with the measurement behind it:
@@ -285,12 +285,16 @@ UI, verified in the running app by UI Automation (badge, description, InfoBar, s
    0.60 instead of 0.45 — and measure the false-apply cost on this exact corpus. It is a half-day, it
    needs no model, and it is worth more than any second checkpoint. Every artifact needed to score it
    is already on `D:`.
-2. **E6 — per-language plausibility ceilings.** This experiment was run in English. The corrector is
-   language-agnostic in mechanism, but `vocabulary-multilingual-research.md §7.5` is right that the
-   common-word brake is materially weaker in Finnish, Hungarian, Turkish and the Slavic languages, and
-   the brake is what stopped `list` → `Lisa` here. The textual path is shipped for those languages on
-   the strength of an English measurement; that is the one claim in this document I would most want
-   checked next.
+2. ~~**E6 — per-language plausibility ceilings.**~~ **DONE**, 2026-07-26 —
+   [`vocabulary-brake-per-language.md`](vocabulary-brake-per-language.md). 10 000 more clips, 19
+   languages. The brake IS materially weaker outside English (Finnish covers 60.1 % of its corpus's
+   types against English's 88.8 %) and 18 of the 19 still clear a 1.0-false-applies-per-1000-words
+   budget, 12 without any change; Slovenian is cut. Two things this document got wrong: §7.5's *fix*
+   was a per-language `PlausibilityCeiling`, and the ceiling turns out to fire **zero** times on the
+   textual path in any language — the knob that bites is the corrector's own acceptance distance. And
+   §7.5's *ranking* was wrong: Finnish and Hungarian, the two it named, are among the safest, because
+   agglutination starves the frequency list and lengthens the words past collision range at the same
+   time.
 3. **Inflection-preserving splice.** The guard in §6.1 blocks rather than fixes. `Neumotron's` →
    `Nemotron's` is the correct answer and the gate has no way to express it today.
 4. **Only then** the Tier-A checkpoints (de, pt). The spotter is worth 51 opportunities' worth of
