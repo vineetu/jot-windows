@@ -11,7 +11,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Jot</AssemblyName>
     <RootNamespace>Jot</RootNamespace>
-    <Version>1.2.2</Version> <!-- keep aligned with Package*.appxmanifest Identity Version (feeds feedback reports + env log) -->
+    <Version>1.2.3</Version> <!-- keep aligned with Package*.appxmanifest Identity Version (feeds feedback reports + env log) -->
     <ApplicationIcon>Assets\jot.ico</ApplicationIcon>
     <!-- ONNX Runtime ships native (win-x64) libraries; pin the platform so they are restored/copied. -->
     <Platforms>x64</Platforms>
