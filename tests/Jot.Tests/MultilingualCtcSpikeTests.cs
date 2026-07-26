@@ -398,9 +398,9 @@ public class MultilingualCtcSpikeTests(ITestOutputHelper output)
             try
             {
                 CtcTokenizer tk = CtcTokenizer.Load(patched);
-                output.WriteLine("  with bos_id/eos_id patched to 1/2: LOADS. " +
-                                 $"'Zürich' -> [{string.Join(",", tk.Encode("Zürich"))}] " +
-                                 "(oracle: [170,49,367]) — the -1 sentinel is the trigger.");
+                output.WriteLine("  with bos_id/eos_id patched to 1/2: LOADS — the -1 sentinel is " +
+                                 "the trigger, and rewriting two proto fields at release time is a " +
+                                 "viable workaround.");
             }
             catch (Exception e2)
             {
@@ -408,6 +408,47 @@ public class MultilingualCtcSpikeTests(ITestOutputHelper output)
                                  "the Unigram path is broken beyond the -1 sentinel.");
             }
         }
+    }
+
+    /// <summary>
+    /// Does the F2 workaround actually WORK, or does it merely stop throwing? One term agreeing is
+    /// an anecdote; a Unigram encoder that disagrees on one merge is silent zero recall, which is
+    /// the whole reason the English C2 fact exists. So the patched model is held to the same bar:
+    /// id-for-id against the Python sentencepiece oracle, every probe term.
+    ///
+    /// Skips (rather than fails) when the patched artifact is absent, because it is a diagnostic
+    /// the spike produced, not something the app ships.
+    /// </summary>
+    [ModelFact("ml:de", "ml-spm-oracle:de", "ml-bospatch:de")]
+    public void Tokenizer_TheBosIdWorkaroundAgreesWithTheOracleIdForId()
+    {
+        var tk = CtcTokenizer.Load(Path.Combine(Dir("de"), "tokenizer.bos.model"));
+        int agreed = 0, inScope = 0;
+        var disagreements = new List<string>();
+
+        // Progress goes to a FILE, flushed per term, because the failure mode being investigated is
+        // a hard process crash (not an exception) — xunit's buffered output is lost when it happens,
+        // so the last line on disk is the term that did it.
+        string progress = Path.Combine(Root, "f2-workaround-progress.txt");
+        File.WriteAllText(progress, "start\n");
+
+        foreach (ProbeRow row in ProbeRows("de"))
+        {
+            if (row.Unk || row.Term.Trim().Length < 2) continue;
+            inScope++;
+            File.AppendAllText(progress, $"encoding '{row.Term}'\n");
+            int[] ours = [.. tk.Encode(row.Term)];
+            File.AppendAllText(progress, $"  ok [{string.Join(",", ours)}]\n");
+            if (row.Cased.SequenceEqual(ours)) agreed++;
+            else disagreements.Add($"'{row.Term}': oracle [{string.Join(",", row.Cased)}] " +
+                                   $"ours [{string.Join(",", ours)}]");
+        }
+
+        foreach (string d in disagreements) output.WriteLine("  " + d);
+        output.WriteLine($"F2 WORKAROUND [de]: {agreed}/{inScope} terms id-for-id identical to " +
+                         "the sentencepiece oracle");
+        Assert.True(inScope >= 10, "probe fixture too small");
+        Assert.Equal(inScope, agreed);
     }
 
     /// <summary>

@@ -667,7 +667,7 @@ twice as many users.
 | # | Finding | Where §§0–12 said otherwise |
 |---|---|---|
 | **F1** | **`nvidia/stt_pt_fastconformer_hybrid_large_pc` is `cc-by-nc-4.0`.** Not the `_pc_nc` sibling — the plain `_pc` model this document recommends piloting. Its card reads *"This model is ready for non-commercial use… The model weights are distributed under a research-friendly non-commercial CC BY-NC 4.0 license"*. | §2 and §12 list the whole family as CC-BY-4.0 **[V]** and §8(d3) recommends piloting **de + pt** "because their artifacts already exist". Half that pilot is unshippable. §11 trap 1 told us to check every checkpoint every time; it was not applied to pt |
-| **F2** | **`CtcTokenizer.Load` throws on the German checkpoint.** `Microsoft.ML.Tokenizers` 2.0.0 raises `IndexOutOfRangeException` inside `SentencePieceUnigramModel..ctor`. Cause isolated: German's tokenizer is **model_type = UNIGRAM** while our English one is **BPE**, and the Unigram code path indexes the piece array with the `bos_id = eos_id = -1` sentinel that both models declare. Patching those two fields to real ids makes the identical file load and produce **oracle-identical ids** (`Zürich → [170,49,367]`). | §3.1 says `CtcTokenizer` is "reusable unchanged". It is not, for any Unigram language — which per §2 is most of the family |
+| **F2** | **`CtcTokenizer.Load` throws on the German checkpoint.** `Microsoft.ML.Tokenizers` 2.0.0 raises `IndexOutOfRangeException` inside `SentencePieceUnigramModel..ctor`. Cause isolated: German's tokenizer is **model_type = UNIGRAM** while our English one is **BPE**, and the Unigram code path indexes the piece array with the `bos_id = eos_id = -1` sentinel that both models declare. Rewriting those two proto fields makes the identical file load and encode **24/24 probe terms id-for-id with the SentencePiece oracle**. | §3.1 says `CtcTokenizer` is "reusable unchanged". It is not, for any Unigram language — which per §2 is most of the family |
 | **F3** | **Casing sensitivity is NOT new.** Our shipping English `parakeet-tdt_ctc-110m` is itself a P&C model: 94 uppercase-bearing pieces, and casing changes the id sequence for **13/13** English terms tested. | §6.2 item 3 calls this a "**NEW TRAP**… it does not exist in the English path we validated" and §6.1 states the English model "emits lowercase, unpunctuated text". Both wrong — read off the model's own `tokens.txt` and card |
 | **F4** | **A small vocabulary is a defect, not a feature.** Portuguese's 128-piece near-character vocabulary is exactly why its planted and decoy score distributions **overlap by 4.27 nats**, while German's 1024-piece BPE separates them by **+3.26 nats**. Character-level pieces are cheap to align spuriously. | §6.3: "Small vocabularies are a feature here, not a defect… Longer, more specific token sequences are also *more* discriminative, not less." Measured false |
 | **F5** | Everything else in §3.1 is **confirmed exactly**: graph contract, metadata keys, front-end constants, 80 ms frames, and cost. See 13.3–13.6. | — |
@@ -855,7 +855,9 @@ with a Portuguese or French name in their list gets silent zero recall, and a pe
 `IsSpottable` message has to say *which* characters are missing, not just "accents are fine now".
 
 Our `CtcTokenizer` agrees with the SentencePiece oracle **25/25 in-scope terms, id-for-id**, for
-Portuguese. For German it cannot be asked, because of F2.
+Portuguese. For German it cannot be asked directly (F2); with the `bos_id`/`eos_id` proto rewrite
+applied it agrees **24/24**, which is what makes the cheap workaround credible — subject to the
+unexplained process crash noted in 13.11.
 
 ## 13.9 Cost — §5's central claim is confirmed at ≈1.0×
 
@@ -939,7 +941,7 @@ line items **re-weighted**:
 |---|---|---|
 | Release pipeline for the first language (2c) | 2 d | **0.5 d** — the de artifacts exist and are verified; only `tokenizer.model` extraction + 2 release assets remain |
 | Calibration (2d) | 1.5 d + "assumes audio exists" | **0.5 d** — audio does exist (CC0/CC-BY, scripted), and −3.0 is already shown to hold |
-| **Unigram term encoder (NEW — F2)** | not costed | **1–3 d.** Cheap path: rewrite `bos_id`/`eos_id` in the proto at release time (verified to work, ~10 lines + a release-script step). Honest path: upstream the fix or write our own Unigram Viterbi encoder, which then needs its own id-for-id oracle test per language |
+| **Unigram term encoder (NEW — F2)** | not costed | **1–3 d.** Cheap path: rewrite `bos_id`/`eos_id` in the proto at release time — verified id-for-id on 24/24 terms, ~10 lines plus a release-script step. Honest path: upstream the fix or write our own Unigram Viterbi encoder, which then needs its own id-for-id oracle test per language. **Do not treat the cheap path as proven yet**: one test host running the patched Unigram model crashed the process outright (not an exception) and did not reproduce on three subsequent runs. Unexplained. A library we are working around by editing its input needs a soak before it carries a shipping feature |
 | **Casing variants (E2)** | 0.5 d, listed as a risk | **confirmed mandatory**, same 0.5 d, now with a measured −70 pp to justify it |
 | Per-language `PlausibilityCeiling` for de (13.10) | not costed | **+0.5 d**, and it should gate enablement |
 | Everything else (table-driven registry, routing, UX) | 8.5 d | unchanged |

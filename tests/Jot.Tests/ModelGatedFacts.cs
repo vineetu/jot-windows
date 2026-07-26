@@ -113,6 +113,15 @@ internal static class ModelGate
             return Check("ml-audio:" + lang);
         }
 
+        // ml-bospatch:<lang> — the spike's bos_id/eos_id-rewritten copy of that language's
+        // tokenizer.model, used to prove the Microsoft.ML.Tokenizers Unigram workaround is sound.
+        if (requirement.StartsWith("ml-bospatch:", StringComparison.Ordinal))
+        {
+            string f = Path.Combine(MlSpikeRoot, requirement["ml-bospatch:".Length..],
+                                    "tokenizer.bos.model");
+            return File.Exists(f) ? null : f;
+        }
+
         // ml-spm-oracle:<lang> — the Python sentencepiece id dump our tokenizer is checked against.
         if (requirement.StartsWith("ml-spm-oracle:", StringComparison.Ordinal))
         {
