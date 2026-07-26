@@ -47,6 +47,7 @@ public class VocabEvalHarness(ITestOutputHelper output)
         {
             case "transcribe": Transcribe(); break;
             case "spot": Spot(); break;
+            case "calibrate": Calibrate(); break;
             case "report": Report(); break;
             default: throw new ArgumentException($"unknown JOT_VOCAB_EVAL stage '{stage}'");
         }
@@ -242,6 +243,87 @@ public class VocabEvalHarness(ITestOutputHelper output)
         [.. File.ReadAllLines(Path.Combine(Out, "transcripts.jsonl"))
               .Select(l => JsonSerializer.Deserialize<Hypothesis>(l)!)];
 
+    // MARK: - Stage 2b · calibration for the confidence-conditional ceiling (E8)
+
+    /// <summary>
+    /// One row per ACOUSTIC detection: what the spotter heard, how sure it was, and how far the nearest
+    /// thing the engine wrote is from the term. This is the joint distribution the ceiling has to be a
+    /// function of, and until it is on disk any mapping from score to ceiling is a number picked by
+    /// feel — which is the one thing E5 §8.1 asked this experiment not to be.
+    ///
+    /// <c>truth</c> is the reference, not the gate: <c>said</c> = the term really was spoken in this
+    /// clip, <c>absent</c> = it was not (so any apply is a false apply), <c>already</c> = it was spoken
+    /// AND the engine already spelled it right (so there is nothing to recover and an apply somewhere
+    /// else in the clip is an overwrite waiting to happen).
+    /// </summary>
+    private void Calibrate()
+    {
+        List<Hypothesis> hyps = ReadHypotheses();
+        string[] all = File.ReadAllLines(Path.Combine(Out, "terms.txt"));
+        var focused = Focused(hyps, all).ToHashSet(StringComparer.Ordinal);
+
+        var sb = new StringBuilder("file\tterm\tscore\ttruth\tinFocused\tgap\tnearest\n");
+        foreach (string line in File.ReadAllLines(Path.Combine(Out, "detections.jsonl")))
+        {
+            SpotRow row = JsonSerializer.Deserialize<SpotRow>(line)!;
+            Hypothesis? h = hyps.FirstOrDefault(x => x.File == row.File);
+            if (h is null) continue;
+            string[] refWords = Words(h.Reference);
+            string[] hypWords = Words(h.Text);
+
+            foreach (DetectionRow d in row.Detections)
+            {
+                string truth = !Contains(refWords, d.Term) ? "absent"
+                    : Contains(hypWords, d.Term) ? "already"
+                    : "said";
+                sb.AppendLine(string.Join('\t', row.File, d.Term,
+                    d.Score.ToString("F3", CultureInfo.InvariantCulture), truth,
+                    focused.Contains(d.Term),
+                    NearestGap(hypWords, d.Term).ToString("F3", CultureInfo.InvariantCulture),
+                    NearestSpan(hypWords, d.Term)));
+            }
+        }
+        File.WriteAllText(Path.Combine(Out, "detection-calibration.tsv"), sb.ToString());
+        output.WriteLine($"wrote detection-calibration.tsv");
+    }
+
+    /// <summary>The 1- or 2-word window of the transcript that <see cref="NearestGap"/> measured, so a
+    /// calibration row can be read by a human without re-deriving it.</summary>
+    private static string NearestSpan(string[] hypWords, string term)
+    {
+        double best = double.MaxValue;
+        string span = "—";
+        for (int w = 1; w <= 2; w++)
+        {
+            for (int i = 0; i + w <= hypWords.Length; i++)
+            {
+                string candidate = string.Join(' ', hypWords[i..(i + w)]);
+                double g = VocabularyGate.Gap(candidate, term, []);
+                if (g < best) { best = g; span = candidate; }
+            }
+        }
+        return span;
+    }
+
+    /// <summary>The realistic 25 — the terms this engine got wrong most often. Extracted so the report
+    /// and the calibration stage cannot pick two different lists and call them the same arm.</summary>
+    private static string[] Focused(List<Hypothesis> hyps, string[] all)
+    {
+        Dictionary<string, int> misses = all.ToDictionary(t => t, _ => 0);
+        foreach (Hypothesis h in hyps)
+        {
+            string[] refWords = Words(h.Reference);
+            string[] hypWords = Words(h.Text);
+            foreach (string t in all)
+            {
+                if (Contains(refWords, t) && !Contains(hypWords, t)) misses[t]++;
+            }
+        }
+        return [.. misses.Where(kv => kv.Value > 0)
+            .OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal)
+            .Take(25).Select(kv => kv.Key)];
+    }
+
     // MARK: - Stage 3 · head to head
 
     private sealed record Applied(string Original, string Term, string Verdict);
@@ -255,19 +337,7 @@ public class VocabEvalHarness(ITestOutputHelper output)
         // either way. 155 terms is a stress list nobody would type; the "focused" one is the realistic
         // shape — a user adds the terms they actually say — and is picked from the corpus, not by hand:
         // the terms the engine got wrong most often.
-        Dictionary<string, int> misses = all.ToDictionary(t => t, _ => 0);
-        foreach (Hypothesis h in hyps)
-        {
-            string[] refWords = Words(h.Reference);
-            string[] hypWords = Words(h.Text);
-            foreach (string t in all)
-            {
-                if (Contains(refWords, t) && !Contains(hypWords, t)) misses[t]++;
-            }
-        }
-        string[] focused = [.. misses.Where(kv => kv.Value > 0)
-            .OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal)
-            .Take(25).Select(kv => kv.Key)];
+        string[] focused = Focused(hyps, all);
 
         var sb = new StringBuilder();
         sb.AppendLine($"clips            {hyps.Count}   ({hyps.Select(h => h.Sentence).Distinct().Count()} distinct sentences)");
@@ -295,7 +365,10 @@ public class VocabEvalHarness(ITestOutputHelper output)
             // list. The DP scores each term independently and suppresses overlaps per TERM, so the
             // only thing dropping a query changes is that its own hits disappear.
             spotted[row.File] = [.. row.Detections.Where(d => inList.Contains(d.Term)).Select(d =>
-                new VocabularyGate.Detection(d.Term, [], d.Score, d.Start, d.End))];
+                // Acoustic: these came off the CTC spotter, and E8's earned ceiling is a function of
+                // that. Replaying them without the flag would score the experiment against the
+                // shipped fixed ceiling and report no change at all.
+                new VocabularyGate.Detection(d.Term, [], d.Score, d.Start, d.End, Acoustic: true))];
             spotMs[row.File] = row.Ms;
         }
 
@@ -307,7 +380,10 @@ public class VocabEvalHarness(ITestOutputHelper output)
         }
 
         var corrector = new VocabularyCorrector();
-        string[] armNames = ["corrector", "spotter", "both"];
+        // The "-fixed" arms are E8's counterfactual and cost nothing to carry: the earned ceiling is a
+        // function of the detection's own Acoustic flag, so replaying the SAME detections with it off
+        // reproduces the shipped fixed-0.45 gate exactly, in the same process, on the same rows.
+        string[] armNames = ["corrector", "spotter-fixed", "spotter", "both-fixed", "both"];
         var arms = armNames.ToDictionary(a => a, a => new Arm(a));
         var baseline = new Arm("baseline");
         var correctorMs = new List<double>();
@@ -331,12 +407,16 @@ public class VocabEvalHarness(ITestOutputHelper output)
             sw.Stop();
             correctorMs.Add(sw.Elapsed.TotalMilliseconds);
             IReadOnlyList<VocabularyGate.Detection> acoustic = spotted.GetValueOrDefault(h.File) ?? [];
+            IReadOnlyList<VocabularyGate.Detection> fixedCeiling =
+                [.. acoustic.Select(d => d with { Acoustic = false })];
 
             var outWords = new Dictionary<string, string[]>();
             foreach ((string name, IReadOnlyList<VocabularyGate.Detection> dets) in new[]
             {
                 ("corrector", textual),
+                ("spotter-fixed", fixedCeiling),
                 ("spotter", acoustic),
+                ("both-fixed", Merge(fixedCeiling, textual)),
                 ("both", Merge(acoustic, textual)),
             })
             {

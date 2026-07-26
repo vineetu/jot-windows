@@ -52,6 +52,68 @@ public static class VocabularyGate
     /// vikram→sriram 0.50, ramanathan→ramaa 0.50, name→jamy 0.50 (block).</summary>
     public const double PlausibilityCeiling = 0.45;
 
+    /// <summary>Loosest ceiling any detection can earn. DERIVED: on 1041 FLEURS clips the widest gap at
+    /// which the CTC spotter was RIGHT about a term beyond the fixed ceiling is 0.615
+    /// (`blitweis lakes` → `Plitvice`); 0.65 is the first round step above it. Nothing in the corpus
+    /// asks for more, and past 0.65 the spotter's own far band turns (5 right, 10 wrong).</summary>
+    public const double PlausibilityCeilingMax = 0.65;
+
+    /// <summary>At or below this acoustic score a detection earns NO headroom at all. DERIVED: the
+    /// strongest score among detections beyond the fixed ceiling whose term was never spoken is
+    /// −1.793, over 1041 clips and 433 detections. Loosening this to −2.2 lets that row and four more
+    /// like it through.</summary>
+    public const float CeilingRampFloorScore = -1.8f;
+
+    /// <summary>At or above this acoustic score a detection earns the whole of
+    /// <see cref="PlausibilityCeilingMax"/> — 0.8 nats clear of the false-apply boundary above, and the
+    /// point at which the headroom covers the widest TRUE detection measured (−1.012 at 0.615).
+    /// </summary>
+    public const float CeilingRampFullScore = -1.0f;
+
+    /// <summary>
+    /// THE CONFIDENCE-CONDITIONAL CEILING (E8). How far from the term a transcript span may be before
+    /// this detection is refused — <see cref="PlausibilityCeiling"/> for everything that is not a
+    /// measured acoustic score, and a ramp up to <see cref="PlausibilityCeilingMax"/> for a detection
+    /// the spotter heard strongly.
+    ///
+    /// WHY AT ALL. E5 measured 214 chances the engine missed and found 61 of them (29 %) sitting beyond
+    /// the fixed 0.45 ceiling — a band the acoustic spotter HEARS 35 of and the gate applied exactly
+    /// none of. It is larger than the spotter's entire marginal band, it needs no model, and the casing
+    /// fix that bought 32 points of raw detector recall moved end-to-end recall by 0.5 points for
+    /// exactly this reason. E6 then found the ceiling never fires at all on the textual path (0 of 531
+    /// blocks in 20 languages), so it is doing no protective work there and all of it here.
+    ///
+    /// WHY A RAMP AND NOT A NUMBER. String similarity and acoustic evidence are substitutes: a term the
+    /// model was 60 % sure of per token does not need the engine's spelling to vouch for it, and one it
+    /// barely heard does. `Herrakit` → `Parakeet` is 0.50 away — one guard too far — and was heard at
+    /// −0.313, the best score of five terms in that dictation.
+    ///
+    /// EVERY NUMBER IS MEASURED, on E5's 433 detections over 1041 clips of real speech. Admitted rows
+    /// in the loosened band, all-155 stress list / realistic 25-term list:
+    ///
+    ///     this mapping                14 right / 0 wrong          6 / 0
+    ///     ramp anchored at -2.2       15 / 3                      7 / 0
+    ///     cap 0.75 instead of 0.65    16 / 1                      6 / 0
+    ///     flat 0.65, unconditional    30 / 25                     ← the reason it is conditional
+    ///
+    /// The mapping sits on a plateau, not a cliff: every neighbouring (floor, full, cap) triple in
+    /// {-2.0,-1.8,-1.6} x {-1.0,-0.75} x {0.60,0.65} also lands on ZERO false applies.
+    ///
+    /// ═══ DELIBERATE DIVERGENCE FROM jot-shared ═══ Swift's `applyFromDetections` compares every gap
+    /// against the one fixed constant. The golden fixture `spot-implausible-skips` ("vikram" vs
+    /// "Sriram", 0.50) is exactly the row this would flip — and does not, because its detections carry
+    /// no acoustic flag, which is the shipped default. That fixture is a contract about the DEFAULT and
+    /// stays byte-identical; the divergence is confined to detections a real acoustic model produced.
+    /// </summary>
+    public static double EffectiveCeiling(Detection detection)
+    {
+        if (!detection.Acoustic || detection.Score <= CeilingRampFloorScore) return PlausibilityCeiling;
+        if (detection.Score >= CeilingRampFullScore) return PlausibilityCeilingMax;
+        double t = (detection.Score - CeilingRampFloorScore) /
+                   (double)(CeilingRampFullScore - CeilingRampFloorScore);
+        return PlausibilityCeiling + (PlausibilityCeilingMax - PlausibilityCeiling) * t;
+    }
+
     private static readonly IReadOnlyDictionary<string, string> NoMeta = new Dictionary<string, string>();
 
     /// <summary>An alternate candidate term for a proposal's span (the 3-option ask).
@@ -86,12 +148,19 @@ public static class VocabularyGate
         IReadOnlyList<Proposal> Proposals);
 
     /// <summary>One acoustically-spotted vocabulary term and where it lives in the audio.</summary>
+    /// <param name="Acoustic">Is <paramref name="Score"/> a real ACOUSTIC score — mean log-probability
+    /// per term token from <c>CtcWordSpotter</c> — or something else wearing the same field?
+    /// <see cref="VocabularyCorrector"/> puts a negated string distance in there and says so in its own
+    /// comment, and the two are not comparable, so anything that READS the score has to know which it
+    /// has. Defaults to false: a source that has not thought about it gets the fixed ceiling, which is
+    /// the shipped behaviour. See <see cref="EffectiveCeiling"/>.</param>
     public readonly record struct Detection(
         string Term,
         IReadOnlyList<string> Aliases,
         float Score,
         double StartTime,
-        double EndTime);
+        double EndTime,
+        bool Acoustic = false);
 
     private readonly record struct CharRange(int Start, int End)
     {
@@ -454,6 +523,10 @@ public static class VocabularyGate
             // ("ramanathan" → "Ramaa Nathan") and all five golden fixtures byte-identical.
             string[][] shapes = [SplitWords(det.Term), .. det.Aliases.Select(SplitWords)];
             int maxWidth = Math.Clamp(shapes.Max(s => s.Length), 1, words.Count);
+            // E8: how far this detection has EARNED the right to reach. Fixed 0.45 for everything the
+            // corrector produces and everything Mac produces; more only when a real acoustic model was
+            // sure. See EffectiveCeiling.
+            double ceiling = EffectiveCeiling(det);
 
             int bestIndex = -1;
             int bestWidth = 0;
@@ -472,7 +545,7 @@ public static class VocabularyGate
                     string spanText = Slice(originalTranscript, window);
                     double gap = PlausibilityGap(Normalize(spanText), det.Term, det.Aliases);
                     if (gap < nearestGap) { nearestGap = gap; nearestText = spanText; }
-                    if (gap > PlausibilityCeiling) continue;
+                    if (gap > ceiling) continue;
                     double positional = Math.Abs((i + w / 2.0) / n - frac);
                     // Position first (unchanged semantics); on an exact tie the WIDER window wins —
                     // it is the more specific match, the same tie-break Apply's span sort uses.
@@ -522,7 +595,9 @@ public static class VocabularyGate
                     ["gap"] = nearestGap is double.MaxValue
                         ? "—"
                         : nearestGap.ToString("F2", CultureInfo.InvariantCulture),
-                    ["ceiling"] = PlausibilityCeiling.ToString("F2", CultureInfo.InvariantCulture),
+                    // The ceiling this detection actually earned, not the constant — otherwise the log
+                    // reads "gap 0.50 against a 0.45 ceiling" for a row that was refused at 0.62.
+                    ["ceiling"] = ceiling.ToString("F2", CultureInfo.InvariantCulture),
                 });
         }
 
@@ -676,7 +751,7 @@ public static class VocabularyGate
             // replacement.
             var synthetic = new RescoreProposal(originalWord, det.Term, true, null, 0);
             Verdict d = Decide(synthetic, originalWord, new Dictionary<string, float>(),
-                overrides, det.Aliases, commonWordSet);
+                overrides, det.Aliases, commonWordSet, EffectiveCeiling(det));
             // A span whose identity is unsafe is force-blocked and is never a live-ask candidate —
             // the same treatment Apply gives an alignment-blocked proposal.
             if ((alignmentBlocked || dedupAmbiguous || inflectionAmbiguous || inflectedCommon) && d.Pass)
@@ -762,7 +837,12 @@ public static class VocabularyGate
         IReadOnlyDictionary<string, float> wordConfidence,
         IReadOnlyList<OverrideEntry> overrides,
         IReadOnlyList<string> aliases,
-        IReadOnlySet<string> commonWords)
+        IReadOnlySet<string> commonWords,
+        // E8. ONE ceiling per proposal, resolved by the caller, so placement and step (1) cannot
+        // disagree: a detection admitted at 0.60 by the loosened placement search and then refused
+        // here at 0.45 would vanish with no row and no log — the same silent-drop class as
+        // spot-unplaced. Defaults to the constant, so Apply and every fixture are untouched.
+        double plausibilityCeiling = PlausibilityCeiling)
     {
         float margin = (r.ReplacementScore ?? r.OriginalScore) - r.OriginalScore;
         // The EFFECTIVE span identity when the caller adjusted it; every guard keys on this so
@@ -812,7 +892,7 @@ public static class VocabularyGate
         //     fuzzy-match with a low floor and concatenate neighbours, so they can propose
         //     "Vikram"→"Sriram" — half the letters different. No acoustic margin makes that right.
         //     A block here still emits a reviewable "kept" record.
-        if (!Plausible(@base, term, aliases))
+        if (PlausibilityGap(@base, term, aliases) > plausibilityCeiling)
             return new Verdict(false, confidence, margin, "BLOCK", unsure, false);
 
         // (2) A multi-word TERM is precise and self-gating. Applied silently → not an ask.
@@ -1224,11 +1304,13 @@ public static class VocabularyGate
 
     // MARK: - Plausibility
 
-    private static bool Plausible(string original, string term, IReadOnlyList<string> aliases) =>
-        PlausibilityGap(original, term, aliases) <= PlausibilityCeiling;
+    // Swift's `plausible(_:_:_:)` folded the measure and the constant together. E8 split them: the
+    // ceiling is now a PARAMETER of the decision (see EffectiveCeiling), so there is nothing left for a
+    // predicate that can only ever compare against one number, and leaving it would give a future
+    // caller a way to bypass the earned ceiling by accident.
 
-    /// <summary>The number <see cref="Plausible"/> compares against
-    /// <see cref="PlausibilityCeiling"/>: the SMALLEST normalized edit distance from the heard word
+    /// <summary>The number the ceiling is compared against:
+    /// the SMALLEST normalized edit distance from the heard word
     /// to the term or any alias. Split out so a rejection can be REPORTED with its margin ("herrakit
     /// vs parakeet, 0.50 against a 0.45 ceiling") instead of vanishing as a bare false.
     ///

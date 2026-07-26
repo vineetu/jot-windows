@@ -315,8 +315,14 @@ public class DetectionPathDedupTests
     /// Verbatim from the end-to-end run: the spotter found "Parakeet" with the BEST score of all five
     /// terms (-0.313) while the engine had written "Herrakit". The gap is 0.50 against a 0.45
     /// ceiling, so no proposal was created — and nothing was logged, so "I added the term and nothing
-    /// happened" was unanswerable. The ceiling itself is the over-correction brake and stays put; the
-    /// diagnostic is what makes the block attributable.
+    /// happened" was unanswerable.
+    ///
+    /// SUPERSEDED IN PART BY E8, and kept exactly as it is for that reason. This detection carries no
+    /// Acoustic flag, so it earns the fixed 0.45 ceiling and is still unplaced — which is the contract
+    /// for every source that is not a measured acoustic score. The real spotter now flags its
+    /// detections, and THIS row is the one E8 was built for: at -0.313 it earns 0.65 and places. See
+    /// <c>EarnedCeilingTests</c>. What is pinned here is the diagnostic, and that an unflagged
+    /// detection gets no headroom.
     /// </summary>
     [Fact]
     public void UnplacedDetection_IsReportedWithItsScoreAndNearestMiss()
@@ -350,8 +356,9 @@ public class DetectionPathDedupTests
         Assert.DoesNotContain(sink.Lines, l => l.StartsWith("spot-unplaced", StringComparison.Ordinal));
     }
 
-    /// <summary>The plausibility threshold is unchanged: this is a diagnostic, not a widening.
-    /// "herrakit" → "parakeet" still does not correct.</summary>
+    /// <summary>The plausibility threshold is unchanged for an UNFLAGGED detection: this was a
+    /// diagnostic, not a widening. E8 widens it only for a detection carrying a real acoustic score;
+    /// everything else — the corrector, Mac's own path, any fixture — still stops at 0.45.</summary>
     [Fact]
     public void PlausibilityCeiling_IsUnchanged()
     {

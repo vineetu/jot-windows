@@ -280,11 +280,15 @@ UI, verified in the running app by UI Automation (badge, description, InfoBar, s
 
 ## 8. What I would do next, in order
 
-1. **A confidence-conditional plausibility ceiling (band D).** 61 of 214 chances, 34 already detected,
-   0 applied. Let a detection well above the spotter's accept threshold buy ceiling headroom — say
-   0.60 instead of 0.45 — and measure the false-apply cost on this exact corpus. It is a half-day, it
-   needs no model, and it is worth more than any second checkpoint. Every artifact needed to score it
-   is already on `D:`.
+1. ~~**A confidence-conditional plausibility ceiling (band D).**~~ **DONE**, 2026-07-26 —
+   [`vocabulary-earned-ceiling.md`](vocabulary-earned-ceiling.md). The guess above was nearly right:
+   0.65, not 0.60, and reached by a ramp rather than a switch. **+4.7 points of end-to-end recall on
+   the focused-25 arm (42.4 → 47.1 % for the spotter, 48.2 → 52.9 % for both) for ZERO additional false
+   applies** — the 0.00/1000-words baseline in §3 holds. The far band is two populations, not one:
+   beyond 0.45 a detection scoring above −1.5 is 17 right to 1 wrong, and below it 19 right to 34
+   wrong, so a flat 0.65 would have admitted 30 right and 25 wrong. **The `spotter` and `both` rows of
+   both tables in §3 are therefore superseded** — the `corrector` and `baseline` rows are not, and the
+   band table in §4 describes the corpus, not the gate, so it stands.
 2. ~~**E6 — per-language plausibility ceilings.**~~ **DONE**, 2026-07-26 —
    [`vocabulary-brake-per-language.md`](vocabulary-brake-per-language.md). 10 000 more clips, 19
    languages. The brake IS materially weaker outside English (Finnish covers 60.1 % of its corpus's

@@ -279,7 +279,12 @@ public sealed class CtcWordSpotter
                     queries[h.QueryIndex].Aliases ?? [],
                     h.Score,
                     h.StartFrame * _frameSeconds,
-                    (h.EndFrame + 1) * _frameSeconds));   // the end frame's audio runs to the NEXT boundary
+                    (h.EndFrame + 1) * _frameSeconds,   // the end frame's audio runs to the NEXT boundary
+                    // THE score field's provenance, and the only place it can be set honestly: this is
+                    // the mean log-prob per term token described above. The gate reads it to decide how
+                    // much string distance the acoustics have earned (VocabularyGate.EffectiveCeiling),
+                    // and it must never be true for a source whose "score" is on some other scale.
+                    Acoustic: true));
             }
         }
 
