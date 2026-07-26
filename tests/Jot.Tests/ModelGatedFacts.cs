@@ -49,6 +49,14 @@ internal static class ModelGate
         }
     }
 
+    /// <summary>Root of the v1.4 multilingual SPIKE assets (de/pt checkpoints + the Common Voice /
+    /// FLEURS corpora). Same shape as <see cref="DefaultAudioDir"/>: an env var when set, else the
+    /// dev box's staged copy, else every multilingual fact skips. Nothing here is ever shipped or
+    /// downloaded by CI — see <c>MultilingualCtcSpikeTests</c>.</summary>
+    public const string MlSpikeDir = "JOT_ML_SPIKE_DIR";
+
+    public static string MlSpikeRoot => Env(MlSpikeDir) ?? @"D:\caches\jot-multilingual-spike";
+
     /// <returns>A human-readable description of the FIRST unmet requirement, or null when all are met.</returns>
     public static string? FirstMissing(string[] requires)
     {
@@ -78,6 +86,39 @@ internal static class ModelGate
             if (dir is null || !Directory.Exists(dir)) return AudioDir;
             string name = requirement["spike-audio:".Length..];
             return File.Exists(Path.Combine(dir, name)) ? null : $"{name} in {dir}";
+        }
+
+        // ml:<lang> — a complete non-English CTC checkpoint in the spike root. Same three files the
+        // shipping locator requires, so a half-downloaded language skips instead of half-running.
+        if (requirement.StartsWith("ml:", StringComparison.Ordinal))
+        {
+            string dir = Path.Combine(MlSpikeRoot, requirement["ml:".Length..]);
+            return new CtcModel(directory: dir).IsInstalled ? null : $"a complete CTC checkpoint in {dir}";
+        }
+
+        // ml-audio:<lang> — the extracted Common Voice / FLEURS corpus and its manifest.
+        if (requirement.StartsWith("ml-audio:", StringComparison.Ordinal))
+        {
+            string dir = Path.Combine(MlSpikeRoot, "audio-" + requirement["ml-audio:".Length..]);
+            return File.Exists(Path.Combine(dir, "manifest.json")) ? null : $"a corpus manifest in {dir}";
+        }
+
+        // ml-feats:<lang> — the NeMo reference feature dumps for that corpus.
+        if (requirement.StartsWith("ml-feats:", StringComparison.Ordinal))
+        {
+            string lang = requirement["ml-feats:".Length..];
+            string dir = Path.Combine(MlSpikeRoot, "feats-" + lang);
+            if (!Directory.Exists(dir) || Directory.GetFiles(dir, "*.bin").Length == 0)
+                return $"NeMo reference features in {dir}";
+            return Check("ml-audio:" + lang);
+        }
+
+        // ml-spm-oracle:<lang> — the Python sentencepiece id dump our tokenizer is checked against.
+        if (requirement.StartsWith("ml-spm-oracle:", StringComparison.Ordinal))
+        {
+            string f = Path.Combine(MlSpikeRoot,
+                                    requirement["ml-spm-oracle:".Length..] + "_tokenizer_probe.json");
+            return File.Exists(f) ? null : f;
         }
 
         return requirement switch

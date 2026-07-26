@@ -12,9 +12,15 @@
 > as inference and never promoted. **[?]** = could not verify; the experiment that would resolve it
 > is named in §10.
 >
-> **Nothing in this document is a measurement on this machine.** Every latency and memory figure for
-> a *new* checkpoint is modelled from the v1.3 measurements in `vocabulary-ctc-port.md §3.5`. §10
-> lists what has to be measured before any of it is believed.
+> **Nothing in §§0–12 of this document is a measurement on this machine.** Every latency and memory
+> figure for a *new* checkpoint in those sections is modelled from the v1.3 measurements in
+> `vocabulary-ctc-port.md §3.5`. §10 lists what has to be measured before any of it is believed.
+>
+> ⚠️ **§13 IS DIFFERENT.** It was added 2026-07-25 (later the same day) after actually downloading
+> and running two of these checkpoints. **Where §13 contradicts §§0–12, §13 wins** — it has numbers
+> and the desk research had inferences. Three of the desk conclusions are now known to be wrong:
+> the Portuguese checkpoint's licence (§2), the casing trap being "new" (§6.2), and small
+> vocabularies being "a feature, not a defect" (§6.3). Read §13 before acting on anything above it.
 
 ---
 
@@ -577,6 +583,13 @@ incremental at ~2 days per language.
 | **E10** | Does NVIDIA's unreleased Granary multilingual CTC checkpoint exist in a shippable form? | One HF discussion post / email | ~20 min | Could end the discussion |
 | **E11** | Are per-language calibration thresholds transferable, or must each language be tuned? | Compare the score distributions of two Tier-A languages on comparable planted-term sets | ~1 d + audio | Determines the per-language cost in §9 |
 
+> **Status update 2026-07-25 (evening): E1, E2, E3, E4 and E11 have been RUN — see §13.** E1/E3/E4
+> passed (contract, front-end and cost are exactly as modelled). E2 is confirmed and costs −70 pp of
+> German recall if ignored. **E11 came back "no": Portuguese needs its own threshold, German does
+> not.** Two blockers §10 did not think to ask about were found instead — the Portuguese licence and
+> a `Microsoft.ML.Tokenizers` failure on Unigram models. **E5, E6, E7, E8, E9, E10 remain open**,
+> and E5 is still the one that decides the programme.
+
 **Explicitly unanswerable without an experiment** — do not let anyone assert these: whether the
 hybrid CTC branch is as *accurate* as our dedicated English CTC model (the CTC head of a
 jointly-trained hybrid is generally the weaker of its two heads), and whether the 2.5 s deadline
@@ -633,3 +646,324 @@ piloting on German and Portuguese because their artifacts already exist.** First
 language is ~14 engineering days end to end and ~2 per language after that, plus native-speaker
 calibration audio we do not currently have; the model-free multilingual path is ~7 days and helps
 twice as many users.
+
+---
+
+# 13. MEASURED — what happened when we actually ran two of them
+
+> **Everything below this line is a measurement on this machine.** Sections 0–12 are desk research
+> and contain none. Written 2026-07-25 (evening) against repo `d4e7f9e`. Harness:
+> `tests/Jot.Tests/MultilingualCtcSpikeTests.cs` (15 facts, all real xunit skips without the
+> assets — CI downloads nothing). Assets and throwaway Python live in
+> `D:\caches\jot-multilingual-spike\`, never in git. Machine: Ryzen 7 3700X, ORT CPU EP,
+> `Microsoft.ML.Tokenizers` 2.0.0, Python 3.12.7.
+>
+> **Headline: the drop-in claim is 90 % right and the missing 10 % is two hard blockers that desk
+> research could not have found — one legal, one in a NuGet package.** German is a GO. Portuguese
+> is a NO-GO on licence, and separately would have needed its own threshold.
+
+## 13.1 Findings that change the plan
+
+| # | Finding | Where §§0–12 said otherwise |
+|---|---|---|
+| **F1** | **`nvidia/stt_pt_fastconformer_hybrid_large_pc` is `cc-by-nc-4.0`.** Not the `_pc_nc` sibling — the plain `_pc` model this document recommends piloting. Its card reads *"This model is ready for non-commercial use… The model weights are distributed under a research-friendly non-commercial CC BY-NC 4.0 license"*. | §2 and §12 list the whole family as CC-BY-4.0 **[V]** and §8(d3) recommends piloting **de + pt** "because their artifacts already exist". Half that pilot is unshippable. §11 trap 1 told us to check every checkpoint every time; it was not applied to pt |
+| **F2** | **`CtcTokenizer.Load` throws on the German checkpoint.** `Microsoft.ML.Tokenizers` 2.0.0 raises `IndexOutOfRangeException` inside `SentencePieceUnigramModel..ctor`. Cause isolated: German's tokenizer is **model_type = UNIGRAM** while our English one is **BPE**, and the Unigram code path indexes the piece array with the `bos_id = eos_id = -1` sentinel that both models declare. Patching those two fields to real ids makes the identical file load and produce **oracle-identical ids** (`Zürich → [170,49,367]`). | §3.1 says `CtcTokenizer` is "reusable unchanged". It is not, for any Unigram language — which per §2 is most of the family |
+| **F3** | **Casing sensitivity is NOT new.** Our shipping English `parakeet-tdt_ctc-110m` is itself a P&C model: 94 uppercase-bearing pieces, and casing changes the id sequence for **13/13** English terms tested. | §6.2 item 3 calls this a "**NEW TRAP**… it does not exist in the English path we validated" and §6.1 states the English model "emits lowercase, unpunctuated text". Both wrong — read off the model's own `tokens.txt` and card |
+| **F4** | **A small vocabulary is a defect, not a feature.** Portuguese's 128-piece near-character vocabulary is exactly why its planted and decoy score distributions **overlap by 4.27 nats**, while German's 1024-piece BPE separates them by **+3.26 nats**. Character-level pieces are cheap to align spuriously. | §6.3: "Small vocabularies are a feature here, not a defect… Longer, more specific token sequences are also *more* discriminative, not less." Measured false |
+| **F5** | Everything else in §3.1 is **confirmed exactly**: graph contract, metadata keys, front-end constants, 80 ms frames, and cost. See 13.3–13.6. | — |
+
+## 13.2 The artifacts, pinned
+
+Both int8 CTC ONNX exports exist exactly as §3.2 claims. Sizes and hashes read on this machine:
+
+| File | Bytes | SHA-256 |
+|---|---|---|
+| `csukuangfj/sherpa-onnx-nemo-stt_de_fastconformer_hybrid_large_pc-int8` / `model.int8.onnx` | 131,652,945 | `FCF42D4F…7C26E259` |
+| …de… / `tokens.txt` (1025 lines) | 10,686 | `ABB11361…E666BE9F` |
+| `csukuangfj/sherpa-onnx-nemo-stt_pt_fastconformer_hybrid_large_pc-int8` / `model.int8.onnx` | 131,279,704 | `CC4135AB…151F75B5` |
+| …pt… / `tokens.txt` (129 lines) | 795 | `C79CD022…BB079B9B` |
+| `nvidia/stt_de_fastconformer_hybrid_large_pc.nemo` | 459,223,040 | `BFF69929…C3671377` |
+| `nvidia/stt_pt_fastconformer_hybrid_large_pc.nemo` | 452,648,960 | `21D7670D…46533A71` |
+| `tokenizer.model` extracted from the de `.nemo` (UNIGRAM, 1024) | 252,610 | `62092DD9…30DDFB35` |
+| `tokenizer.model` extracted from the pt `.nemo` (BPE, 128) | 239,225 | `FCE6CFB8…0582324E` |
+
+Confirmed: neither sherpa export ships `tokenizer.model` (§11 trap 4 holds), and **neither sherpa
+mirror carries any licence tag at all** — the HF API returns an empty `license` for both, so the
+only licence that exists is the upstream NVIDIA one. That is what makes F1 bite: nothing in the
+artifact you download tells you it is non-commercial.
+
+**Licence audit of the whole family**, read from each HF model card (2026-07-25):
+
+> `en de es fr it nl pl ru ua uk hr be ka hy uz ar fa` → **cc-by-4.0**.
+> **`pt` → cc-by-nc-4.0.** `es_..._pc_nc` → cc-by-nc-4.0 (expected, the `_nc` sibling).
+>
+> So Tier A loses Portuguese and keeps the other ten. **pt-BR and pt-PT drop out of the acoustic
+> plan entirely** — §2b's "14 locales" becomes **12**.
+
+Only **de** and **pt** have published int8 CTC exports; every other Tier-A language still needs the
+§3.2 export run. So the one shippable language with a ready artifact is **German, alone**.
+
+## 13.3 E1 — the graph contract: **exact match, both languages**
+
+Read off the exports, not assumed (`E1_GraphContractMatchesTheEnglishExport`):
+
+| | English (shipping) | German | Portuguese |
+|---|---|---|---|
+| inputs | `audio_signal` f32 `[B,80,T]`, `length` i64 `[B]` | identical | identical |
+| output | `logprobs` f32 `[B,T',V+1]` | identical | identical |
+| `normalize_type` | `per_feature` | `per_feature` | `per_feature` |
+| `subsampling_factor` | 8 | 8 | 8 |
+| `model_type` | `EncDecHybridRNNTCTCBPEModel` | same | same |
+| `vocab_size` / blank id | 1024 / 1024 | 1024 / 1024 | **128 / 128** |
+| `d_model` × `n_layers` (from `.nemo`) | 512 × 17 | 512 × 17 | 512 × 17 |
+
+`CtcEncoder` and `CtcTokens` needed **no change**: both already read `vocab` from the tensor and the
+blank from `tokens.txt` rather than assuming 1025/1024. Portuguese's 129-wide output proves that
+was worth doing.
+
+**E3 (preprocessor)**: the `preprocessor:` block extracted from both `.nemo` files is byte-identical
+to English's — `sample_rate 16000, normalize per_feature, window_size 0.025, window_stride 0.01,
+window hann, features 80, n_fft 512, dither 1e-5, pad_to 0`, subsampling `dw_striding` ×8. §3.1's
+table is correct in every row.
+
+## 13.4 Feature parity — **our front-end is right for both, unchanged**
+
+`CtcMelFrontend` was not modified. Compared element-wise against a NeMo
+`AudioToMelSpectrogramPreprocessor` reference over 20 real clips per language:
+
+| Checkpoint | worst max \|Δ\| over 20 clips | English bar |
+|---|---|---|
+| German | **5.279e-4** | 9.34e-4 |
+| Portuguese | **4.619e-5** | 9.34e-4 |
+
+Both inside the bar; Portuguese is 20× better than it. **The front-end genuinely is shared.**
+
+**Decode sanity** — our features driving their graph, greedy-decoded, WER against the corpus's own
+reference transcript over 30 clips: **German median 9.1 %** (mean 11.3 %), **Portuguese median
+9.1 %** (mean 13.0 %). It is transcribing the language correctly, not producing plausible noise.
+
+## 13.5 Real speech — the corpus, and why it is not TTS
+
+TTS was rejected outright: one canonical pronunciation per term cannot establish recall.
+
+| Source | Licence | Role |
+|---|---|---|
+| **Common Voice 17** via the ungated mirror `fsicoli/common_voice_17_0` | **CC0-1.0** | crowd-sourced, varied mics and accents, **real `client_id`s** — one clip per distinct speaker |
+| **FLEURS** (`google/fleurs`) | **CC-BY-4.0** | studio read speech; each sentence recorded by several different speakers |
+
+Two collection notes worth writing down:
+
+* **`mozilla-foundation/common_voice_*` is auth-gated** (HTTP 401 on the file tree) and cannot be
+  scripted. The `fsicoli` mirror is ungated and carries the same CC0 licence.
+* **FLEURS' `gender` column is uniformly `MALE`** for both `de_de` and `pt_br` (862/862 and 919/919
+  rows). It is unusable as a diversity signal; speaker spread has to come from distinct recordings.
+
+Terms were chosen the way a real user's list would be: capitalised, ≥5 characters, **absent from
+Jot's own 24 000-entry common-word list for that language** (i.e. exactly what the gate's brake
+would not veto), and — for FLEURS — also present in the English rendering of the same FLoRes
+sentence, which is a cheap and principled proper-noun detector. The German set deliberately mixes
+proper nouns (`Straßburg`, `Großbritannien`, `Birmingham`, `Arrondissement`, `Sundarbans`,
+`Mendoza`), diacritic-carrying words (`Änderungsanträge`, `Ausläufer`, `Laubblätter`, `Fußball`,
+`Großvater`) and compounds (`Rechtswissenschaften`, `Eisenbahnstrecke`, `Berichterstatter`,
+`Bronzemedaille`).
+
+| | German | Portuguese |
+|---|---|---|
+| terms | 15 | 14 |
+| planted clips | **96, one per distinct speaker** | **85, one per distinct speaker** |
+| decoy clips (contain no term) | 40 | 40 |
+| decoy scores collected | 600 (15 terms × 40 clips) | 560 |
+| total audio | 1009 s | 995 s |
+
+## 13.6 M2 — recall, false positives, and whether −3.0 transfers
+
+The **shipping `CtcWordSpotter` DP, unmodified**, over each checkpoint's log-probs.
+
+**German — −3.0 transfers, with room to spare.**
+
+```
+planted (typed casing)  n=96   min -2.11  p10 -0.38  median -0.07  max -0.00
+decoy   (typed casing)  n=600  min -23.20 p10 -18.88 median -15.53 max -5.37
+band separation = +3.26 nats            [English measured +4.35]
+
+  thr    recall            false positives
+ -1.0    93/96 ( 96.9%)      0/600 (0.00%)
+ -2.0    95/96 ( 99.0%)      0/600 (0.00%)
+ -3.0    96/96 (100.0%)      0/600 (0.00%)   <- the shipped English threshold
+ -5.0    96/96 (100.0%)      0/600 (0.00%)
+ -6.0    96/96 (100.0%)      2/600 (0.33%)
+```
+
+−3.0 sits inside a **three-nat-wide plateau** where recall is 100 % and false positives are zero.
+Worst planted term is `Sundarbans` at −2.11; every other term's worst clip is above −1.4.
+
+**Portuguese — −3.0 does not transfer; the bands overlap.**
+
+```
+planted (typed casing)  n=85   min -7.17  p10 -3.39  median -0.13  max -0.00
+decoy   (typed casing)  n=560  min -17.20 p10 -13.76 median -10.81 max -2.90
+band separation = -4.27 nats  (NEGATIVE — no threshold separates them cleanly)
+
+  thr    recall            false positives
+ -3.0    75/85 ( 88.2%)      1/560 (0.18%)
+ -5.0    81/85 ( 95.3%)     14/560 (2.50%)
+ -7.5    85/85 (100.0%)     74/560 (13.21%)
+```
+
+−3.0 is still a *defensible operating point* (88 % / 0.18 %), but it is a compromise chosen from an
+overlapping pair of distributions, not a gap. Full recall costs a 13 % false-positive rate. The
+three weak terms are all **foreign names** — `Dunlap` (worst −7.17), `Schengen` (−6.94),
+`Kirchner` (−3.74) — which the Portuguese model renders with Portuguese phonotactics. **This is
+E11 answered: thresholds are not automatically transferable, and the per-language calibration cost
+in §9 is real.**
+
+## 13.7 The casing trap — real, expensive, and pre-existing
+
+Feeding the DP the lowercased term instead of the typed one, same audio, same threshold:
+
+| | typed casing | lowercased | cost |
+|---|---|---|---|
+| German recall @ −3.0 | 96/96 (100 %) | **29/96 (30.2 %)** | **−70 pp** |
+| Portuguese recall @ −3.0 | 75/85 (88.2 %) | 54/85 (63.5 %) | −25 pp |
+
+Casing changes the id sequence for **27/29** German and **25/27** Portuguese probe terms. §6.2's
+mitigation (feed both forms as term variants) is **necessary and confirmed** — but §6.2's framing
+that this is *new* is wrong (F3): our English tokenizer does the same for 13/13 terms. The shipped
+English path is already exposed to it; nothing in this measurement suggests English recall is
+suffering, but the assumption behind that should be re-checked rather than inherited.
+
+## 13.8 The tokenizer verdict, per language
+
+Verified by reading real token inventories and running the Python `sentencepiece` oracle, not by
+trusting the model cards.
+
+| | German (1024, UNIGRAM) | Portuguese (128, BPE) | English (1024, BPE) |
+|---|---|---|---|
+| lowercase / uppercase letters | 30 / 29 | 39 / 34 | 26 / 26 |
+| language's own accents | `ä ö ü ß` **present** | `à á â ã ç é ê í ó ô õ ú ü` **present** | none |
+| digits | none | none | none |
+| hyphen | none | none | none |
+| apostrophe | yes | no | yes |
+| `Müller` `Zürich` `Straße` `Schönberg` | all spottable | **all spottable** (pt carries `ü` and `é`) | unspottable |
+| `São Paulo` `Gonçalves` | **`<unk>` — NOT spottable** | spottable | unspottable |
+| `café` | **`<unk>`** | spottable | unspottable |
+| `Wi-Fi`, `3.14` | `<unk>` | `<unk>` | `<unk>` |
+
+So §6.2 item 2 is confirmed — the "no accented Latin" UX copy must become conditional — but with a
+sharper edge than stated: **each model carries only *its own* language's accents.** A German user
+with a Portuguese or French name in their list gets silent zero recall, and a per-language
+`IsSpottable` message has to say *which* characters are missing, not just "accents are fine now".
+
+Our `CtcTokenizer` agrees with the SentencePiece oracle **25/25 in-scope terms, id-for-id**, for
+Portuguese. For German it cannot be asked, because of F2.
+
+## 13.9 Cost — §5's central claim is confirmed at ≈1.0×
+
+Measured with the **same harness on the same audio** for all three graphs (the old "+283 MB" figure
+came from a 5 s chirp and one forward pass, so it is not comparable and should not be quoted
+against these):
+
+| 60 s of speech, CPU EP | p50 latency | working set while resident | graph on disk |
+|---|---|---|---|
+| **English (shipping), baseline** | **2593 ms** | +1015 MB | 125.6 MB |
+| **German** | **2594 ms** | +1022 MB | 125.6 MB |
+| **Portuguese** | **2549 ms** | +976 MB | 125.2 MB |
+
+10 s: 327 / 323 / 328 ms. 40 s: 1536 / 1555 / 1516 ms. Session load 1.1–1.3 s for all three.
+Working set returns fully on dispose in every case.
+
+**A Tier-A checkpoint costs exactly what English costs.** §5's "≈1.0×" was an inference; it is now
+a measurement, and the 2.5 s deadline / 120 s cutoff logic in `CtcVocabularySpotter` needs no
+per-language change.
+
+## 13.10 The gate's assumptions in these two languages (reported, not fixed)
+
+* **Both languages have a common-word list.** `EmbeddedCommonWordsProvider.SupportedLanguages`
+  contains `de` and `pt`, and `ResourceFor("pt-BR")` → `common-words-pt`. **Neither has the
+  brake-absent problem that §2b flags for Croatian and Arabic** — that warning stands for hr and ar
+  and does not extend here.
+* **Brake strength, measured on the same corpora the recall run used** (fraction of running text
+  covered by the 24 000-entry list):
+
+  | corpus | en | de | pt |
+  |---|---|---|---|
+  | FLEURS, token coverage | 92.8 % | **87.6 %** | 94.0 % |
+  | FLEURS, type coverage | 89.4 % | **72.1 %** | 84.9 % |
+  | Common Voice, token coverage | — | 86.1 % | 91.9 % |
+  | Common Voice, type coverage | — | **44.3 %** | 66.2 % |
+
+  On matched corpora German's brake is ~5 points weaker than English's by token and **17 points
+  weaker by type**; on the much larger and more varied Common Voice text its type coverage falls to
+  44 %. §7.5's "de: medium-high, adequate; probably, measure" is roughly right but optimistic —
+  German is the weakest of the three and a tighter `PlausibilityCeiling` for it is worth E6's half
+  day before enabling.
+* **Compounding (§7.4) is real and blocks about a third of realistic embeddings.** Normalised
+  Levenshtein over the gate's skeleton, term inside a genuine German compound:
+
+  | | distance | verdict at 0.45 |
+  |---|---|---|
+  | `Förderung` in `Förderungsantrag` | 0.44 | allowed (barely) |
+  | `Straße` in `Hauptstraße` | 0.45 | **blocked** |
+  | `Bahn` in `Eisenbahnstrecke` | 0.75 | **blocked** |
+  | `Recht` in `Rechtswissenschaften` | 0.75 | **blocked** |
+  | `Vater` in `Großvater` | 0.44 | allowed |
+  | `Ball` in `Fußball` | 0.43 | allowed |
+
+  3 of 8 blocked, and the survivors clear by ≤0.02. §7.4's arithmetic is confirmed; the recall hole
+  is not hypothetical.
+* **The skeleton handles `ß`, `ä`, `ö`, `ü`, `ç`, `ã` correctly** — all have precomposed NFC forms,
+  all count as one rune, so §7.1 holds for both languages.
+
+## 13.11 Verdict
+
+| | **German** | **Portuguese** |
+|---|---|---|
+| Drop-in? | **YES, with one change**: a Unigram-capable term encoder (F2) | **Moot — licence-disqualified (F1)** |
+| Graph contract | exact match | exact match |
+| Feature parity | 5.279e-4 (bar 9.34e-4) | 4.619e-5 |
+| Decode median WER | 9.1 % | 9.1 % |
+| Recall @ −3.0, real speech | **96/96 (100 %)**, 96 speakers | 75/85 (88.2 %), 85 speakers |
+| False positives @ −3.0 | **0/600 (0.00 %)** | 1/560 (0.18 %) |
+| Does −3.0 transfer? | **Yes**, +3.26 nat gap, 3-nat plateau | **No clean threshold** — bands overlap 4.27 nats |
+| Casing | must feed both forms (−70 pp otherwise) | must feed both forms (−25 pp otherwise) |
+| Tokenizer | accents present; **library cannot load it** | accents present; library agrees 25/25 |
+| Cost vs English | 1.00× latency, 1.01× memory | 0.98× / 0.96× |
+| **Verdict** | **GO** | **NO-GO** |
+
+### What shipping German actually costs, now that the unknowns are known
+
+§9 estimated ~14 days for the first non-English acoustic language. That still looks right, with the
+line items **re-weighted**:
+
+| Work | §9 said | Now |
+|---|---|---|
+| Release pipeline for the first language (2c) | 2 d | **0.5 d** — the de artifacts exist and are verified; only `tokenizer.model` extraction + 2 release assets remain |
+| Calibration (2d) | 1.5 d + "assumes audio exists" | **0.5 d** — audio does exist (CC0/CC-BY, scripted), and −3.0 is already shown to hold |
+| **Unigram term encoder (NEW — F2)** | not costed | **1–3 d.** Cheap path: rewrite `bos_id`/`eos_id` in the proto at release time (verified to work, ~10 lines + a release-script step). Honest path: upstream the fix or write our own Unigram Viterbi encoder, which then needs its own id-for-id oracle test per language |
+| **Casing variants (E2)** | 0.5 d, listed as a risk | **confirmed mandatory**, same 0.5 d, now with a measured −70 pp to justify it |
+| Per-language `PlausibilityCeiling` for de (13.10) | not costed | **+0.5 d**, and it should gate enablement |
+| Everything else (table-driven registry, routing, UX) | 8.5 d | unchanged |
+
+**≈14 days still, but the composition changed: less release engineering, more tokenizer.** And the
+"~2 days per additional language" figure is now **optimistic**, because (a) every other Tier-A
+language needs the sherpa export run from scratch (+0.5 d), (b) any language whose tokenizer is
+UNIGRAM re-hits F2, and (c) Portuguese proves a language can need its own threshold, which is the
+1.5 d line §9 hoped to amortise.
+
+### Recommendation, unchanged in shape and sharper in detail
+
+§8's sequence still holds: **(c)+(d1) model-free everywhere first, then (b) for Tier A.** What
+changes:
+
+1. **Drop Portuguese from the acoustic plan.** F1. pt-BR and pt-PT are textual-only, permanently.
+2. **Pilot on German alone**, not de + pt. It is the only Tier-A language that is simultaneously
+   CC-BY-4.0, artifact-ready, and measured to work at the shipped threshold.
+3. **Fix F2 before anything else in phase 2** — it is a hard stop, it is cheap, and it silently
+   determines which of the remaining ten Tier-A languages are reachable. Check `model_type` for
+   every candidate's `tokenizer.model` up front; that is a 5-minute script now that the reader
+   exists.
+4. **Re-verify the English casing assumption (F3)** before shipping casing variants, because the
+   English path already has the property we thought was new.
+5. **E5 is still the gate on all of it.** Nothing here measures the spotter's marginal value over
+   the model-free L1 corrector — the single most decision-relevant number in this document remains
+   unmeasured.
