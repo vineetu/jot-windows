@@ -421,17 +421,9 @@ public static class VocabularyGate
 
         IReadOnlySet<string> commonWordSet = commonWords.Words(commonWordsResource);
 
-        // Tokenize into whole words with char ranges, in document order.
         var words = new List<(string Text, CharRange Range)>();
-        int idx = 0;
-        while (idx < originalTranscript.Length)
-        {
-            while (idx < originalTranscript.Length && char.IsWhiteSpace(originalTranscript[idx])) idx++;
-            if (idx >= originalTranscript.Length) break;
-            int start = idx;
-            while (idx < originalTranscript.Length && !char.IsWhiteSpace(originalTranscript[idx])) idx++;
-            words.Add((originalTranscript[start..idx], new CharRange(start, idx)));
-        }
+        foreach ((int start, int end) in WordSpans(originalTranscript))
+            words.Add((originalTranscript[start..end], new CharRange(start, end)));
         if (words.Count == 0) return new Result(originalTranscript, 0, [], []);
 
         // Fractional center of each word over the word SEQUENCE — the same axis the detection's
@@ -599,6 +591,30 @@ public static class VocabularyGate
                 }
             }
 
+            // ── WINDOWS DIVERGENCE (defect 4 — "Mariana's" → "Marianas"). Swift's applyFromDetections
+            // has this hole too. Skeleton() drops the apostrophe, so a POSSESSIVE measures as its own
+            // plural: skeleton("Mariana's") == skeleton("Marianas"), gap 0.00, and the term is applied
+            // over a word the engine got right — deleting a grammatical inflection.
+            // PreservingEdgePunctuation cannot rescue it: the trailing "s" is alphanumeric, so nothing
+            // is carried, and narrowing the span to "Mariana" would publish "Marianas's". Blocking is
+            // the only answer that neither corrupts nor guesses, and it still leaves a reviewable row.
+            //
+            // MEASURED on 1041 FLEURS clips through the shipping Nemotron + CTC spotter (2026-07-25):
+            // 5 of the spotter's 20 false applies were exactly this shape ("Mariana's" → "Marianas",
+            // "USOC's" → "USOC", "Shayam's" → "Shyam", "Falkland's" → "Falkland").
+            //
+            // One-directional on purpose: a term that CARRIES an apostrophe ("O'Brien") must still
+            // correct a span that lost it, which is a real and common mis-transcription.
+            bool inflectionAmbiguous =
+                HasApostrophe(originalWord) &&
+                !HasApostrophe(det.Term) && !det.Aliases.Any(HasApostrophe);
+            if (inflectionAmbiguous)
+            {
+                diagnostics.Record(DiagnosticsCategory.VocabularyGate,
+                    $"inflection-ambiguous {originalWord} → {det.Term}",
+                    new Dictionary<string, string> { ["reason"] = "span carries an apostrophe the term has not" });
+            }
+
             // Identity no-op: the spotter fires on the audio whether or not the decoder already wrote
             // the term correctly. Skip so we never emit a spurious "Vikram → Vikram".
             //
@@ -640,7 +656,7 @@ public static class VocabularyGate
                 overrides, det.Aliases, commonWordSet);
             // A span whose identity is unsafe is force-blocked and is never a live-ask candidate —
             // the same treatment Apply gives an alignment-blocked proposal.
-            if ((alignmentBlocked || dedupAmbiguous) && d.Pass)
+            if ((alignmentBlocked || dedupAmbiguous || inflectionAmbiguous) && d.Pass)
                 d = d with { Pass = false, Label = "BLOCK", AskCandidate = false };
 
             diagnostics.Record(DiagnosticsCategory.VocabularyGate,
@@ -1080,6 +1096,39 @@ public static class VocabularyGate
         return words;
     }
 
+    // MARK: - Shared measures (the detection SOURCES address these, not their own copies)
+
+    /// <summary>
+    /// The whole-word split <see cref="ApplyFromDetections"/> places onto, as (start, end) UTF-16
+    /// ranges. Public because a detection source that guesses at a different tokenizer addresses
+    /// windows the gate will never re-derive, and the correction silently disappears.
+    /// </summary>
+    public static IReadOnlyList<(int Start, int End)> WordSpans(string text)
+    {
+        var spans = new List<(int, int)>();
+        int idx = 0;
+        while (idx < text.Length)
+        {
+            while (idx < text.Length && char.IsWhiteSpace(text[idx])) idx++;
+            if (idx >= text.Length) break;
+            int start = idx;
+            while (idx < text.Length && !char.IsWhiteSpace(text[idx])) idx++;
+            spans.Add((start, idx));
+        }
+        return spans;
+    }
+
+    /// <summary>The plausibility brake's unit of measure — lowercased alphanumeric scalars, spaces and
+    /// punctuation dropped. Public for the same reason as <see cref="WordSpans"/>: a source that
+    /// measures on a different axis than the gate judges on will propose things the gate then throws
+    /// away.</summary>
+    public static Rune[] SkeletonOf(string s) => Skeleton(s);
+
+    /// <summary>The number <see cref="PlausibilityCeiling"/> is compared against, for callers that
+    /// need to know whether the gate would accept a span BEFORE proposing it.</summary>
+    public static double Gap(string heard, string term, IReadOnlyList<string> aliases) =>
+        PlausibilityGap(Normalize(heard), term, aliases);
+
     // MARK: - Plausibility
 
     private static bool Plausible(string original, string term, IReadOnlyList<string> aliases) =>
@@ -1112,6 +1161,11 @@ public static class VocabularyGate
             return (double)Levenshtein(heard, c) / Math.Max(heard.Length, c.Length);
         }
     }
+
+    /// <summary>Straight, curly and modifier-letter apostrophes — the three forms an ASR or a keyboard
+    /// actually produces. See the inflection guard in <see cref="ApplyFromDetections"/>.</summary>
+    private static bool HasApostrophe(string s) =>
+        s.AsSpan().IndexOfAny('\'', '’', 'ʼ') >= 0;
 
     /// <summary>Does <paramref name="s"/> end on a letter/number cluster? Trailing punctuation is a
     /// boundary the engine put there, and the detection path's dedup widening must not absorb across

@@ -317,10 +317,11 @@
                         <TextBlock Text="Vocabulary" Style="{DynamicResource SubtitleTextBlockStyle}" />
                         <Border Margin="10,2,0,0" Padding="6,1" CornerRadius="4" VerticalAlignment="Center"
                                 Background="{DynamicResource ControlFillColorSecondaryBrush}">
-                            <!-- "English only" belongs HERE, not just in the language InfoBar below:
-                                 that bar only appears when the feature is BLOCKED, so an English user —
-                                 the only one it works for — would otherwise never learn the limit exists. -->
-                            <TextBlock Text="Experimental · English only" FontSize="11"
+                            <!-- Which of the two matching paths this language gets belongs HERE, not just
+                                 in the language InfoBar below: that bar only appears when the feature is
+                                 BLOCKED, so a user it works for would otherwise never learn which one
+                                 they have. -->
+                            <TextBlock Text="{Binding VocabularyModeBadge}" FontSize="11"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                         </Border>
                     </StackPanel>
@@ -338,7 +339,7 @@
                                 Title="Vocabulary unavailable"
                                 Message="{Binding VocabularyModelStatus}" />
                     <ctl:SettingRow Title="Custom vocabulary"
-                                    Description="Words Jot should get right — names, products, jargon. Runs entirely on this PC. Works when you dictate in English; other languages are unaffected.">
+                                    Description="{Binding VocabularyModeDescription}">
                         <ui:ToggleSwitch IsChecked="{Binding VocabularyEnabled, Mode=TwoWay}" />
                     </ctl:SettingRow>
                     <ctl:SettingRow Title="Your terms"

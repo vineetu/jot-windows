@@ -21,6 +21,15 @@
 > and the desk research had inferences. Three of the desk conclusions are now known to be wrong:
 > the Portuguese checkpoint's licence (§2), the casing trap being "new" (§6.2), and small
 > vocabularies being "a feature, not a defect" (§6.3). Read §13 before acting on anything above it.
+>
+> ⚠️ **E5 HAS BEEN RUN, and §8's recommendation is partly superseded** —
+> [`vocabulary-corrector-vs-spotter.md`](vocabulary-corrector-vs-spotter.md), 1041 FLEURS clips
+> through the shipping pipeline. The spotter's marginal value is **large**, not small (43.9 % vs
+> 36.9 % recall, and *fewer* false applies), so §8's "if the margin is small, stop" branch does not
+> fire. The model-free path shipped anyway for the 20 non-English gate languages, where it goes from
+> 0 % to 34–37 %. The biggest finding is in neither column: **29 % of missed terms sit beyond the
+> gate's own 0.45 plausibility ceiling**, the spotter already hears more than half of them, and the
+> gate applies none — that ceiling, not a second checkpoint, is the highest-value thing to work on.
 
 ---
 

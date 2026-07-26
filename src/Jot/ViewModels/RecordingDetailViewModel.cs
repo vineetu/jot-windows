@@ -213,11 +213,16 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
             return "Custom vocabulary is off — turn it on in Settings to use this.";
         if (Transcription.Nemotron.NemotronLocales.Normalize(s.Language)
                 .Equals(Transcription.Nemotron.NemotronLocales.AutoCode, StringComparison.OrdinalIgnoreCase))
-            return "Saved. Vocabulary needs your language set to English — it's on Auto detect.";
-        if (!Jot.Vocabulary.VocabularyRunner.LanguageSupported(s.Language))
-            return "Saved. Vocabulary only applies when your language is set to English.";
+            return "Saved. Vocabulary needs a language — yours is on Auto detect.";
+        Jot.Vocabulary.VocabularyRunner.VocabularyMode mode =
+            Jot.Vocabulary.VocabularyRunner.ModeFor(s.Language);
+        if (mode == Jot.Vocabulary.VocabularyRunner.VocabularyMode.Off)
+            return "Saved. Vocabulary doesn't cover this language yet.";
+        if (mode == Jot.Vocabulary.VocabularyRunner.VocabularyMode.Textual)
+            return "Future dictations will fix near-miss spellings of this term.";
         if (!_vocabulary.Spotter.IsReady)
-            return "Saved. Jot downloads the vocabulary model (about 130 MB) the first time you use it.";
+            return "Saved. Jot matches spellings now, and listens for the term once the vocabulary " +
+                   "model (about 130 MB) has downloaded.";
         return "Future dictations will prefer this spelling.";
     }
 

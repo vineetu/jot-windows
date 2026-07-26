@@ -116,17 +116,23 @@ public sealed partial class VocabularyViewModel : ObservableObject
 
     public string Subtitle =>
         "Terms Jot should prefer when it transcribes. Kept on this PC. Works best under about 100 terms."
-        + (LanguageOk ? "" : " · English only");
+        + Mode switch
+        {
+            VocabularyRunner.VocabularyMode.Acoustic => "",
+            VocabularyRunner.VocabularyMode.Textual => " · spelling matching only",
+            _ => " · not active in this language",
+        };
 
-    /// <summary>D5 — vocabulary runs only on an explicitly-selected English locale; auto-detect
-    /// normalizes to "auto" and is therefore off. Stated on this page too, so the state is visible
-    /// from the management surface and not only from Settings.</summary>
-    public bool LanguageOk => VocabularyRunner.LanguageSupported(_settings.Current.Language);
+    /// <summary>D5 — which matching path this language gets. Stated on this page too, so the state is
+    /// visible from the management surface and not only from Settings.</summary>
+    public VocabularyRunner.VocabularyMode Mode => VocabularyRunner.ModeFor(_settings.Current.Language);
+    public bool LanguageOk => Mode == VocabularyRunner.VocabularyMode.Acoustic;
 
-    /// <summary>Model state, as a one-line tertiary note under the subtitle. Never a blocker.</summary>
-    public string ModelNote => _spotter.IsReady
+    /// <summary>Model state, as a one-line tertiary note under the subtitle. Never a blocker — and
+    /// never shown outside English, where the checkpoint is not what the terms are waiting on.</summary>
+    public string ModelNote => _spotter.IsReady || !LanguageOk
         ? ""
-        : "Vocabulary model not downloaded — your terms are saved and will apply once it is.";
+        : "Vocabulary model not downloaded — Jot is matching spellings only until it is.";
     public bool HasModelNote => ModelNote.Length > 0;
 
     // MARK: - List

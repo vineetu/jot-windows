@@ -118,6 +118,7 @@ public sealed class VocabularyRunner
     private readonly CorrectionStore _corrections;
     private readonly CorrectionProvenance _provenance;
     private readonly IVocabularySpotter _spotter;
+    private readonly ITextVocabularySpotter? _corrector;
     private readonly ICommonWordsProvider _commonWords;
     private readonly IDiagnosticsSink _diagnostics;
 
@@ -128,38 +129,83 @@ public sealed class VocabularyRunner
         CorrectionProvenance provenance,
         IVocabularySpotter? spotter = null,
         ICommonWordsProvider? commonWords = null,
-        IDiagnosticsSink? diagnostics = null)
+        IDiagnosticsSink? diagnostics = null,
+        ITextVocabularySpotter? corrector = null)
     {
         _settings = settings;
         _terms = terms;
         _corrections = corrections;
         _provenance = provenance;
         _spotter = spotter ?? NoVocabularySpotter.Instance;
+        _corrector = corrector;
         _commonWords = commonWords ?? EmbeddedCommonWordsProvider.Shared;
         _diagnostics = diagnostics ?? JotLogDiagnosticsSink.Instance;
     }
 
     // MARK: - Gating
 
-    /// <summary>
-    /// D5 · the spotter checkpoint is English-only, so vocabulary runs ONLY on an explicitly-selected
-    /// English locale. Auto-detect normalizes to "auto" and is therefore OFF: both transcribers throw
-    /// the model's <c>&lt;xx-YY&gt;</c> locale token away, so there is no per-recording resolved
-    /// language to gate on. Running the English spotter on other audio is actively harmful, not
-    /// merely useless — the shipped Spanish incident was vocab ["Lisa"] clobbering "lista".
-    ///
-    /// Precedent: <c>TextPipeline</c> already punts on "auto" the same way.
-    /// </summary>
-    public static bool LanguageSupported(string? language) =>
-        NemotronLocales.Normalize(language).StartsWith("en", StringComparison.OrdinalIgnoreCase);
+    /// <summary>What a language can have. Auto-detect is <see cref="Off"/> in both: the transcribers
+    /// throw the model's <c>&lt;xx-YY&gt;</c> locale token away, so there is no per-recording resolved
+    /// language to gate on.</summary>
+    public enum VocabularyMode
+    {
+        /// <summary>No common-word list ships for this language, so the gate's over-correction brake
+        /// would be absent. Partial enablement is worse than off — the shipped Spanish incident was
+        /// vocab ["Lisa"] clobbering "lista", and the brake is what stops it.</summary>
+        Off,
 
-    /// <summary>Master toggle ON, at least one term, and an explicitly-selected English locale. Model
+        /// <summary>Spelling-only: <see cref="VocabularyCorrector"/> matches terms against the finished
+        /// transcript. No model, no download, no licence.</summary>
+        Textual,
+
+        /// <summary>Sound-alike: the CTC spotter hears the term in the audio. English only — that is
+        /// what the checkpoint is trained on, and running it on other audio is actively harmful.</summary>
+        Acoustic,
+    }
+
+    /// <summary>
+    /// D5, re-derived per language. English gets the acoustic spotter; every other language with a
+    /// frequency list gets the textual corrector; the rest stay off.
+    ///
+    /// MEASURED before widening this (1041 FLEURS clips, docs/plans/vocabulary-corrector-vs-spotter.md):
+    /// the textual path recovers 34–37 % of the terms the engine got wrong at 0.27 false applies per
+    /// 1000 words on a realistic 25-term list. That is the whole feature for 20 languages where the
+    /// alternative is nothing at all. It is deliberately NOT stacked on top of the spotter in English —
+    /// there it bought +5.8 points of recall for +6 false applies, and precision wins that trade.
+    /// </summary>
+    public static VocabularyMode ModeFor(string? language)
+    {
+        string locale = NemotronLocales.Normalize(language);
+        if (locale.StartsWith("en", StringComparison.OrdinalIgnoreCase)) return VocabularyMode.Acoustic;
+        return EmbeddedCommonWordsProvider.ResourceFor(locale) is null
+            ? VocabularyMode.Off
+            : VocabularyMode.Textual;
+    }
+
+    /// <summary>Whether the ACOUSTIC spotter may run — still the English-only question, and still what
+    /// the 132 MB download offer and the sound-alike copy key on.</summary>
+    public static bool LanguageSupported(string? language) =>
+        ModeFor(language) == VocabularyMode.Acoustic;
+
+    /// <summary>What this runner can actually deliver: the language's mode, narrowed by the detection
+    /// sources it was given. A runner built without a corrector cannot serve a textual-only language,
+    /// and saying so here is what keeps <see cref="ShouldRun"/> honest.</summary>
+    public VocabularyMode Mode
+    {
+        get
+        {
+            VocabularyMode mode = ModeFor(_settings.Current.Language);
+            return mode == VocabularyMode.Textual && _corrector is null ? VocabularyMode.Off : mode;
+        }
+    }
+
+    /// <summary>Master toggle ON, at least one term, and a language something can run on. Model
     /// readiness is deliberately NOT here: a term list with no model yet must still save and still
     /// short-circuit silently, which <see cref="Run"/> does.</summary>
     public bool ShouldRun =>
         _settings.Current.VocabularyEnabled
         && _terms.Terms.Count > 0
-        && LanguageSupported(_settings.Current.Language);
+        && Mode != VocabularyMode.Off;
 
     // MARK: - The run
 
@@ -175,13 +221,20 @@ public sealed class VocabularyRunner
     {
         if (!ShouldRun || string.IsNullOrWhiteSpace(text)) return Outcome.Unchanged(text);
 
-        // Model still downloading / never downloaded / failed to prepare: no spotter, no
-        // corrections, no error. The Settings row is where that state is explained.
-        if (!_spotter.IsReady) return Outcome.Unchanged(text);
-
         List<VocabularyTerm> terms = [.. _terms.Terms];
+
+        // ONE source per dictation, never both. In English the spotter wins outright — it recovered
+        // 43.9 % of missed terms to the corrector's 36.9 %, with FEWER false applies — and stacking the
+        // corrector on top traded roughly one recovery per one corrupted word, which is the wrong side
+        // of D2. Everywhere else the corrector is the only source there is.
+        //
+        // The no-model case is the one behaviour change: English with the checkpoint absent used to do
+        // nothing at all, and now falls back to spelling matches through the same gate. Still silent,
+        // still no error — just no longer inert while 132 MB downloads.
         IReadOnlyList<VocabularyGate.Detection> detections =
-            _spotter.Spot(samples, sampleRate, terms, ct);
+            Mode == VocabularyMode.Acoustic && _spotter.IsReady
+                ? _spotter.Spot(samples, sampleRate, terms, ct)
+                : _corrector?.Spot(text, terms, duration.TotalSeconds, ct) ?? [];
         if (detections.Count == 0) return Outcome.Unchanged(text);
 
         ct.ThrowIfCancellationRequested();

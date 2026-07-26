@@ -351,14 +351,19 @@ public class VocabularyReviewTests : IDisposable
     // MARK: - Language honesty
 
     [Fact]
-    public void NonEnglish_AnswersTheQuestionWhereItIsAsked()
+    public void AnUncoveredLanguage_AnswersTheQuestionWhereItIsAsked()
     {
+        // Spanish no longer belongs here: it runs the model-free corrector, so "Jot didn't apply your
+        // terms" would be a lie. The note is now for languages with no frequency list, plus Auto.
         Harness h = Build();
         h.Settings.Current.Language = "es-ES";
         h.Review.Reload();
+        Assert.False(h.Review.ShowLanguageNote);
 
+        h.Settings.Current.Language = "ja-JP";
+        h.Review.Reload();
         Assert.True(h.Review.ShowLanguageNote);
-        Assert.Contains("English only", h.Review.LanguageNote, StringComparison.Ordinal);
+        Assert.Contains("doesn't cover this language", h.Review.LanguageNote, StringComparison.Ordinal);
 
         h.Settings.Current.Language = "auto";
         h.Review.Reload();
@@ -455,9 +460,11 @@ public class VocabularyReviewTests : IDisposable
     /// about — every one of these is a state where the term IS stored and does nothing.</summary>
     [Theory]
     [InlineData("en-US", false, "Custom vocabulary is off — turn it on in Settings to use this.")]
-    [InlineData("es-ES", true, "Saved. Vocabulary only applies when your language is set to English.")]
-    [InlineData("auto", true, "Saved. Vocabulary needs your language set to English — it's on Auto detect.")]
-    [InlineData("en-US", true, "Saved. Jot downloads the vocabulary model (about 130 MB) the first time you use it.")]
+    // Spanish is no longer a "does nothing" state — it gets the model-free corrector. Japanese still is.
+    [InlineData("es-ES", true, "Future dictations will fix near-miss spellings of this term.")]
+    [InlineData("ja-JP", true, "Saved. Vocabulary doesn't cover this language yet.")]
+    [InlineData("auto", true, "Saved. Vocabulary needs a language — yours is on Auto detect.")]
+    [InlineData("en-US", true, "Saved. Jot matches spellings now, and listens for the term once the vocabulary model (about 130 MB) has downloaded.")]
     public void AddToVocabularyStatus_SaysWhatWillActuallyHappen(string language, bool enabled, string expected)
     {
         var item = new RecordingItem { Transcript = "anything" };

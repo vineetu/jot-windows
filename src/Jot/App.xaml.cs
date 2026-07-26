@@ -2474,6 +2474,9 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<ISettingsStore>()));
         services.AddSingleton<Vocabulary.IVocabularySpotter>(sp =>
             sp.GetRequiredService<Vocabulary.CtcVocabularySpotter>());
+        // The model-free detection source. No model, no download, no state — hence a plain singleton
+        // next to the spotter rather than anything with a lifecycle.
+        services.AddSingleton<Vocabulary.ITextVocabularySpotter, Vocabulary.VocabularyCorrector>();
         services.AddSingleton<Vocabulary.VocabularyRunner>(sp => new Vocabulary.VocabularyRunner(
             sp.GetRequiredService<ISettingsStore>(),
             sp.GetRequiredService<Vocabulary.VocabularyStore>(),
@@ -2481,7 +2484,8 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<Vocabulary.CorrectionProvenance>(),
             sp.GetRequiredService<Vocabulary.IVocabularySpotter>(),
             Vocabulary.EmbeddedCommonWordsProvider.Shared,
-            Vocabulary.JotLogDiagnosticsSink.Instance));
+            Vocabulary.JotLogDiagnosticsSink.Instance,
+            sp.GetRequiredService<Vocabulary.ITextVocabularySpotter>()));
 
         services.AddSingleton<RecorderController>();
         services.AddSingleton<Rewrite.RewriteController>();

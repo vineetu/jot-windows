@@ -122,12 +122,12 @@ public sealed partial class VocabularyReviewViewModel : ObservableObject
         _item.Kind == RecordingKind.Dictation
         && _recordCount == 0
         && _terms.Terms.Count > 0
-        && !VocabularyRunner.LanguageSupported(_settings.Current.Language);
+        && VocabularyRunner.ModeFor(_settings.Current.Language) == VocabularyRunner.VocabularyMode.Off;
 
     public string LanguageNote =>
         NemotronLocales_IsAuto()
-            ? "Custom vocabulary needs your language set to English — it's on Auto detect."
-            : "Custom vocabulary works in English only right now, so Jot didn't apply your terms here.";
+            ? "Custom vocabulary needs a language, not Auto detect — so Jot didn't apply your terms here."
+            : "Custom vocabulary doesn't cover this language yet, so Jot didn't apply your terms here.";
 
     private bool NemotronLocales_IsAuto() =>
         Transcription.Nemotron.NemotronLocales.Normalize(_settings.Current.Language)

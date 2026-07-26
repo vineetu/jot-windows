@@ -665,24 +665,52 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string VocabularyTermCountText =>
         VocabularyTermCount == 1 ? "1 term" : $"{VocabularyTermCount} terms";
 
-    /// <summary>D5 · the spotter is English-only AND there is no per-recording resolved language, so
-    /// vocabulary runs only on an explicitly-selected English locale. False ⇒ the banner below shows
-    /// and vocabulary does nothing; the toggle and the term list stay usable either way, because
-    /// people switch languages and silently locking their data behind one is worse than saying so.</summary>
+    /// <summary>D5 · whether the SOUND-ALIKE (acoustic) path may run. Still the English-only question:
+    /// it is what the 132 MB download offer keys on, and what the spotter session's lifecycle keys on.
+    /// It is NO LONGER the same as "vocabulary works here" — see <see cref="VocabularyMode"/>.</summary>
     public bool VocabularyLanguageOk => VocabularyRunner.LanguageSupported(Language);
-    public bool VocabularyLanguageBlocked => !VocabularyLanguageOk;
+
+    public VocabularyRunner.VocabularyMode VocabularyMode => VocabularyRunner.ModeFor(Language);
+
+    /// <summary>The banner fires only when vocabulary can do NOTHING — Auto detect, or a language with
+    /// no everyday-word list, where the gate would lose the brake that stops a term clobbering an
+    /// ordinary word. Spelling-only languages are a working feature and get a badge, not a warning.
+    /// The toggle and the term list stay usable either way: people switch languages, and silently
+    /// locking their data behind one is worse than saying so.</summary>
+    public bool VocabularyLanguageBlocked => VocabularyMode == VocabularyRunner.VocabularyMode.Off;
     public bool VocabularyLanguageIsAuto =>
         NemotronLocales.Normalize(Language).Equals(NemotronLocales.AutoCode, StringComparison.OrdinalIgnoreCase);
 
     public string VocabularyLanguageTitle => VocabularyLanguageIsAuto
-        ? "Custom vocabulary needs your language set to English."
-        : "Custom vocabulary works in English only right now.";
+        ? "Custom vocabulary needs a language, not Auto detect."
+        : $"Custom vocabulary doesn't cover {LanguageLabel(Language)} yet.";
 
     public string VocabularyLanguageMessage => VocabularyLanguageIsAuto
         ? "Your language is set to Auto detect, so Jot can't tell which language you're speaking. " +
-          "Set it to English in Settings → Language to use your terms. Your list is saved either way."
-        : $"Your language is set to {LanguageLabel(Language)}, so Jot won't apply your terms. " +
-          "Your list is saved and will work as soon as you switch to English.";
+          "Pick one in Settings → Language to use your terms. Your list is saved either way."
+        : $"Jot has no everyday-word list for {LanguageLabel(Language)}, and without one it can't tell " +
+          "your term from an ordinary word — so it leaves your dictations alone. Your list is saved.";
+
+    /// <summary>The badge next to the section title. It has to state the limit for the users the
+    /// feature DOES work for, because the InfoBar above only appears when it doesn't.</summary>
+    public string VocabularyModeBadge => VocabularyMode switch
+    {
+        VocabularyRunner.VocabularyMode.Acoustic => "Experimental · sound-alike matching",
+        VocabularyRunner.VocabularyMode.Textual => "Experimental · spelling matching",
+        _ => "Experimental",
+    };
+
+    private const string VocabularyLead =
+        "Words Jot should get right — names, products, jargon. Runs entirely on this PC. ";
+
+    public string VocabularyModeDescription => VocabularyMode switch
+    {
+        VocabularyRunner.VocabularyMode.Acoustic => VocabularyLead +
+            "In English, Jot listens for your terms in the audio as well as checking the spelling.",
+        VocabularyRunner.VocabularyMode.Textual => VocabularyLead +
+            "Outside English, Jot fixes near-miss spellings of your terms; it can't listen for them.",
+        _ => VocabularyLead + "Your current language isn't covered — see above.",
+    };
 
     /// <summary>Model state, as the user's problem rather than ours. The headline is deliberately
     /// "Vocabulary unavailable — …", not "Download failed": the same state is reached by a tokenizer
@@ -695,8 +723,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     public bool VocabularyModelReady => _spotter.IsReady;
 
     /// <summary>The warning bar's gate. A running download is NOT "unavailable" — the row underneath is
-    /// already showing MB-of-MB progress, and a warning sitting on top of it reads as a failure.</summary>
-    public bool VocabularyModelUnavailable => !VocabularyModelReady && !_vocabularyDownload.IsDownloading;
+    /// already showing MB-of-MB progress, and a warning sitting on top of it reads as a failure. Nor is
+    /// a language that never uses the model: warning a Spanish user about a missing English checkpoint
+    /// would be advertising a download that would do nothing for them.</summary>
+    public bool VocabularyModelUnavailable =>
+        VocabularyLanguageOk && !VocabularyModelReady && !_vocabularyDownload.IsDownloading;
 
     /// <summary>The InfoBar's BODY only — the "Vocabulary unavailable" headline lives in its Title, so
     /// repeating it here printed the phrase twice on screen.</summary>
@@ -718,6 +749,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(VocabularyTermCount));
         OnPropertyChanged(nameof(VocabularyTermCountText));
         OnPropertyChanged(nameof(VocabularyLanguageOk));
+        OnPropertyChanged(nameof(VocabularyMode));
+        OnPropertyChanged(nameof(VocabularyModeBadge));
+        OnPropertyChanged(nameof(VocabularyModeDescription));
         OnPropertyChanged(nameof(VocabularyLanguageBlocked));
         OnPropertyChanged(nameof(VocabularyLanguageIsAuto));
         OnPropertyChanged(nameof(VocabularyLanguageTitle));

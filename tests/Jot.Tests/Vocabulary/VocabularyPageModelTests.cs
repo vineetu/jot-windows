@@ -382,21 +382,32 @@ public class VocabularyPageModelTests
     // MARK: - Header honesty
 
     [Fact]
-    public void Subtitle_SaysEnglishOnlyWhenTheLanguageRulesVocabularyOut()
+    public void Subtitle_SaysWhichMatchingTheLanguageActuallyGets()
     {
+        // Was "· English only" for everything non-English. Spanish now gets the model-free corrector
+        // (docs/plans/vocabulary-corrector-vs-spotter.md), so saying "English only" there would be
+        // false; only a language with no frequency list is genuinely inactive.
         (VocabularyViewModel vm, _, _, FakeSettingsStore settings) = Build();
-        Assert.DoesNotContain("English only", vm.Subtitle, StringComparison.Ordinal);
+        Assert.DoesNotContain("·", vm.Subtitle, StringComparison.Ordinal);
 
         settings.Current.Language = "es-ES";
-        Assert.Contains("· English only", vm.Subtitle, StringComparison.Ordinal);
+        Assert.Contains("· spelling matching only", vm.Subtitle, StringComparison.Ordinal);
+
+        settings.Current.Language = "ja-JP";
+        Assert.Contains("· not active in this language", vm.Subtitle, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ModelNote_ExplainsThatTermsAreStillSaved()
     {
-        (VocabularyViewModel vm, _, _, _) = Build();
+        (VocabularyViewModel vm, _, _, FakeSettingsStore settings) = Build();
         Assert.True(vm.HasModelNote);
-        Assert.Equal("Vocabulary model not downloaded — your terms are saved and will apply once it is.",
+        Assert.Equal("Vocabulary model not downloaded — Jot is matching spellings only until it is.",
             vm.ModelNote);
+
+        // Outside English the checkpoint is not what the terms are waiting on, so advertising it
+        // would point the user at a 132 MB download that would do nothing for them.
+        settings.Current.Language = "es-ES";
+        Assert.False(vm.HasModelNote);
     }
 }
