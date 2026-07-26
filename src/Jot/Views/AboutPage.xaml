@@ -14,7 +14,9 @@
                     <TextBlock Text="Jot for Windows" Style="{DynamicResource SubtitleTextBlockStyle}" />
                     <TextBlock Text="Free, on-device dictation. Press a key, speak, and it's pasted at your cursor."
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                    <TextBlock Text="Version 0.1.0 (preview)" Margin="0,2,0,0" FontSize="12"
+                    <!-- Filled at runtime from the assembly version — a hardcoded string here shipped
+                         "0.1.0 (preview)" to the Store on a 1.2.1 build. -->
+                    <TextBlock x:Name="VersionText" Margin="0,2,0,0" FontSize="12"
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
                 </StackPanel>
             </StackPanel>
@@ -53,6 +55,21 @@
                     </StackPanel>
                     <TextBlock x:Name="StatsText" Margin="0,8,0,0" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </ui:Card>
+
+            <!-- Attribution, not polish: both on-device models are NVIDIA checkpoints under CC-BY-4.0 and
+                 Jot re-hosts them on its own GitHub release, which makes this redistribution. Naming BOTH
+                 is the licence term. Do not delete this card while either model ships. -->
+            <ui:Card Margin="0,16,0,0">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="Certificate24" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                        <TextBlock Text="Models &amp; licences" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="Speech is transcribed by NVIDIA Nemotron 3.5 ASR Streaming. Custom vocabulary uses NVIDIA Parakeet TDT-CTC 110M. Both are used under the Creative Commons Attribution 4.0 licence (CC-BY-4.0), run entirely on this PC, and are downloaded from Jot's own releases." />
                 </StackPanel>
             </ui:Card>
 

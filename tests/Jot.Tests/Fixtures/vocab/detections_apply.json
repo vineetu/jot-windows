@@ -1,0 +1,42 @@
+[
+  {
+    "name": "spot-applies-oov-name",
+    "transcript": "talk to shriram",
+    "totalAudioDuration": 1.0,
+    "detections": [{"term": "Sriram", "aliases": [], "score": 0.9, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "talk to Sriram",
+    "expectProposals": [{"originalWord": "shriram", "outcome": "applied", "askCandidate": true}]
+  },
+  {
+    "name": "spot-blocks-common-word",
+    "transcript": "the cloud today",
+    "totalAudioDuration": 1.0,
+    "detections": [{"term": "Claude", "aliases": [], "score": 0.9, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "the cloud today",
+    "expectProposals": [{"originalWord": "cloud", "outcome": "kept", "askCandidate": true}]
+  },
+  {
+    "name": "spot-preserves-edge-punctuation",
+    "transcript": "call shriram, then rest",
+    "totalAudioDuration": 1.0,
+    "detections": [{"term": "Sriram", "aliases": [], "score": 0.9, "startTime": 0.2, "endTime": 0.3}],
+    "expectText": "call Sriram, then rest",
+    "expectProposals": [{"originalWord": "shriram,", "outcome": "applied"}]
+  },
+  {
+    "name": "spot-identity-is-noop",
+    "transcript": "talk to sriram",
+    "totalAudioDuration": 1.0,
+    "detections": [{"term": "Sriram", "aliases": [], "score": 0.9, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "talk to sriram",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-implausible-skips",
+    "transcript": "talk to vikram",
+    "totalAudioDuration": 1.0,
+    "detections": [{"term": "Sriram", "aliases": [], "score": 0.9, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "talk to vikram",
+    "expectProposalCount": 0
+  }
+]

@@ -1,0 +1,52 @@
+[
+  {
+    "name": "lowercase-basic",
+    "input": "Jamy",
+    "expected": "jamy"
+  },
+  {
+    "name": "whitespace-run-collapse",
+    "input": "sri   ram",
+    "expected": "sri ram"
+  },
+  {
+    "name": "outer-punct-trim",
+    "input": "(Sriram).",
+    "expected": "sriram"
+  },
+  {
+    "name": "apostrophe-internal-preserved",
+    "input": "can't",
+    "expected": "can't"
+  },
+  {
+    "name": "collision-guard-cant",
+    "input": "cant",
+    "expected": "cant"
+  },
+  {
+    "name": "space-internal-preserved",
+    "input": "a part",
+    "expected": "a part"
+  },
+  {
+    "name": "collision-guard-apart",
+    "input": "apart",
+    "expected": "apart"
+  },
+  {
+    "name": "nfc-precompose-combining-acute",
+    "input": "cafe\u0301",
+    "expected": "caf\u00e9"
+  },
+  {
+    "name": "turkish-I-locale-invariant",
+    "input": "I",
+    "expected": "i"
+  },
+  {
+    "name": "outer-trim-with-internal-comma",
+    "input": "  Hello, World!  ",
+    "expected": "hello, world"
+  }
+]

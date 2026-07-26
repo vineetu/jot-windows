@@ -113,7 +113,7 @@ walk the flow again without reinstalling.
 ## 2. Dictation & Recording
 
 ### 2.1 Toggle Recording
-Pressing the global hotkey (default **Alt + Space**) starts recording; pressing it again stops and
+Pressing the global hotkey (default **Ctrl + Shift + Space**) starts recording; pressing it again stops and
 transcribes. The same toggle is available from the [tray menu](#102-system-tray) and from a record button
 in [Recents](#61-single-library-surface). While recording, the [status pill](#41-floating-status-pill)
 shows live state.
@@ -166,7 +166,10 @@ best-validated language; several others are confirmed working, with a lower-conf
 ### 3.4 In-App Model Download
 On first use the speech model is fetched from within Settings, with a progress bar and an install-state
 row. The model is stored under the user's data folder (kept off the system drive by default), not the
-system drive.
+system drive. Three models use the same downloader and the same row shape: the required speech model, the
+optional faster GPU model, and the optional [vocabulary](#95-custom-vocabulary) model. Transfers resume
+after an interruption, retry transient failures, check free space up front, and verify a SHA-256 per file
+before anything is treated as installed; a failed attempt keeps its reason on screen and offers a retry.
 
 ### 3.5 CPU / GPU Processing
 By default the engine runs on the CPU. A Settings toggle switches it to a GPU (DirectML) backend, which
@@ -358,10 +361,9 @@ auto-paste / press-Enter / keep-clipboard, [per-event sounds](#26-per-event-soun
 [reset controls](#94-reset--erase).
 
 ### 9.2 Show Advanced Features
-A master switch reveals the more advanced surfaces — Ask Jot, extra shortcuts, and the vocabulary
-surface. The [AI provider/key/cleanup fields](#71-bring-your-own-provider) and
-[Vocabulary](#95-custom-vocabulary) additionally stay hidden until they actually work, so the app never
-shows a control that would fail.
+A master switch reveals the more advanced surfaces — Ask Jot, extra shortcuts, and
+[Vocabulary](#95-custom-vocabulary). The [AI provider/key/cleanup fields](#71-bring-your-own-provider)
+additionally stay hidden until they actually work, so the app never shows a control that would fail.
 
 ### 9.3 Data Location & Retention
 Recordings and the transcript library live in a user-chosen data folder; by default Jot picks the fixed
@@ -374,16 +376,26 @@ A Reset group offers "Reset settings" and "Erase all data," each behind a confir
 "reset permissions" action — Windows manages microphone access in OS Settings, with no in-app analog.)
 
 ### 9.5 Custom Vocabulary
-**Built-but-hidden**: a custom-terms surface exists in the code but is non-functional — the term list is
-in-memory only, never persisted or fed to the decoder — so it is hidden rather than shown broken. It needs
-real persistence plus decoder biasing before it ships.
+**Experimental, default off.** Terms Jot should spell your way — names, products, jargon — saved on this
+PC and edited on their own page (Settings → Vocabulary → **Manage…**). After each dictation an on-device
+keyword spotter finds where a term was actually spoken and a safety gate decides whether to replace the
+word, so a term can never silently overwrite something the transcriber already got right. A small mark on
+the pill says when a term was used, and the recording's detail view lets you pick the word you meant.
+
+The feature needs an extra on-device model (~126 MB). Jot **asks before fetching it** the first time the
+toggle is switched on, and the Vocabulary section carries its own download row (status, progress, retry)
+for anyone who declines or wants it later. Until the model is present, switching the toggle on saves your
+terms and changes nothing — the section says so, and dictation is never affected either way.
+
+One honest limit remains: it applies only when the language is set to **English** (not auto-detect). Two
+Help tours cover it — **Custom vocabulary** and **Fix a word** (the right-click gesture on a transcript).
 
 ---
 
 ## 10. Global Shortcuts, Tray & Window
 
 ### 10.1 Global Hotkeys & Rebinding
-Jot registers a system-wide toggle hotkey (default **Alt + Space**) plus the
+Jot registers a system-wide toggle hotkey (default **Ctrl + Shift + Space**) plus the
 [stop-and-save Esc](#23-stop--save-with-esc) while recording. Hotkeys can be rebound on the Shortcuts
 page. **Caveat**: only Toggle recording and stop-Esc are active today; Paste-last, Rewrite, and
 Rewrite-with-voice are **not registered** because those features aren't wired

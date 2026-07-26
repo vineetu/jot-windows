@@ -1,0 +1,188 @@
+[
+  {
+    "name": "jamy-disaster",
+    "transcript": "my name is important",
+    "replacements": [{"originalWord": "name", "replacementWord": "Jamy", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Jamy"],
+    "expectText": "my name is important",
+    "expectOutcomes": {"name": "kept"}
+  },
+  {
+    "name": "use-survives",
+    "transcript": "please use Claude code now",
+    "replacements": [{"originalWord": "use Claude code", "replacementWord": "Claude Code", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude Code"],
+    "expectText": "please use Claude Code now",
+    "expectOutcomes": {}
+  },
+  {
+    "name": "shifted-span-blocks",
+    "transcript": "Claude Claude code here",
+    "replacements": [{"originalWord": "Claude Claude", "replacementWord": "Claude Code", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude Code"],
+    "expectText": "Claude Claude code here",
+    "expectOutcomes": {"claude claude": "kept"}
+  },
+  {
+    "name": "dedup-absorb",
+    "transcript": "open clawed code now",
+    "replacements": [{"originalWord": "clawed", "replacementWord": "Claude Code", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude Code"],
+    "aliases": {"claude code": ["clawed"]},
+    "expectText": "open Claude Code now",
+    "expectOutcomes": {}
+  },
+  {
+    "name": "repeated-occurrence-blocks",
+    "transcript": "clawed here and clawed there",
+    "replacements": [{"originalWord": "clawed", "replacementWord": "Claude", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude"],
+    "expectText": "clawed here and clawed there",
+    "expectOutcomes": {"clawed": "kept"}
+  },
+  {
+    "name": "repeated-all-proposed-applies",
+    "transcript": "korvus here and korvus there",
+    "replacements": [
+      {"originalWord": "korvus", "replacementWord": "Corvus", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0},
+      {"originalWord": "korvus", "replacementWord": "Corvus", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}
+    ],
+    "allTerms": ["Corvus"],
+    "expectText": "Corvus here and Corvus there",
+    "expectOutcomes": {}
+  },
+  {
+    "name": "dedup-punct",
+    "transcript": "open clawed code, then rest",
+    "replacements": [{"originalWord": "clawed", "replacementWord": "Claude Code", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude Code"],
+    "aliases": {"claude code": ["clawed"]},
+    "expectText": "open Claude Code, then rest",
+    "expectOutcomes": {}
+  },
+  {
+    "name": "alternates-preserved",
+    "transcript": "let me check cloud code settings",
+    "replacements": [{"originalWord": "cloud", "replacementWord": "Claude", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude", "Claude Code"],
+    "expectText": "let me check cloud code settings",
+    "expectOutcomes": {"cloud": "kept"},
+    "expectProposals": [{"originalWord": "cloud", "alternates": [{"term": "Claude Code", "find": "cloud code"}]}]
+  },
+  {
+    "name": "mid-span-extra-blocks",
+    "transcript": "the Claude big code thing",
+    "replacements": [{"originalWord": "Claude big code", "replacementWord": "Claude Code", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude Code"],
+    "expectText": "the Claude big code thing",
+    "expectOutcomes": {"claude big code": "kept"}
+  },
+  {
+    "name": "narrowed-identity-decides",
+    "transcript": "alpha beta cloud code end",
+    "replacements": [{"originalWord": "alpha beta cloud code", "replacementWord": "Claude Code", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude Code"],
+    "expectText": "alpha beta Claude Code end",
+    "expectOutcomes": {}
+  },
+  {
+    "name": "narrowed-punct-survives",
+    "transcript": "please use cloud code, thanks",
+    "replacements": [{"originalWord": "use cloud code", "replacementWord": "Claude Code", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude Code"],
+    "expectText": "please use Claude Code, thanks",
+    "expectOutcomes": {}
+  },
+  {
+    "name": "widened-demotion-blocks",
+    "transcript": "open clawed code now",
+    "replacements": [{"originalWord": "clawed", "replacementWord": "Claude Code", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude Code"],
+    "aliases": {"claude code": ["clawed"]},
+    "overrides": [{"originalWord": "clawed code", "term": "Claude Code", "net": -1, "alwaysReplace": false}],
+    "expectText": "open clawed code now",
+    "expectOutcomes": {"clawed code": "kept"}
+  },
+  {
+    "name": "alternate-find-exact-slice",
+    "transcript": "check cloud  code here",
+    "replacements": [{"originalWord": "cloud", "replacementWord": "Claude", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude", "Claude Code"],
+    "expectText": "check cloud  code here",
+    "expectOutcomes": {"cloud": "kept"},
+    "expectProposals": [{"originalWord": "cloud", "alternates": [{"term": "Claude Code", "find": "cloud  code"}]}]
+  },
+  {
+    "name": "merge-shape-classified",
+    "transcript": "my name is sri ram ok",
+    "replacements": [{"originalWord": "sri ram", "replacementWord": "Sriram", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Sriram"],
+    "expectText": "my name is sri ram ok",
+    "expectOutcomes": {"sri ram": "kept"},
+    "expectProposals": [{"originalWord": "sri ram", "shape": "merge"}]
+  },
+  {
+    "name": "grant-auto-applies",
+    "transcript": "the cloud is here",
+    "replacements": [{"originalWord": "cloud", "replacementWord": "Claude", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude"],
+    "overrides": [{"originalWord": "cloud", "term": "Claude", "net": 2, "alwaysReplace": true}],
+    "expectText": "the Claude is here",
+    "expectOutcomes": {"cloud": "applied"},
+    "expectProposals": [{"originalWord": "cloud", "askCandidate": false}]
+  },
+  {
+    "name": "demotion-beats-grant",
+    "transcript": "the cloud is here",
+    "replacements": [{"originalWord": "cloud", "replacementWord": "Claude", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude"],
+    "overrides": [{"originalWord": "cloud", "term": "Claude", "net": -1, "alwaysReplace": true}],
+    "expectText": "the cloud is here",
+    "expectOutcomes": {"cloud": "kept"}
+  },
+  {
+    "name": "measured-jamie-applies",
+    "transcript": "call jamie later",
+    "replacements": [{"originalWord": "jamie", "replacementWord": "Jamy", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Jamy"],
+    "expectText": "call Jamy later",
+    "expectOutcomes": {"jamie": "applied"},
+    "expectProposals": [{"originalWord": "jamie", "askCandidate": true}]
+  },
+  {
+    "name": "measured-vikram-implausible-blocks",
+    "transcript": "ask vikram now",
+    "replacements": [{"originalWord": "vikram", "replacementWord": "Sriram", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Sriram"],
+    "expectText": "ask vikram now",
+    "expectOutcomes": {"vikram": "kept"},
+    "expectProposals": [{"originalWord": "vikram", "askCandidate": false}]
+  },
+  {
+    "name": "measured-cloud-common-blocks",
+    "transcript": "the cloud today",
+    "replacements": [{"originalWord": "cloud", "replacementWord": "Claude", "shouldReplace": true, "replacementScore": 3.5, "originalScore": 0}],
+    "allTerms": ["Claude"],
+    "expectText": "the cloud today",
+    "expectOutcomes": {"cloud": "kept"},
+    "expectProposals": [{"originalWord": "cloud", "askCandidate": true}]
+  },
+  {
+    "name": "confidence-ceiling-protects-name",
+    "transcript": "shriram spoke",
+    "replacements": [{"originalWord": "shriram", "replacementWord": "Sriram", "shouldReplace": true, "replacementScore": 3.0, "originalScore": 0}],
+    "tokenTimings": [{"token": "▁shriram", "confidence": 0.99}],
+    "allTerms": ["Sriram"],
+    "expectText": "shriram spoke",
+    "expectOutcomes": {"shriram": "kept"}
+  },
+  {
+    "name": "earned-margin-overrides-ceiling",
+    "transcript": "shriram spoke",
+    "replacements": [{"originalWord": "shriram", "replacementWord": "Sriram", "shouldReplace": true, "replacementScore": 5.0, "originalScore": 0}],
+    "tokenTimings": [{"token": "▁shriram", "confidence": 0.99}],
+    "allTerms": ["Sriram"],
+    "expectText": "Sriram spoke",
+    "expectOutcomes": {"shriram": "applied"}
+  }
+]

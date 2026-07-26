@@ -1,0 +1,116 @@
+[
+  {
+    "name": "applied-record-is-worth-asking",
+    "records": [
+      {"originalWord": "jamie", "term": "Jamy", "decision": "APPLY", "outcome": "applied", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 5, "publishedStart": 0, "publishedLength": 4}
+    ],
+    "overrides": [],
+    "keyboardSuppressed": [],
+    "mergeAsked": [],
+    "expectSelected": [{"originalWord": "jamie", "isMergeTeach": false}]
+  },
+  {
+    "name": "kept-non-merge-zero-prior-not-asked",
+    "records": [
+      {"originalWord": "cloud", "term": "Claude", "decision": "BLOCK", "outcome": "kept", "confidence": 0.85, "margin": 3.5, "unsure": true, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 5, "publishedStart": 0, "publishedLength": 5}
+    ],
+    "overrides": [],
+    "keyboardSuppressed": [],
+    "mergeAsked": [],
+    "expectSelected": []
+  },
+  {
+    "name": "prior-desc-rank-and-maxasks-cap",
+    "records": [
+      {"originalWord": "aaa", "term": "Aaa", "decision": "APPLY", "outcome": "applied", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 3, "publishedStart": 0, "publishedLength": 3},
+      {"originalWord": "bbb", "term": "Bbb", "decision": "APPLY", "outcome": "applied", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 1, "originalStart": 10, "originalLength": 3, "publishedStart": 10, "publishedLength": 3},
+      {"originalWord": "ccc", "term": "Ccc", "decision": "APPLY", "outcome": "applied", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 2, "originalStart": 20, "originalLength": 3, "publishedStart": 20, "publishedLength": 3},
+      {"originalWord": "ddd", "term": "Ddd", "decision": "APPLY", "outcome": "applied", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 3, "originalStart": 30, "originalLength": 3, "publishedStart": 30, "publishedLength": 3}
+    ],
+    "overrides": [
+      {"originalWord": "aaa", "term": "Aaa", "net": 3, "alwaysReplace": false},
+      {"originalWord": "bbb", "term": "Bbb", "net": 2, "alwaysReplace": false},
+      {"originalWord": "ccc", "term": "Ccc", "net": 1, "alwaysReplace": false},
+      {"originalWord": "ddd", "term": "Ddd", "net": 0, "alwaysReplace": false}
+    ],
+    "keyboardSuppressed": [],
+    "mergeAsked": [],
+    "expectSelected": [
+      {"originalWord": "aaa", "isMergeTeach": false},
+      {"originalWord": "bbb", "isMergeTeach": false},
+      {"originalWord": "ccc", "isMergeTeach": false}
+    ]
+  },
+  {
+    "name": "keyboard-suppressed-excluded",
+    "records": [
+      {"originalWord": "cloud", "term": "Claude", "decision": "APPLY", "outcome": "applied", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 5, "publishedStart": 0, "publishedLength": 6}
+    ],
+    "overrides": [],
+    "keyboardSuppressed": ["cloud|claude"],
+    "mergeAsked": [],
+    "expectSelected": []
+  },
+  {
+    "name": "always-replace-grant-excluded",
+    "records": [
+      {"originalWord": "cloud", "term": "Claude", "decision": "OVERRIDE", "outcome": "applied", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 5, "publishedStart": 0, "publishedLength": 6}
+    ],
+    "overrides": [{"originalWord": "cloud", "term": "Claude", "net": 2, "alwaysReplace": true}],
+    "keyboardSuppressed": [],
+    "mergeAsked": [],
+    "expectSelected": []
+  },
+  {
+    "name": "merge-teach-one-shot-eligible",
+    "records": [
+      {"originalWord": "sri ram", "term": "Sriram", "decision": "BLOCK", "outcome": "kept", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 7, "publishedStart": 0, "publishedLength": 7, "shape": "merge"}
+    ],
+    "overrides": [],
+    "keyboardSuppressed": [],
+    "mergeAsked": [],
+    "expectSelected": [{"originalWord": "sri ram", "isMergeTeach": true}]
+  },
+  {
+    "name": "merge-teach-already-spent-excluded",
+    "records": [
+      {"originalWord": "sri ram", "term": "Sriram", "decision": "BLOCK", "outcome": "kept", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 7, "publishedStart": 0, "publishedLength": 7, "shape": "merge"}
+    ],
+    "overrides": [],
+    "keyboardSuppressed": [],
+    "mergeAsked": ["sri ram|sriram"],
+    "expectSelected": []
+  },
+  {
+    "name": "mixed-payload-drops-merge-teach",
+    "records": [
+      {"originalWord": "jamie", "term": "Jamy", "decision": "APPLY", "outcome": "applied", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 5, "publishedStart": 0, "publishedLength": 4},
+      {"originalWord": "sri ram", "term": "Sriram", "decision": "BLOCK", "outcome": "kept", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 1, "originalStart": 20, "originalLength": 7, "publishedStart": 20, "publishedLength": 7, "shape": "merge"}
+    ],
+    "overrides": [],
+    "keyboardSuppressed": [],
+    "mergeAsked": [],
+    "expectSelected": [{"originalWord": "jamie", "isMergeTeach": false}]
+  },
+  {
+    "name": "merge-teach-pair-deduped",
+    "records": [
+      {"originalWord": "sri ram", "term": "Sriram", "decision": "BLOCK", "outcome": "kept", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 7, "publishedStart": 0, "publishedLength": 7, "shape": "merge"},
+      {"originalWord": "sri ram", "term": "Sriram", "decision": "BLOCK", "outcome": "kept", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 1, "originalStart": 20, "originalLength": 7, "publishedStart": 20, "publishedLength": 7, "shape": "merge"}
+    ],
+    "overrides": [],
+    "keyboardSuppressed": [],
+    "mergeAsked": [],
+    "expectSelected": [{"originalWord": "sri ram", "isMergeTeach": true}]
+  },
+  {
+    "name": "three-option-alternate-passthrough",
+    "records": [
+      {"originalWord": "cloud", "term": "Claude", "decision": "APPLY", "outcome": "applied", "confidence": 0.85, "margin": 3.5, "unsure": false, "occurrenceIndex": 0, "originalStart": 0, "originalLength": 5, "publishedStart": 0, "publishedLength": 6, "alternates": [{"term": "Claude Code", "find": "cloud code"}]}
+    ],
+    "overrides": [],
+    "keyboardSuppressed": [],
+    "mergeAsked": [],
+    "expectSelected": [{"originalWord": "cloud", "isMergeTeach": false, "altTerm": "Claude Code", "altFind": "cloud code"}]
+  }
+]

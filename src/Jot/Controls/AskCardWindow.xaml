@@ -1,0 +1,73 @@
+<Window x:Class="Jot.Controls.AskCardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        Width="520" SizeToContent="Height"
+        WindowStartupLocation="Manual"
+        FontFamily="Segoe UI Variable, Segoe UI"
+        AutomationProperties.Name="Vocabulary confirmation">
+    <!-- Same dark translucent capsule as the pill and the prompt picker, so the three overlays feel
+         like one system. Unlike the pill this window is ACTIVATABLE (no WS_EX_NOACTIVATE) — see the
+         class comment for why that is safe and what it costs on the paste path. -->
+    <Border CornerRadius="12" Background="#F01B1B1F" BorderBrush="#22FFFFFF" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="0" Opacity="0.55" Color="#000000" />
+        </Border.Effect>
+        <Grid Margin="16,13">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Context line FIRST: our placement is proportional, so this is the only thing that
+                 says WHICH occurrence the card is about. -->
+            <TextBlock x:Name="ContextLine" Grid.Row="0" Grid.Column="0" FontStyle="Italic" FontSize="12"
+                       Foreground="#8CFFFFFF" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+
+            <!-- Countdown ring, no digits. Static and full when the OS asks for reduced motion —
+                 the timeout still fires, it just stops moving. -->
+            <ui:ProgressRing x:Name="Countdown" Grid.Row="0" Grid.Column="1" Grid.RowSpan="2"
+                             Width="18" Height="18" Margin="12,0,10,0" IsIndeterminate="False"
+                             Foreground="#B0FFFFFF" VerticalAlignment="Center" />
+
+            <TextBlock x:Name="PositionText" Grid.Row="0" Grid.Column="2" FontSize="11"
+                       FontFamily="{DynamicResource JotMonoFont}" Foreground="#66FFFFFF"
+                       VerticalAlignment="Center" />
+
+            <!-- Past tense, because it has: the card CONFIRMS an edit already made in the pending
+                 text. Only ever true for an applied correction — which is the only kind the deck
+                 filter admits. -->
+            <TextBlock x:Name="Headline" Grid.Row="1" Grid.Column="0" Margin="0,6,0,0"
+                       Foreground="#F2FFFFFF" FontSize="14" FontWeight="SemiBold" />
+
+            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal"
+                        Margin="0,10,0,0">
+                <!-- Original FIRST, then the term. Never yes/no: "pick the word you meant". -->
+                <Button x:Name="OriginalChip" Padding="12,5" Margin="0,0,8,0" Click="OnPickOriginal" />
+                <Button x:Name="TermChip" Padding="12,5" Click="OnPickTerm" />
+            </StackPanel>
+
+            <!-- Own row, right-aligned: on the chips row it overflowed the fixed 520 px capsule and
+                 squeezed the ring and the counter out of the layout entirely. -->
+            <TextBlock x:Name="Hint" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0"
+                       HorizontalAlignment="Right" FontSize="11" Foreground="#66FFFFFF">
+                <Run Text="←→" /><Run Text=" choose   " />
+                <Run Text="Enter" /><Run Text=" confirm   " />
+                <Run Text="Esc" /><Run Text=" skip" />
+            </TextBlock>
+        </Grid>
+    </Border>
+</Window>

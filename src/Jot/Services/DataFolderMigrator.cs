@@ -30,7 +30,11 @@ public sealed partial class DataFolderMigrator : ObservableObject
 
     // The top-level items (relative to a data folder) a move carries. Everything else in the folder
     // (settings.json, logs, the marker) is either fixed-location or transient and stays put.
-    private static readonly string[] MigratedItems = ["models", "recordings", "library.json"];
+    // "Vocabulary" is the learned corrections ledger: leaving it behind silently resets the owner's
+    // training when they move the data folder. Internal so VocabStoreProvenanceTests asserts the real
+    // list rather than a copy of it.
+    internal static readonly string[] MigratedItems =
+        ["models", "recordings", "library.json", JotPaths.VocabularyFolderName];
 
     private readonly ISettingsStore _store;
 

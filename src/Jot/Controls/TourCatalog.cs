@@ -109,10 +109,47 @@ internal static class TourCatalog
                 _ => "It goes right to the developer. No email or account."),
         });
 
+    /// <summary>
+    /// Vocabulary tour — what custom vocabulary is, its two honest limits, and where the terms live.
+    ///
+    /// DISCOVERABLE-ONLY, like <see cref="Feedback"/>: no auto-trigger anywhere. The feature ships
+    /// default-OFF inside Advanced features, so a tour that fired on its own would land almost entirely
+    /// on people who never enabled it — noise, and about a feature they can't act on. The teachable
+    /// moment (switching the toggle on) is already spoken for by the model-download prompt, and stacking
+    /// a tour on top of a modal is worse than either alone.
+    /// </summary>
+    public static readonly Tour Vocabulary = new(
+        "vocabulary", "Custom vocabulary", "Custom vocabulary",
+        "Teach Jot the words it keeps getting wrong.", new[]
+        {
+            new TourCard(SymbolRegular.BookLetter24, "Add your words",
+                _ => "Turn it on in Settings → Vocabulary, then open Manage… to add names, products and jargon."),
+            new TourCard(SymbolRegular.ArrowDownload24, "One extra download",
+                _ => $"Jot asks before fetching a {Services.CtcModelDownload.SizeMb} MB model. Like everything " +
+                     "else, it stays on this PC."),
+            new TourCard(SymbolRegular.Beaker24, "Experimental, English only",
+                _ => "Your terms apply when your language is English. Other languages are left untouched."),
+        });
+
+    /// <summary>Add-to-Vocabulary tour — the right-click gesture on a recording's transcript, which is
+    /// the feature's flagship discovery moment and is otherwise invisible. Discoverable-only, for the
+    /// same reason as <see cref="Vocabulary"/>.</summary>
+    public static readonly Tour AddToVocabulary = new(
+        "add-to-vocabulary", "Fix a word", "Fix a word for good",
+        "Correct a transcript and teach Jot in one go.", new[]
+        {
+            new TourCard(SymbolRegular.Highlight24, "Select what Jot got wrong",
+                _ => "Open a recording from Recents and select the misspelled word in the transcript."),
+            new TourCard(SymbolRegular.Cursor24, "Right-click → Add to Vocabulary…",
+                _ => "Type the spelling you wanted. Jot fixes this transcript and saves the term."),
+            new TourCard(SymbolRegular.CheckmarkCircle24, "It sticks",
+                _ => "Next time you say it, Jot writes it your way."),
+        });
+
     /// <summary>Every named tour, in Help-hub display order. Getting-started leads; the rest are the
     /// per-feature tours. This is the list the dev <c>--tour &lt;name&gt;</c> hook and the Help hub read.</summary>
     public static readonly IReadOnlyList<Tour> All = new[]
-        { GettingStarted, Shortcuts, Ai, Rewrite, Import, Feedback };
+        { GettingStarted, Shortcuts, Ai, Rewrite, Import, Vocabulary, AddToVocabulary, Feedback };
 
     /// <summary>Look a tour up by its Id (case-insensitive); null if the name is unknown.</summary>
     public static Tour? ById(string? id) =>

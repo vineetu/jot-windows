@@ -21,6 +21,10 @@
                 <ui:Button Content="Set up AI" Icon="{ui:SymbolIcon Brain24}" Margin="0,0,8,8" Click="OnTourAi" />
                 <ui:Button Content="Rewrite &amp; transform" Icon="{ui:SymbolIcon Wand24}" Margin="0,0,8,8" Click="OnTourRewrite" />
                 <ui:Button Content="Import a recording" Icon="{ui:SymbolIcon ArrowUpload24}" Margin="0,0,8,8" Click="OnTourImport" />
+                <!-- The two vocabulary tours are reachable ONLY from here (and the dev tour switch): the
+                     feature ships default-off, so neither auto-fires. See TourCatalog.Vocabulary. -->
+                <ui:Button Content="Custom vocabulary" Icon="{ui:SymbolIcon BookLetter24}" Margin="0,0,8,8" Click="OnTourVocabulary" />
+                <ui:Button Content="Fix a word" Icon="{ui:SymbolIcon Cursor24}" Margin="0,0,8,8" Click="OnTourAddToVocabulary" />
                 <ui:Button Content="Send feedback" Icon="{ui:SymbolIcon PersonFeedback24}" Margin="0,0,8,8" Click="OnTourFeedback" />
             </WrapPanel>
 

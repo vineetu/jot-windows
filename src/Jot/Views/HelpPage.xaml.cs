@@ -27,6 +27,8 @@ public partial class HelpPage : Page
     private void OnTourAi(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Ai);
     private void OnTourRewrite(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Rewrite);
     private void OnTourImport(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Import);
+    private void OnTourVocabulary(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Vocabulary);
+    private void OnTourAddToVocabulary(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.AddToVocabulary);
     private void OnTourFeedback(object sender, System.Windows.RoutedEventArgs e) => ShowTour(Controls.TourCatalog.Feedback);
 
     private static void ShowTour(Controls.Tour tour) => new Controls.QuickTourWindow(tour).Show();

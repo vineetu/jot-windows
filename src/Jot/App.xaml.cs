@@ -414,6 +414,8 @@ public partial class App : System.Windows.Application
         // Enforce the retention window (delete old recordings) off the UI thread.
         _ = Task.Run(() => Services.GetRequiredService<RetentionCleaner>().Prune());
 
+        WireVocabularySpotterLifecycle();
+
         WireRecorderNotifications();
         WireTourTriggers();
         SetupTray();
@@ -425,7 +427,7 @@ public partial class App : System.Windows.Application
 
         // `--show` surfaces the main window immediately (Jot normally boots to tray).
         if (e.Args.Contains("--show") || e.Args.Contains("--detail") || e.Args.Contains("--settings")
-            || e.Args.Contains("--shortcuts") || e.Args.Contains("--about"))
+            || e.Args.Contains("--shortcuts") || e.Args.Contains("--about") || e.Args.Contains("--page"))
             ShowMainWindow();
         if (e.Args.Contains("--settings"))
             Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.SettingsPage)),
@@ -438,14 +440,47 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--about"))
             Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(typeof(Views.AboutPage)),
                 System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        // `--page <name>` opens the window on any nav page — the per-page flags above only cover three,
+        // and a screenshot pass needs the rest (prompts, help, askjot). Names: recents, askjot, prompts,
+        // shortcuts, help, about, settings. Unknown → ignored (window still opens on Recents).
+        int pageArg = Array.IndexOf(e.Args, "--page");
+        if (pageArg >= 0)
+        {
+            string page = pageArg + 1 < e.Args.Length ? e.Args[pageArg + 1].ToLowerInvariant() : "recents";
+            Type? target = page switch
+            {
+                "recents" => typeof(Views.RecentsPage),
+                "askjot" => typeof(Views.AskJotPage),
+                "prompts" => typeof(Views.PromptsPage),
+                "shortcuts" => typeof(Views.ShortcutsPage),
+                "help" => typeof(Views.HelpPage),
+                "about" => typeof(Views.AboutPage),
+                "settings" => typeof(Views.SettingsPage),
+                // Vocabulary has no sidebar entry — Settings → Vocabulary → "Manage…" is the only
+                // in-app door, so this is how you get at the page without walking through Settings.
+                "vocabulary" => typeof(Views.VocabularyPage),
+                _ => null,
+            };
+            if (target is not null)
+                Dispatcher.BeginInvoke(() => Services.GetRequiredService<INavigator>().Navigate(target),
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
         // `--pilldemo` drives the pill with a speech-like envelope (no mic needed).
         if (e.Args.Contains("--pilldemo")) RunPillDemo();
         // `--pickerdemo` shows the rewrite prompt-picker overlay (stays open for review).
         if (e.Args.Contains("--pickerdemo")) RunPickerDemo();
+        // `--askcarddemo` shows the vocabulary ask card on a synthetic deck. The card only ever
+        // appears mid-delivery behind a hidden, default-off feature that needs a downloaded model, so
+        // without this there is no way to look at it at all.
+        if (e.Args.Contains("--askcarddemo")) RunAskCardDemo();
+        // `--chipdemo` shows the pill's vocabulary chip (Success state); add `--expanded` for its
+        // detail list. Same justification as --askcarddemo — see RunChipDemo.
+        if (e.Args.Contains("--chipdemo")) RunChipDemo();
         // `--donatedemo` shows the donate popup (fetches the live donations summary).
         if (e.Args.Contains("--donatedemo")) { new Controls.DonationsWindow().Show(); }
         // `--tour [name]` force-shows a tour (testing/screenshots), ignoring its show-once flag. Valid names:
-        // getting-started (default), shortcuts, ai, rewrite, import, feedback. Unknown → getting-started.
+        // getting-started (default), shortcuts, ai, rewrite, import, vocabulary, add-to-vocabulary,
+        // feedback — i.e. every Tour.Id in TourCatalog.All. Unknown → getting-started.
         int tourArg = Array.IndexOf(e.Args, "--tour");
         if (tourArg >= 0)
         {
@@ -485,14 +520,17 @@ public partial class App : System.Windows.Application
         else if (e.Args.Length == 0) ShowMainWindow();
         // `--smoketest` constructs every page in turn so XAML-load errors hit crash.log.
         if (e.Args.Contains("--smoketest")) RunSmokeTest();
-        // `--detail` opens the first recording's detail view.
-        if (e.Args.Contains("--detail"))
+        // `--detail [n]` opens the n-th (default first) recording's detail view. The index matters for
+        // screenshots: dictation and rewrite rows render completely different detail layouts.
+        int detailArg = Array.IndexOf(e.Args, "--detail");
+        if (detailArg >= 0)
         {
             var store = Services.GetRequiredService<IRecordingStore>();
             var nav = Services.GetRequiredService<INavigator>();
-            if (store.Items.Count > 0)
+            if (detailArg + 1 >= e.Args.Length || !int.TryParse(e.Args[detailArg + 1], out int index)) index = 0;
+            if (index >= 0 && index < store.Items.Count)
                 Dispatcher.BeginInvoke(
-                    () => nav.Navigate(typeof(Views.RecordingDetailPage), store.Items[0]),
+                    () => nav.Navigate(typeof(Views.RecordingDetailPage), store.Items[index]),
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
     }
@@ -2120,7 +2158,10 @@ public partial class App : System.Windows.Application
     {
         bool expanded = System.Environment.GetCommandLineArgs().Contains("--expanded");
         var pill = new Controls.PillWindow();
-        pill.SetKeyHints("Alt + Space", "Esc");       // same API the live PillController path uses
+        // Live labels, not literals — a screenshot showing "Alt + Space" while the app is bound to
+        // Ctrl+Shift+Space is the exact drift the central label helper exists to prevent.
+        pill.SetKeyHints(ToggleHotkeyLabel(),
+            Recording.HotkeyChord.Display(Services.GetRequiredService<ISettingsStore>().Current.CancelRecordingHotkey));
         pill.SetState(Controls.PillState.Recording); // anchors bottom-center on the active monitor
 
         // A growing caption to exercise the live-text line (and the click-to-expand panel).
@@ -2151,6 +2192,28 @@ public partial class App : System.Windows.Application
             }
         };
         timer.Start();
+    }
+
+    /// <summary>
+    /// `--chipdemo` — the pill's vocabulary chip in its Success state, with the detail list expanded.
+    ///
+    /// Same reason `--askcarddemo` exists: the chip only ever renders for ~4 s at the end of a real
+    /// dictation that actually applied a term, behind a default-off feature whose spotter model has no
+    /// download path yet. Without this there is no way to look at it at all, so it shipped unseen.
+    /// </summary>
+    private void RunChipDemo()
+    {
+        var pill = new Controls.PillWindow();
+        pill.SetKeyHints(ToggleHotkeyLabel(),
+            Recording.HotkeyChord.Display(Services.GetRequiredService<ISettingsStore>().Current.CancelRecordingHotkey));
+        pill.SetCorrections([
+            new Vocabulary.VocabularyCorrection("Claude", "Claude Code"),
+            new Vocabulary.VocabularyCorrection("Herrakit", "Parakeet"),
+        ]);
+        pill.SetState(Controls.PillState.Success,
+            "Claude Code generated most of the boiler plate for the installer.");
+        pill.SetCopyVisible(true);
+        if (System.Environment.GetCommandLineArgs().Contains("--expanded")) pill.ExpandForDemo();
     }
 
     private void RunPillScrollTest()
@@ -2231,8 +2294,55 @@ public partial class App : System.Windows.Application
     {
         var vm = Services.GetRequiredService<PromptPickerViewModel>();
         var picker = new Controls.PromptPickerWindow(vm) { CloseOnDeactivate = false };
+        // `--augment [text]` paints the speak-a-direction step (where Shift+Enter lands) with no mic running.
+        // Order is load-bearing: AugmentText BEFORE IsListening, or the VM reads it as typing-takeover.
+        string[] argv = Environment.GetCommandLineArgs();
+        int aug = Array.IndexOf(argv, "--augment");
+        if (aug >= 0)
+        {
+            vm.AugmentLabel = "Add a direction";
+            vm.AugmentPlaceholder = "Speak now, or type…";
+            vm.AugmentText = aug + 1 < argv.Length && !argv[aug + 1].StartsWith("--") ? argv[aug + 1] : "";
+            vm.IsAugmenting = true;
+            vm.IsListening = true;
+            // The box focuses with everything selected; park the caret at the end so the demo shot reads
+            // as dictated text rather than a selection.
+            picker.Dispatcher.BeginInvoke(() => picker.AugmentBox.Select(picker.AugmentBox.Text.Length, 0),
+                System.Windows.Threading.DispatcherPriority.Input);
+        }
         picker.Show();
         picker.Activate();
+    }
+
+    /// <summary>Paints the vocabulary ask card on a synthetic APPLIED deck — the only kind the D8
+    /// filter admits — so the card can be looked at without a model, a microphone or a real
+    /// dictation. Answers go nowhere; this is a rendering + keyboard check.</summary>
+    private static void RunAskCardDemo()
+    {
+        static Vocabulary.CorrectionRecord Record(string original, string term, int start) => new()
+        {
+            OriginalWord = original,
+            Term = term,
+            Decision = "APPLY",
+            Outcome = "applied",
+            Confidence = 0.85f,
+            Margin = 0,
+            Unsure = false,
+            OccurrenceIndex = 0,
+            OriginalStart = start,
+            OriginalLength = original.Length,
+            PublishedStart = start,
+            PublishedLength = term.Length,
+        };
+
+        List<Vocabulary.AskPolicy.Selection> deck =
+        [
+            new(Record("neumotron", "Nemotron", 9), false, null, null),
+            new(Record("you jet", "UJET", 40), false, null, null),
+        ];
+        // Long countdown + no resolve-on-deactivate: a screenshot pass steals focus, and the shipping
+        // behaviour (deactivate resolves and delivers) would make the card vanish before it is seen.
+        _ = Controls.AskCardWindow.RunAsync(deck, IntPtr.Zero, cardMs: 120_000, resolveOnDeactivate: false);
     }
 
     /// <summary>Relaunch Jot cleanly. Releases the single-instance mutex FIRST so the child can claim it
@@ -2274,7 +2384,12 @@ public partial class App : System.Windows.Application
             ? Transcription.Onnx.ComputeBackend.DirectML
             : Transcription.Onnx.ComputeBackend.Cpu;
 
-    private static IServiceProvider BuildServices()
+    private static IServiceProvider BuildServices() => Registrations().BuildServiceProvider();
+
+    // Split from BuildServices so the composition root can be VALIDATED in a test without
+    // instantiating anything: a constructor whose dependency was never registered otherwise shows up
+    // only as a crash on launch, which no test in this repo would catch.
+    internal static ServiceCollection Registrations()
     {
         var services = new ServiceCollection();
         services.AddSingleton<ISettingsStore, JsonSettingsStore>();
@@ -2327,6 +2442,47 @@ public partial class App : System.Windows.Application
                     Transcription.Onnx.ComputeBackend.Cpu),
             };
         });
+        // Vocabulary (SHIPS VISIBLE inside Advanced features, master toggle default off). All three
+        // stores take the SAME
+        // containerRoot — the data folder — and append `Vocabulary\` themselves, so the one folder
+        // registered in JotDataPurge and DataFolderMigrator covers terms, the learned ledger and the
+        // per-recording provenance (D7). Explicit factories because that root is a string, not a
+        // service, and because the diagnostics sink must be the JotLog one: on the default sink the
+        // gate's APPLY/BLOCK/OVERRIDE trace vanishes and the pre-unhide calibration pass is blind.
+        services.AddSingleton<Vocabulary.VocabularyStore>(sp => new Vocabulary.VocabularyStore(
+            JotPaths.DataDir(sp.GetRequiredService<ISettingsStore>().Current),
+            Vocabulary.JotLogDiagnosticsSink.Instance));
+        services.AddSingleton<Vocabulary.CorrectionStore>(sp => new Vocabulary.CorrectionStore(
+            JotPaths.DataDir(sp.GetRequiredService<ISettingsStore>().Current),
+            Vocabulary.JotLogDiagnosticsSink.Instance));
+        services.AddSingleton<Vocabulary.CorrectionProvenance>(sp => new Vocabulary.CorrectionProvenance(
+            JotPaths.DataDir(sp.GetRequiredService<ISettingsStore>().Current),
+            Vocabulary.JotLogDiagnosticsSink.Instance));
+        // The CTC keyword spotter (M2). Optional second model, downloaded only when vocabulary is turned
+        // on; with it absent the spotter reports IsReady=false and the runner short-circuits silently —
+        // vocabulary is simply unavailable, never an error. Registered concretely as well as behind the
+        // seam so Settings can Warm/Unload the 283 MB session without resolving the interface.
+        services.AddSingleton<Transcription.Ctc.CtcModel>(sp =>
+            new Transcription.Ctc.CtcModel(settings: sp.GetRequiredService<ISettingsStore>()));
+        services.AddSingleton<Transcription.Ctc.CtcModelInstaller>();
+        // Third download surface (the vocabulary model). Never started by the app — Settings asks
+        // first; see CtcModelDownload.
+        services.AddSingleton<CtcModelDownload>();
+        services.AddSingleton<Vocabulary.CtcVocabularySpotter>(sp => new Vocabulary.CtcVocabularySpotter(
+            sp.GetRequiredService<Transcription.Ctc.CtcModel>(),
+            sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
+            sp.GetRequiredService<ISettingsStore>()));
+        services.AddSingleton<Vocabulary.IVocabularySpotter>(sp =>
+            sp.GetRequiredService<Vocabulary.CtcVocabularySpotter>());
+        services.AddSingleton<Vocabulary.VocabularyRunner>(sp => new Vocabulary.VocabularyRunner(
+            sp.GetRequiredService<ISettingsStore>(),
+            sp.GetRequiredService<Vocabulary.VocabularyStore>(),
+            sp.GetRequiredService<Vocabulary.CorrectionStore>(),
+            sp.GetRequiredService<Vocabulary.CorrectionProvenance>(),
+            sp.GetRequiredService<Vocabulary.IVocabularySpotter>(),
+            Vocabulary.EmbeddedCommonWordsProvider.Shared,
+            Vocabulary.JotLogDiagnosticsSink.Instance));
+
         services.AddSingleton<RecorderController>();
         services.AddSingleton<Rewrite.RewriteController>();
         services.AddSingleton<IPhraseDictation, PhraseDictation>(); // "speak" side of the prompt-augment field (reuses recorder+engine)
@@ -2342,10 +2498,27 @@ public partial class App : System.Windows.Application
         services.AddSingleton<AskJotViewModel>();
         services.AddSingleton<PromptCatalog>();
         services.AddSingleton<PromptsViewModel>();
+        // Explicit factory, like the stores above: the common-word provider is a shared static, not a
+        // registered service, and the validator can't see through an optional parameter's default.
+        // The recording-detail page's vocabulary half, bundled: the page builds its VM by hand (the
+        // item arrives as a navigation parameter), so it resolves one object instead of five.
+        services.AddSingleton<VocabularyServices>(sp => new VocabularyServices(
+            sp.GetRequiredService<Vocabulary.VocabularyStore>(),
+            sp.GetRequiredService<Vocabulary.CorrectionStore>(),
+            sp.GetRequiredService<Vocabulary.CorrectionProvenance>(),
+            sp.GetRequiredService<ISettingsStore>(),
+            sp.GetRequiredService<Vocabulary.IVocabularySpotter>()));
+        services.AddSingleton<VocabularyViewModel>(sp => new VocabularyViewModel(
+            sp.GetRequiredService<Vocabulary.VocabularyStore>(),
+            sp.GetRequiredService<Vocabulary.CorrectionStore>(),
+            sp.GetRequiredService<ISettingsStore>(),
+            sp.GetRequiredService<Vocabulary.IVocabularySpotter>(),
+            sp.GetRequiredService<INavigator>(),
+            Vocabulary.EmbeddedCommonWordsProvider.Shared));
         services.AddTransient<PromptPickerViewModel>(); // fresh palette per open; shares the singleton catalog
 
         services.AddSingleton<MainWindow>();
-        return services.BuildServiceProvider();
+        return services;
     }
 
     private Forms.ToolStripMenuItem? _toggleItem;
@@ -2525,6 +2698,7 @@ public partial class App : System.Windows.Application
             () => nav.Navigate(typeof(Views.HelpPage)),
             () => nav.Navigate(typeof(Views.AboutPage)),
             () => nav.Navigate(typeof(Views.SettingsPage)),
+            () => nav.Navigate(typeof(Views.VocabularyPage)),
             () => { if (store.Items.Count > 0) nav.Navigate(typeof(Views.RecordingDetailPage), store.Items[0]); },
             () => nav.Navigate(typeof(Views.RecentsPage)),
         };
@@ -2565,6 +2739,35 @@ public partial class App : System.Windows.Application
         _mainWindow.Topmost = true;   // reliably bring to front...
         _mainWindow.Topmost = false;  // ...without pinning it there
         _mainWindow.Focus();
+    }
+
+    /// <summary>
+    /// Owns the CTC spotter session's LIFE, which the spotter itself cannot: it only ever hears about a
+    /// dictation. Two things have to happen off the stop path — the ~1–1.9 s session load (paid inside a
+    /// stop it blows the vocabulary deadline by itself, every first dictation) and the release of the
+    /// session's working set when the user turns vocabulary off or empties the term list.
+    /// </summary>
+    private void WireVocabularySpotterLifecycle()
+    {
+        var settings = Services!.GetRequiredService<ISettingsStore>();
+        var spotter = Services.GetRequiredService<Vocabulary.CtcVocabularySpotter>();
+        var terms = Services.GetRequiredService<Vocabulary.VocabularyStore>();
+
+        void Sync()
+        {
+            bool wanted = settings.Current.VocabularyEnabled && terms.Terms.Count > 0
+                          && Vocabulary.VocabularyRunner.LanguageSupported(settings.Current.Language);
+            // Always off the UI thread: Warm loads 132 MB, Unload tears down a native session.
+            _ = Task.Run(() =>
+            {
+                try { if (wanted) spotter.Warm(); else spotter.Unload(); }
+                catch (Exception ex) { JotLog.Error("vocabulary spotter lifecycle", ex); }
+            });
+        }
+
+        settings.Changed += (_, _) => Sync();
+        terms.Terms.CollectionChanged += (_, _) => Sync();
+        Sync();   // the feature may already be on from a previous session
     }
 
     private void WireRecorderNotifications()

@@ -28,6 +28,10 @@
          so the fidelity test always has it, independent of transitive Content-copy behavior. -->
     <Content Include="..\..\src\Jot\Assets\prompt-library.json" Link="Assets\prompt-library.json"
              CopyToOutputDirectory="PreserveNewest" />
+    <!-- Cross-platform conformance fixtures copied from jot-shared @5326460. These lock the
+         Windows vocabulary gate to the shipping Mac/iOS behaviour. -->
+    <Content Include="Fixtures\vocab\*.json" Link="Fixtures\vocab\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -23,7 +23,10 @@ public static class JotDataPurge
     private const string RunValue = "Jot";
 
     // The subfolders/files that make up a DATA folder (relative to the data dir — which may be a custom drive).
-    private static readonly string[] DataSubdirs = ["models", "recordings", "logs"];
+    // "Vocabulary" holds the correction ledger + provenance — learned text the owner dictated, so it
+    // must go with an erase or the privacy claim is false.
+    private static readonly string[] DataSubdirs =
+        ["models", "recordings", "logs", JotPaths.VocabularyFolderName];
     private static readonly string[] DataFiles = ["library.json", "aikey.dat", "stats.json"];
     // Artifacts that always live in the fixed config root (JotPaths.ConfigDir): ffmpeg tools, the pre-init
     // log fallback, and the config/marker files.

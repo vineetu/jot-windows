@@ -20,8 +20,51 @@ public partial class RecordingDetailPage : Page
         if (nav.Parameter is RecordingItem item)
         {
             var store = App.Services.GetRequiredService<IRecordingStore>();
-            DataContext = new RecordingDetailViewModel(item, store, nav);
+            var vm = new RecordingDetailViewModel(item, store, nav,
+                App.Services.GetRequiredService<VocabularyServices>());
+            // The "flash" after a review pick is the WPF selection highlight — a read-only TextBox
+            // cannot render styled runs at all, and Select() scrolls the span into view for free.
+            if (vm.Review is not null) vm.Review.FlashRequested += FlashTranscript;
+            DataContext = vm;
         }
+    }
+
+    private void FlashTranscript(int start, int length)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (start < 0 || start + length > TranscriptBox.Text.Length) return;
+            TranscriptBox.Focus();
+            TranscriptBox.Select(start, length);
+        }), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    // The menu item stays PRESENT and goes disabled when the selection isn't a plausible term — a
+    // missing item reads as a bug, a disabled one reads as a rule.
+    private void OnTranscriptMenuOpened(object sender, RoutedEventArgs e)
+    {
+        AddToVocabularyItem.IsEnabled =
+            DataContext is RecordingDetailViewModel vm && vm.CanAddToVocabulary(TranscriptBox.SelectedText);
+    }
+
+    // Selection offsets live on the control, not the VM, so this hop is code-behind by necessity.
+    private void OnAddToVocabulary(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not RecordingDetailViewModel vm) return;
+
+        int start = TranscriptBox.SelectionStart;
+        int length = TranscriptBox.SelectionLength;
+        string heard = TranscriptBox.SelectedText;
+        if (!vm.CanAddToVocabulary(heard)) return;
+
+        var dialog = new Jot.Controls.AddToVocabularyWindow(
+            Jot.Vocabulary.VocabularyStore.SanitizeTerm(heard), vm.AddToVocabularyStatus(), canAdd: true)
+        {
+            Owner = System.Windows.Window.GetWindow(this),
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        vm.AddToVocabulary(start, length, dialog.Heard, dialog.Term);
     }
 
     // Open the overflow ("…") button's ContextMenu on left-click too, anchored under it, so it acts

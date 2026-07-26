@@ -26,7 +26,7 @@ sign-in they won't have).
 >    (progress bar "Downloading… X MB of 754 MB"). It is required for transcription.
 > 3. Finish the wizard (pick a microphone; leave the rest at defaults).
 > 4. Click into any text field (Notepad, a browser box, this form). Press the dictation hotkey —
->    default Alt+Space (shown in Settings → Shortcuts) — speak a sentence, press it again to stop.
+>    default Ctrl+Shift+Space (shown on the Shortcuts page) — speak a sentence, press it again to stop.
 >    Your words are typed at the cursor.
 >
 > Notes:
@@ -129,15 +129,22 @@ Share the resulting Store link internally; anyone with the link can install, no 
 
 ---
 
-## Screenshots — use a SUBSET of the public set (store-assets/listing/)
-Use only the shots that don't reveal provider internals:
-  1. 01-main.png    — Recents / dictation history
-  2. 02-pill.png    — live recording pill (waveform + caption)
-  3. 03-rewrite.png — the "Rewrite with…" palette (provider-agnostic; shows prompts, not providers)
-DO NOT reuse 04-settings.png / 05-ai.png — those show the PUBLIC bring-your-own-provider AI section
-(OpenAI/Anthropic/etc.), which is wrong for this build. If a settings shot is wanted, recapture it
-from the Sony build with the AI section scrolled off-screen (the PFB sign-in card would otherwise
-reveal the internal service).
+## Screenshots — use a SUBSET of the public set (store-assets/listing-final/)
+Nine of the public ten; captions are the same as store-listing.md. Upload in this order:
+  1. 01-dictate-anywhere.png
+  2. 02-live-pill.png
+  3. 03-transform-before-after.png
+  4. 04-prompt-palette.png
+  5. 05-speak-your-direction.png
+  6. 06-pill-expanded.png
+  7. 07-shortcuts.png
+  8. 09-local-history.png
+  9. 10-private-by-default.png
+
+DO NOT upload 08-languages-and-ai.png — it shows the PUBLIC bring-your-own-provider AI section
+(Provider = OpenAI), which is wrong for this build. If a settings shot is wanted, recapture it from
+the Sony build with the AI section scrolled off-screen (the PFB sign-in card would otherwise reveal
+the internal service). The old five in store-assets/listing/ are superseded — do not upload those.
 
 ===================================================================================================
 ## INTERNAL — not for the public listing (context only)

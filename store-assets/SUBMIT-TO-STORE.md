@@ -55,8 +55,8 @@ To verify the primary feature (dictation):
    transcription (time depends on the connection).
 3. Finish the wizard (pick a microphone; the remaining steps can be left at their defaults).
 4. Click into any text field (Notepad, a browser box, even this form). Press the dictation hotkey - default
-   Alt+Space (the current binding is shown in Settings > Shortcuts) - speak a sentence, then press it again to
-   stop. Your words are typed at the cursor.
+   Ctrl+Shift+Space (the current binding is shown on the Shortcuts page) - speak a sentence, then press it
+   again to stop. Your words are typed at the cursor.
 
 Notes:
 - Microphone access is required; Windows prompts on first use - please Allow.

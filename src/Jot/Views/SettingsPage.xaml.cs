@@ -29,7 +29,9 @@ public partial class SettingsPage : Page
         // Each time Settings opens, re-read the saved key from the store and push it into the box, so it
         // shows even when the singleton VM was seeded stale or the box missed the first sync (bug: key
         // was blank until a provider round-trip). Loaded fires on every navigation to the page.
-        Loaded += (_, _) => { vm.RefreshApiKey(); SyncKeyBox(vm); vm.Download.Refresh(); vm.GpuDownload.Refresh(); };
+        // RefreshDownloads() covers every model row at once — naming them one by one is how the GPU row
+        // came to be missed after a data-folder move.
+        Loaded += (_, _) => { vm.RefreshApiKey(); SyncKeyBox(vm); vm.RefreshDownloads(); };
 
         // Page height/scrolling is handled centrally by the shell (MainWindow applies FillHeight on
         // navigation), so no per-page scroll plumbing here.

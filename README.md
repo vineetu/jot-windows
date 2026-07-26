@@ -27,8 +27,12 @@ Highlights of what's real vs. not:
 - ⚠️ **AI rewrite / rewrite-with-voice / paste-last hotkeys** — the underlying mechanics have
   been verified working end-to-end in testing, but the hotkeys remain unregistered and hidden
   from Settings pending a hands-on confirmation on real-world apps.
-- ❌ **Custom vocabulary, speaker diarization** — present in the UI code but non-functional
-  stubs; both are hidden rather than shown broken.
+- ⚠️ **Custom vocabulary** — built and proven end-to-end on real audio (spotter finds the terms,
+  the gate applies them, the transcript is delivered corrected). Visible under Advanced features,
+  **default off**, and gated by two real limits: the spotter model has no download path in this
+  build, and a multi-word term currently duplicates its trailing word ("Claude Code code").
+- ❌ **Speaker diarization** — present in the UI code but a non-functional stub; hidden rather
+  than shown broken.
 
 Don't take any of the above as a substitute for `docs/features.md` — that file is the
 source of truth and is kept current as things change.
@@ -52,7 +56,7 @@ dotnet build
 dotnet run --project src/Jot
 ```
 
-Jot lives in the system tray. Press **Alt+Space** to start dictation, **Alt+Space** again
+Jot lives in the system tray. Press **Ctrl+Shift+Space** to start dictation, and again
 to stop → transcribe → paste. Right-click the tray icon to quit.
 
 ## License

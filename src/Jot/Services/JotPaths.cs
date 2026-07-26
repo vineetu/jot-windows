@@ -47,4 +47,16 @@ public static class JotPaths
 
     /// <summary>Models dir resolved from the default location (used before settings are available).</summary>
     public static string DefaultModelsDir => Path.Combine(DefaultDataDir, "models");
+
+    /// <summary>Folder name for the vocabulary learning data. A const because THREE places must agree
+    /// on it — this accessor, <see cref="JotDataPurge"/>'s artifact list, and
+    /// <c>DataFolderMigrator.MigratedItems</c> — and a folder registered in only some of them either
+    /// survives "Erase all data" (contradicting the privacy claim) or gets stranded by a folder move.
+    /// VocabStoreProvenanceTests asserts all three against this one name.</summary>
+    public const string VocabularyFolderName = "Vocabulary";
+
+    /// <summary>Where the correction store's ledger (<c>corrections.json</c>) and the per-transcript
+    /// provenance payloads live. This is the <c>containerRoot</c> the shared vocabulary core appends
+    /// <c>Vocabulary\</c> to, so pass <see cref="DataDir"/> — not this — to those constructors.</summary>
+    public static string VocabularyDir(JotSettings s) => Path.Combine(DataDir(s), VocabularyFolderName);
 }

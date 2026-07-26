@@ -10,10 +10,14 @@ param(
     [Parameter(Mandatory)] [string]$Out,
     [int]$Wait = 9,
     [string]$Keys = "",          # optional keystrokes to send after focusing (e.g. scroll)
-    [int]$Pad = 0                # extra pixels to shave off each edge (drop shadow) if needed
+    [int]$Pad = 0,               # extra pixels to shave off each edge (drop shadow) if needed
+    [switch]$Backdrop,           # blank the screen behind translucent overlays (pill, prompt picker)
+    [string]$Exe = ""            # override the binary (e.g. the one unpacked from a built .msix)
 )
 
-$exe = "C:\Users\vinee\projects\jot-windows\src\Jot\bin\Release\net10.0-windows10.0.26100.0\win-x64\publish\Jot.exe"
+$exe = if ($Exe) { $Exe } else {
+    "C:\Users\vinee\projects\jot-windows\src\Jot\bin\Release\net10.0-windows10.0.26100.0\win-x64\publish\Jot.exe"
+}
 
 Add-Type @"
 using System;
@@ -44,6 +48,15 @@ Add-Type -AssemblyName System.Drawing
 
 Get-Process Jot -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep 1
+
+$bd = $null
+if ($Backdrop) {
+    $bd = Start-Process powershell -PassThru `
+        -ArgumentList '-NoProfile', '-STA', '-File', (Join-Path $PSScriptRoot 'backdrop.ps1')
+    Start-Sleep 2
+}
+function Stop-Backdrop { if ($bd) { Stop-Process -Id $bd.Id -Force -ErrorAction SilentlyContinue } }
+
 $p = Start-Process $exe -ArgumentList $JotArgs -PassThru
 Start-Sleep -Seconds $Wait
 $p.Refresh()
@@ -61,7 +74,7 @@ if ($Select -eq "main") {
     foreach ($w in $wins) { $r=[Win]::Frame($w); $a=($r.R-$r.L)*($r.B-$r.T); if ($a -gt $bestArea){$bestArea=$a;$best=$w} }
     $hwnd = $best
 }
-if (-not $hwnd -or $hwnd -eq [IntPtr]::Zero) { Write-Output "NO WINDOW FOUND"; exit 1 }
+if (-not $hwnd -or $hwnd -eq [IntPtr]::Zero) { Stop-Backdrop; Write-Output "NO WINDOW FOUND"; exit 1 }
 
 [Win]::SetForegroundWindow($hwnd) | Out-Null
 Start-Sleep -Milliseconds 500
@@ -78,4 +91,5 @@ $dir = Split-Path $Out
 if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
 $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
+Stop-Backdrop
 Write-Output "saved $Out  ($w x $h)"

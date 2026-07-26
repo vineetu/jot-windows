@@ -144,6 +144,17 @@ public partial class PillWindow : Window
         Top = top;
     }
 
+    /// <summary>
+    /// The vocabulary corrections for the NEXT <see cref="PillState.Success"/>. Call immediately
+    /// before <see cref="SetState"/>; an empty list degrades the pill to its exact previous look.
+    /// Gated by the caller on <c>JotSettings.VocabularyChipEnabled</c> — the one real throttle this
+    /// surface has, since the Mac's `notable` filter is constant-true on our engine path.
+    /// </summary>
+    public void SetCorrections(IReadOnlyList<Jot.Vocabulary.VocabularyCorrection> corrections)
+        => _corrections = corrections;
+
+    private IReadOnlyList<Jot.Vocabulary.VocabularyCorrection> _corrections = [];
+
     public void SetState(PillState state, string? text = null)
     {
         if (state == PillState.Hidden) { HidePill(); return; }
@@ -155,6 +166,8 @@ public partial class PillWindow : Window
         Elapsed.Visibility = Visibility.Collapsed;
         Capsule.Width = double.NaN;   // auto-size by default; only Recording pins a fixed width
         Hint.Visibility = Visibility.Collapsed;  // only Recording shows the stop/cancel key hint
+        VocabChip.Visibility = Visibility.Collapsed;
+        VocabDetail.Visibility = Visibility.Collapsed;
         _expanded = false;
         _lineWhenCollapsed = false;
 
@@ -192,10 +205,16 @@ public partial class PillWindow : Window
 
             case PillState.Success:
                 Dot.Fill = Res("JotSuccessBrush", Color.FromRgb(0x3F, 0xB9, 0x50));
-                LineText.Text = OneLine(text) ?? "Done";
+                // A chip eats horizontal room, so shorten the caption's budget rather than let the
+                // auto-sized capsule outgrow LineText's MaxWidth.
+                LineText.Text = OneLine(text, _corrections.Count > 0 ? 46 : 60) ?? "Done";
                 TranscriptText.Text = text ?? "";
                 _lineWhenCollapsed = true;
-                AutomationProperties.SetName(this, "Transcription ready");
+                ApplyVocabChip();
+                // Folded into the WINDOW's one automation name — a separate peer would make Narrator
+                // announce it twice.
+                AutomationProperties.SetName(this,
+                    "Transcription ready." + Jot.Vocabulary.VocabularyCorrection.AutomationSuffix(_corrections));
                 break;
 
             case PillState.Notice:
@@ -344,11 +363,26 @@ public partial class PillWindow : Window
     private Brush Res(string key, Color fallback)
         => TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
 
-    private static string? OneLine(string? text)
+    private static string? OneLine(string? text, int budget = 60)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
         text = text.Trim().ReplaceLineEndings(" ");
-        return text.Length > 60 ? text[..57] + "…" : text;
+        return text.Length > budget ? text[..(budget - 3)] + "…" : text;
+    }
+
+    // The chip is NOT clickable in v1 — a 4-second click target is a bad target — but the glyph is
+    // final, so a later "click → open this recording's corrections" is not a visual change.
+    private void ApplyVocabChip()
+    {
+        if (_corrections.Count == 0) return;
+        VocabChipText.Text = Jot.Vocabulary.VocabularyCorrection.ChipText(_corrections);
+        VocabChip.Visibility = Visibility.Visible;
+
+        // Cap the detail list; a pill is a glance, not a report.
+        var lines = _corrections.Take(5).Select(c => $"{c.OriginalWord} → {c.Term}").ToList();
+        if (_corrections.Count > 5) lines.Add($"+{_corrections.Count - 5} more");
+        VocabList.ItemsSource = lines;
+        VocabDetail.Visibility = Visibility.Visible;
     }
 
     // Win32: no-activate tool window + monitor work area

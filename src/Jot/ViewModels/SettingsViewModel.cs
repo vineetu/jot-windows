@@ -7,6 +7,8 @@ using Jot.Services.Abstractions;
 using Jot.Services.Ai;
 using Jot.Transcription;
 using Jot.Transcription.Nemotron;
+using Jot.Vocabulary;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using NAudio.CoreAudioApi;
 
@@ -26,12 +28,20 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IThemeService _theme;
     private readonly ModelDownload _download;
     private readonly GpuModelDownload _gpuDownload;
+    private readonly CtcModelDownload _vocabularyDownload;
+    /// <summary>Every model-download surface this page owns, so anything that invalidates "is it on
+    /// disk?" refreshes ALL of them. Replaces the individually-named `Refresh()` calls, which were
+    /// already one short: a data-folder move refreshed only <see cref="_download"/>, leaving the GPU
+    /// row claiming "Installed" against a folder the model no longer lived in.</summary>
+    private readonly ModelDownload[] _downloads;
     private readonly DataFolderMigrator _migrator;
     private readonly ITranscriber _transcriber;
     private readonly IAiClient _ai;
     private readonly AiCredentials _credentials;
     private readonly PfbAuth _pfb;
     private readonly ISoundService _sound;
+    private readonly VocabularyStore _vocabulary;
+    private readonly IVocabularySpotter _spotter;
     private JotSettings S => _store.Current;
 
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -103,6 +113,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// silent background fetch drives, so the "GPU model" row shows live progress either way. The manual
     /// Download button exists for the cases the automatic path skips (metered connection, weak-looking GPU).</summary>
     public GpuModelDownload GpuDownload => _gpuDownload;
+
+    /// <summary>The optional vocabulary keyword-spotter model's download state — the "Vocabulary model"
+    /// row's status, progress bar and Download/Retry button. Started ONLY by the user (the toggle-on
+    /// prompt or that button); nothing in the app fetches it in the background.</summary>
+    public CtcModelDownload VocabularyDownload => _vocabularyDownload;
 
     /// <summary>Moves the model + recordings + library when the Save location changes — the Save-location
     /// row binds its progress bar and status here. Shared singleton (also finishes interrupted moves on launch).</summary>
@@ -211,19 +226,25 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
-        ModelDownload download, GpuModelDownload gpuDownload, DataFolderMigrator migrator,
-        ITranscriber transcriber, IAiClient ai, AiCredentials credentials, PfbAuth pfb, ISoundService sound)
+        ModelDownload download, GpuModelDownload gpuDownload, CtcModelDownload vocabularyDownload,
+        DataFolderMigrator migrator,
+        ITranscriber transcriber, IAiClient ai, AiCredentials credentials, PfbAuth pfb, ISoundService sound,
+        VocabularyStore vocabulary, IVocabularySpotter spotter)
     {
         _store = store;
         _theme = theme;
         _download = download;
         _gpuDownload = gpuDownload;
+        _vocabularyDownload = vocabularyDownload;
+        _downloads = [download, gpuDownload, vocabularyDownload];
         _migrator = migrator;
         _transcriber = transcriber;
         _ai = ai;
         _credentials = credentials;
         _pfb = pfb;
         _sound = sound;
+        _vocabulary = vocabulary;
+        _spotter = spotter;
 
         // Seed backing fields directly so wiring the UI doesn't trigger a save storm.
         _themeMode = S.Theme;
@@ -257,10 +278,25 @@ public sealed partial class SettingsViewModel : ObservableObject
         _soundCancel = S.SoundCancel;
         _soundSuccess = S.SoundSuccess;
         _soundError = S.SoundError;
+        _vocabularyEnabled = S.VocabularyEnabled;
+        _vocabularyChipEnabled = S.VocabularyChipEnabled;
+        _vocabulary.Terms.CollectionChanged += (_, _) => RaiseVocabularyComputed();
+        // The vocabulary InfoBars are derived from download state (unavailable / downloading / ready),
+        // so they have to be re-raised whenever it moves — otherwise the warning bar stays up through
+        // a successful download and only a page rebuild clears it.
+        _vocabularyDownload.PropertyChanged += (_, _) => RaiseVocabularyComputed();
 
         LoadDevices();
-        _download.Refresh();
+        RefreshDownloads();
         RefreshAiModels();
+    }
+
+    /// <summary>Re-check every model download against disk. Called at construction, each time Settings
+    /// opens, and after a data-folder move — one call, so a fourth model can't be forgotten.</summary>
+    public void RefreshDownloads()
+    {
+        foreach (ModelDownload d in _downloads) d.Refresh();
+        RaiseVocabularyComputed();
     }
 
     /// <summary>Applies the stored language (locale code, or a legacy display name) to the engine.
@@ -299,6 +335,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         S.Language = value;
         Save();
         ApplyLanguage(_transcriber, value);
+        RaiseVocabularyComputed();   // the English-only banner is language-derived
     }
     partial void OnTranscriptionDeviceChanged(string value) { S.TranscriptionDevice = value; Save(); }
     partial void OnLiveCaptionsChanged(bool value) { S.LiveCaptions = value; Save(); }
@@ -470,7 +507,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         bool ok = await _migrator.MoveToAsync(target);
         DataDirectory = JotPaths.DataDir(S);
-        if (ok) _download.Refresh(); // model now lives in the new folder — re-check "Installed" against it
+        // Every model now lives in the new folder — re-check "Installed" against it. All of them, not
+        // just the required one: see _downloads.
+        if (ok) RefreshDownloads();
     }
 
     [RelayCommand]
@@ -551,22 +590,140 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
 
-    public ObservableCollection<string> VocabularyTerms { get; } = new(["Jot", "Nemotron", "WASAPI"]);
+    // VOCABULARY. The section is VISIBLE (inside Advanced features) with the master toggle default off.
+    // Term editing itself lives on VocabularyPage; this pane owns the two toggles, the two honesty
+    // banners, the model-download row, and the door to that page.
 
-    [ObservableProperty] private string _newVocabTerm = "";
+    [ObservableProperty] private bool _vocabularyEnabled;
+    [ObservableProperty] private bool _vocabularyChipEnabled = true;
 
+    /// <summary>"Manage…" — a programmatic navigation, like the one Recents makes to
+    /// RecordingDetailPage. Resolved on demand rather than injected so this already-long constructor
+    /// doesn't grow a UI-navigation dependency (same pattern as ReTranscribe's transcriber).</summary>
     [RelayCommand]
-    private void AddVocabTerm()
+    private void ManageVocabulary() =>
+        App.Services.GetRequiredService<Services.Navigation.INavigator>()
+           .Navigate(typeof(Views.VocabularyPage));
+
+    /// <summary>
+    /// Turning vocabulary ON is the one moment the ~132 MB model is worth asking about: the user has
+    /// just said they want the feature, and it cannot do anything without it. ASKED, never automatic —
+    /// this is by far the largest optional fetch in the app and it must be the user's call.
+    ///
+    /// Declining leaves the toggle ON deliberately: the terms are saved, the row keeps its Download
+    /// button, and the state is exactly the pre-download one the whole feature is already designed to
+    /// survive (no model ⇒ no spotter ⇒ no corrections ⇒ no error). Flipping the toggle back off
+    /// behind the user's back would throw away the intent they just expressed.
+    /// </summary>
+    partial void OnVocabularyEnabledChanged(bool value)
     {
-        string t = NewVocabTerm.Trim();
-        if (t.Length > 0 && !VocabularyTerms.Contains(t, StringComparer.OrdinalIgnoreCase))
-            VocabularyTerms.Add(t);
-        NewVocabTerm = "";
+        S.VocabularyEnabled = value;
+        Save();
+        RaiseVocabularyComputed();
+        if (!CtcModelDownload.ShouldOffer(value, _vocabularyDownload.IsInstalled,
+                                          _vocabularyDownload.IsDownloading, VocabularyLanguageOk))
+            return;
+
+        // Fully qualified: the project also references WinForms, whose MessageBox would silently win a
+        // plain `using System.Windows`.
+        System.Windows.MessageBoxResult answer = System.Windows.MessageBox.Show(
+            CtcModelDownload.ConsentMessage, CtcModelDownload.ConsentTitle,
+            System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
+        if (answer == System.Windows.MessageBoxResult.Yes) DownloadVocabularyModelCommand.Execute(null);
     }
 
+    partial void OnVocabularyChipEnabledChanged(bool value) { S.VocabularyChipEnabled = value; Save(); }
+
+    /// <summary>
+    /// The one path that fetches the vocabulary model — the toggle-on prompt and the row's
+    /// Download/Retry button both land here. Idempotent and resumable (that is <c>EnsureAsync</c>), and
+    /// it never throws: a failure leaves the message in the row and the feature in its designed
+    /// no-model state.
+    /// </summary>
     [RelayCommand]
-    private void RemoveVocabTerm(string? term)
+    private async Task DownloadVocabularyModel()
     {
-        if (term is not null) VocabularyTerms.Remove(term);
+        bool ok = await _vocabularyDownload.EnsureAsync();
+        RaiseVocabularyComputed();
+        if (!ok) return;
+
+        // Pay the 1–1.9 s session load HERE rather than inside the first dictation's stop path — the
+        // exact reason App.WireVocabularySpotterLifecycle warms at all. That wiring only re-syncs on a
+        // settings change or a term-list change, and a finished download is neither.
+        // Concrete type test, like ApplyLanguage's transcriber switch: Warm is a session-lifecycle
+        // detail of the CTC spotter, not part of the IVocabularySpotter seam.
+        if (_spotter is CtcVocabularySpotter ctc)
+            _ = Task.Run(() =>
+            {
+                try { ctc.Warm(); }
+                catch (Exception ex) { JotLog.Error("vocabulary: warm after download failed", ex); }
+            });
+    }
+
+    /// <summary>Live count of saved terms — the "Your terms" row, and what makes the empty case honest.</summary>
+    public int VocabularyTermCount => _vocabulary.Terms.Count;
+    public string VocabularyTermCountText =>
+        VocabularyTermCount == 1 ? "1 term" : $"{VocabularyTermCount} terms";
+
+    /// <summary>D5 · the spotter is English-only AND there is no per-recording resolved language, so
+    /// vocabulary runs only on an explicitly-selected English locale. False ⇒ the banner below shows
+    /// and vocabulary does nothing; the toggle and the term list stay usable either way, because
+    /// people switch languages and silently locking their data behind one is worse than saying so.</summary>
+    public bool VocabularyLanguageOk => VocabularyRunner.LanguageSupported(Language);
+    public bool VocabularyLanguageBlocked => !VocabularyLanguageOk;
+    public bool VocabularyLanguageIsAuto =>
+        NemotronLocales.Normalize(Language).Equals(NemotronLocales.AutoCode, StringComparison.OrdinalIgnoreCase);
+
+    public string VocabularyLanguageTitle => VocabularyLanguageIsAuto
+        ? "Custom vocabulary needs your language set to English."
+        : "Custom vocabulary works in English only right now.";
+
+    public string VocabularyLanguageMessage => VocabularyLanguageIsAuto
+        ? "Your language is set to Auto detect, so Jot can't tell which language you're speaking. " +
+          "Set it to English in Settings → Language to use your terms. Your list is saved either way."
+        : $"Your language is set to {LanguageLabel(Language)}, so Jot won't apply your terms. " +
+          "Your list is saved and will work as soon as you switch to English.";
+
+    /// <summary>Model state, as the user's problem rather than ours. The headline is deliberately
+    /// "Vocabulary unavailable — …", not "Download failed": the same state is reached by a tokenizer
+    /// error on an already-downloaded bundle, and by a model that was simply never fetched.
+    ///
+    /// The copy used to say "this version of Jot can't fetch it", which was true while nothing called
+    /// <c>CtcModelInstaller</c> and its release tag was uncut. Both are now false — the release is live
+    /// and the row below downloads it — so the copy points at the button instead. If a future build
+    /// ever drops the fetch path again, this string is the thing that has to go back.</summary>
+    public bool VocabularyModelReady => _spotter.IsReady;
+
+    /// <summary>The warning bar's gate. A running download is NOT "unavailable" — the row underneath is
+    /// already showing MB-of-MB progress, and a warning sitting on top of it reads as a failure.</summary>
+    public bool VocabularyModelUnavailable => !VocabularyModelReady && !_vocabularyDownload.IsDownloading;
+
+    /// <summary>The InfoBar's BODY only — the "Vocabulary unavailable" headline lives in its Title, so
+    /// repeating it here printed the phrase twice on screen.</summary>
+    public string VocabularyModelStatus => VocabularyModelReady
+        ? "Vocabulary model ready"
+        : $"This feature needs an extra on-device model (about {CtcModelDownload.SizeMb} MB) that isn't " +
+          "on this PC yet. Your terms are saved; download it below and they start working.";
+
+    private static string LanguageLabel(string code)
+    {
+        string norm = NemotronLocales.Normalize(code);
+        NemotronLocale? l = NemotronLocales.All.FirstOrDefault(x => x.Code == norm);
+        if (l is null) return norm;
+        return l.EnglishName == l.NativeName ? l.EnglishName : $"{l.EnglishName} — {l.NativeName}";
+    }
+
+    private void RaiseVocabularyComputed()
+    {
+        OnPropertyChanged(nameof(VocabularyTermCount));
+        OnPropertyChanged(nameof(VocabularyTermCountText));
+        OnPropertyChanged(nameof(VocabularyLanguageOk));
+        OnPropertyChanged(nameof(VocabularyLanguageBlocked));
+        OnPropertyChanged(nameof(VocabularyLanguageIsAuto));
+        OnPropertyChanged(nameof(VocabularyLanguageTitle));
+        OnPropertyChanged(nameof(VocabularyLanguageMessage));
+        OnPropertyChanged(nameof(VocabularyModelReady));
+        OnPropertyChanged(nameof(VocabularyModelUnavailable));
+        OnPropertyChanged(nameof(VocabularyModelStatus));
     }
 }

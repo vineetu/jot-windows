@@ -17,6 +17,18 @@ namespace Jot.ViewModels;
 public sealed record SpeakerTurn(string Speaker, string Text, Brush Color);
 
 /// <summary>
+/// The vocabulary dependencies this page needs, bundled into one optional constructor argument so
+/// the existing three-argument shape keeps working (and so a test can drive the review + right-click
+/// logic with in-memory stores).
+/// </summary>
+public sealed record VocabularyServices(
+    Jot.Vocabulary.VocabularyStore Terms,
+    Jot.Vocabulary.CorrectionStore Corrections,
+    Jot.Vocabulary.CorrectionProvenance Provenance,
+    ISettingsStore Settings,
+    Jot.Vocabulary.IVocabularySpotter Spotter);
+
+/// <summary>
 /// The recording "reading surface": transcript, playback bar (real only when the row has audio on
 /// disk), inline edit, tags, stub speaker detection, WebVTT export. Constructed with the selected
 /// item as the page DataContext.
@@ -71,11 +83,24 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
     public bool CanPlay => Item.HasAudio;
     public bool HasSpeakers => SpeakerTurns.Count > 0;
 
-    public RecordingDetailViewModel(RecordingItem item, IRecordingStore store, INavigator navigator)
+    /// <summary>The review + learn block (ux §5). Null when the page was built without vocabulary
+    /// services — the block simply never renders, which is also what happens for a rewrite row.</summary>
+    public VocabularyReviewViewModel? Review { get; }
+
+    private readonly VocabularyServices? _vocabulary;
+
+    public RecordingDetailViewModel(RecordingItem item, IRecordingStore store, INavigator navigator,
+        VocabularyServices? vocabulary = null)
     {
         Item = item;
         _store = store;
         _navigator = navigator;
+        _vocabulary = vocabulary;
+        if (vocabulary is not null)
+        {
+            Review = new VocabularyReviewViewModel(
+                item, vocabulary.Provenance, vocabulary.Corrections, vocabulary.Terms, vocabulary.Settings);
+        }
         EditableTranscript = item.Transcript;
         Duration = item.DurationSeconds;
 
@@ -111,6 +136,12 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
         }
         IsEditing = false;
         OnPropertyChanged(nameof(MatchSummary)); // transcript may have changed under an open find bar
+        // A free-form rewrite has no geometry to shift. The review block re-reads through the
+        // provenance reconcile, which either re-maps the anchors through a real diff or — when the
+        // edit was wholesale — leaves nothing resolvable, which the block reports honestly instead
+        // of silently vanishing. Deliberately NOT "hide the block when IsEdited": that latch is
+        // one-way and is also set by ReplaceNext, ReplaceAll and this feature's own right-click add.
+        Review?.Reload();
     }
 
     [RelayCommand]
@@ -135,6 +166,7 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
         Item.IsEdited = true;
         EditableTranscript = Item.Transcript; // keep edit-mode snapshot in sync so a later Save can't clobber
         OnPropertyChanged(nameof(MatchSummary));
+        Review?.Reload();   // one known-geometry splice; the reconcile diff maps it exactly
     }
 
     [RelayCommand]
@@ -148,6 +180,118 @@ public sealed partial class RecordingDetailViewModel : ObservableObject
         Item.IsEdited = true;
         EditableTranscript = Item.Transcript; // keep edit-mode snapshot in sync so a later Save can't clobber
         OnPropertyChanged(nameof(MatchSummary));
+        // N sites, N deltas, and this method never computes the indices — so nothing here can report
+        // a span. The reconcile's diff maps them anyway; anything it can't is hidden, and a
+        // whole-transcript miss degrades to the honest one-liner.
+        Review?.Reload();
+    }
+
+    // MARK: - Add to Vocabulary (ux §2.7)
+
+    /// <summary>
+    /// Is this selection a plausible term? Mirrors Mac + iOS: ≤4 words, ≤60 chars, contains letters,
+    /// edge punctuation trimmed, and not already a term. A FAILING selection leaves the menu item
+    /// present but disabled — a missing item reads as a bug, a disabled one reads as a rule.
+    /// </summary>
+    public bool CanAddToVocabulary(string? selection)
+    {
+        if (_vocabulary is null || !IsDictation) return false;
+        string clean = Jot.Vocabulary.VocabularyStore.SanitizeTerm(selection);
+        if (clean.Length is 0 or > 60) return false;
+        if (!clean.Any(char.IsLetter)) return false;
+        if (Jot.Vocabulary.VocabularyStore.WordCount(clean) > Jot.Vocabulary.VocabularyStore.MaxTermWords) return false;
+        return _vocabulary.Terms.Find(clean) is null;
+    }
+
+    /// <summary>Status line under the two fields — it must say what will ACTUALLY happen, including
+    /// "saved, but nothing will use it yet" (ux §2.7's table).</summary>
+    public string AddToVocabularyStatus()
+    {
+        if (_vocabulary is null) return "";
+        JotSettings s = _vocabulary.Settings.Current;
+        if (!s.VocabularyEnabled)
+            return "Custom vocabulary is off — turn it on in Settings to use this.";
+        if (Transcription.Nemotron.NemotronLocales.Normalize(s.Language)
+                .Equals(Transcription.Nemotron.NemotronLocales.AutoCode, StringComparison.OrdinalIgnoreCase))
+            return "Saved. Vocabulary needs your language set to English — it's on Auto detect.";
+        if (!Jot.Vocabulary.VocabularyRunner.LanguageSupported(s.Language))
+            return "Saved. Vocabulary only applies when your language is set to English.";
+        if (!_vocabulary.Spotter.IsReady)
+            return "Saved. Jot downloads the vocabulary model (about 130 MB) the first time you use it.";
+        return "Future dictations will prefer this spelling.";
+    }
+
+    /// <summary>
+    /// The gesture's three effects, in one action:
+    /// (1) the selected span in THIS transcript becomes the canonical term — the user's immediate
+    ///     annoyance is fixed;
+    /// (2) the term is created (or the heard form appended as an alias of an existing one), so
+    ///     FUTURE dictations improve;
+    /// (3) the pair starts at net 1, which arms the learned override immediately for a rare/OOV
+    ///     original.
+    ///
+    /// Guard rail from iOS scar tissue: if every word of the typed term is an everyday word, fix the
+    /// text and create NO term — "that's the 'what is this?' test; ordinary rewording isn't
+    /// vocabulary." Returns the line to show the user.
+    /// </summary>
+    public string AddToVocabulary(int selectionStart, int selectionLength, string? heardRaw, string? termRaw)
+    {
+        if (_vocabulary is null) return "";
+        string heard = Jot.Vocabulary.VocabularyStore.SanitizeTerm(heardRaw);
+        string term = Jot.Vocabulary.VocabularyStore.SanitizeTerm(termRaw);
+        if (term.Length == 0) return "";
+
+        // (1) Fix this transcript. Bounds-checked against the LIVE string (the selection was taken
+        // from the control, and nothing guarantees it is still valid) and, crucially, whitespace-
+        // trimmed: WPF's double-click hands us "Venith ", and splicing the trimmed term over that
+        // raw range is what published "My name is VineetSriram."
+        if (Jot.Vocabulary.VocabularySplice.TrySelectionSpan(
+                Item.Transcript, selectionStart, selectionLength,
+                out Jot.Vocabulary.VocabularySplice.Span span))
+        {
+            string updated = Jot.Vocabulary.VocabularySplice.Replace(Item.Transcript, span, term);
+            if (updated != Item.Transcript)
+            {
+                Item.Transcript = updated;
+                Item.IsEdited = true;
+                EditableTranscript = updated;
+                OnPropertyChanged(nameof(MatchSummary));
+            }
+        }
+
+        if (IsEverydayPhrase(term))
+        {
+            Review?.Reload();
+            return $"Fixed here. \"{term}\" is an everyday phrase, so it wasn't added to your vocabulary.";
+        }
+
+        // (2) + (3). Note what (3) does NOT do for a COMMON-word original: Decide step (0) requires
+        // !isCommon, so such a pair stays blocked forever while now carrying Prior ≥ 1 — which is
+        // exactly why the ask deck is filtered to applied corrections (VocabularyRunner.SelectAsks).
+        if (heard.Length > 0)
+        {
+            _vocabulary.Terms.AddMapping(heard, term);
+            _vocabulary.Corrections.Adjust(heard, term, +1);
+        }
+        else
+        {
+            _vocabulary.Terms.Add(term);
+        }
+
+        Review?.Reload();
+        return AddToVocabularyStatus();
+    }
+
+    private bool IsEverydayPhrase(string term)
+    {
+        if (_vocabulary is null) return false;
+        string? resource = Jot.Vocabulary.EmbeddedCommonWordsProvider.ResourceFor(
+            Transcription.Nemotron.NemotronLocales.Normalize(_vocabulary.Settings.Current.Language));
+        IReadOnlySet<string> common = Jot.Vocabulary.EmbeddedCommonWordsProvider.Shared.Words(resource);
+        if (common.Count == 0) return false;
+        string[] words = term.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return words.Length > 0
+            && words.All(w => common.Contains(Jot.Vocabulary.CorrectionKey.Normalize(w)));
     }
 
     private static int CountMatches(string haystack, string needle, bool matchCase)

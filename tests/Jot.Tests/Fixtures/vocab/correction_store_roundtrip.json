@@ -1,0 +1,75 @@
+[
+  {
+    "name": "mac-subset-decodes-superset-adopts",
+    "initialJSON": "{\"jamy\":{\"mappings\":[{\"originalWord\":\"jamie\",\"term\":\"Jamy\",\"confirmations\":1,\"reverts\":0,\"blockedKeeps\":1}],\"suppressedBlocks\":[]}}",
+    "operations": [{"op": "confirm", "originalWord": "jamie", "term": "Jamy"}],
+    "expectSnapshot": [{"originalWord": "jamie", "term": "Jamy", "net": 2, "alwaysReplace": false}],
+    "expectFileContains": ["alwaysReplace"]
+  },
+  {
+    "name": "net-math-confirm-confirm-revert",
+    "initialJSON": "{}",
+    "operations": [
+      {"op": "confirm", "originalWord": "aaa", "term": "Aaa"},
+      {"op": "confirm", "originalWord": "aaa", "term": "Aaa"},
+      {"op": "revert", "originalWord": "aaa", "term": "Aaa"}
+    ],
+    "expectSnapshot": [{"originalWord": "aaa", "term": "Aaa", "net": 1, "alwaysReplace": false}]
+  },
+  {
+    "name": "always-replace-one-revert-revokes",
+    "initialJSON": "{}",
+    "operations": [
+      {"op": "confirm", "originalWord": "cloud", "term": "Claude"},
+      {"op": "confirm", "originalWord": "cloud", "term": "Claude"},
+      {"op": "grantAlwaysReplace", "originalWord": "cloud", "term": "Claude"},
+      {"op": "adjust", "originalWord": "cloud", "term": "Claude", "delta": -1}
+    ],
+    "expectSnapshot": [{"originalWord": "cloud", "term": "Claude", "net": 1, "alwaysReplace": false}]
+  },
+  {
+    "name": "blocked-keeps-threshold-suppresses",
+    "initialJSON": "{}",
+    "operations": [
+      {"op": "noteBlockedKeep", "originalWord": "okay", "term": "Okta"},
+      {"op": "noteBlockedKeep", "originalWord": "okay", "term": "Okta"}
+    ],
+    "expectSnapshot": [{"originalWord": "okay", "term": "Okta", "net": 0, "alwaysReplace": false}],
+    "expectKeyboardSuppressed": ["okay|okta"]
+  },
+  {
+    "name": "blocked-keeps-below-threshold-not-suppressed",
+    "initialJSON": "{}",
+    "operations": [
+      {"op": "noteBlockedKeep", "originalWord": "okay", "term": "Okta"}
+    ],
+    "expectSnapshot": [{"originalWord": "okay", "term": "Okta", "net": 0, "alwaysReplace": false}],
+    "expectKeyboardSuppressed": []
+  },
+  {
+    "name": "suppress-block-adds-pair",
+    "initialJSON": "{}",
+    "operations": [
+      {"op": "suppressBlock", "originalWord": "name", "term": "Jamy"}
+    ],
+    "expectKeyboardSuppressed": ["name|jamy"]
+  },
+  {
+    "name": "merge-asked-spend-once",
+    "initialJSON": "{}",
+    "operations": [
+      {"op": "noteMergeAsked", "originalWord": "sri ram", "term": "Sriram"},
+      {"op": "noteMergeAsked", "originalWord": "sri ram", "term": "Sriram"}
+    ],
+    "expectMergeAsked": ["sri ram|sriram"]
+  },
+  {
+    "name": "decode-failure-must-not-overwrite",
+    "initialJSON": "{ this is not valid json at all",
+    "operations": [
+      {"op": "confirm", "originalWord": "aaa", "term": "Aaa"}
+    ],
+    "expectFileUnchanged": true,
+    "expectDiagnosticsCategory": "vocabularySaveFailed"
+  }
+]

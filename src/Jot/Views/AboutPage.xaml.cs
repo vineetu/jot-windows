@@ -16,6 +16,8 @@ public partial class AboutPage : Page
     public AboutPage()
     {
         InitializeComponent();
+        // Same source the feedback report and env log use, so all three can't drift apart.
+        VersionText.Text = $"Version {typeof(AboutPage).Assembly.GetName().Version?.ToString(3) ?? "?"}";
         var stats = App.Services.GetRequiredService<UsageStats>();
         StatsText.Text = stats.TotalDictations == 0
             ? "Dictate something and Jot will start tracking how much time you've saved versus typing."

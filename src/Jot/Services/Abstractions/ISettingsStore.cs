@@ -47,6 +47,14 @@ public sealed class JotSettings
     // "shift_insert", "type" (synthesise characters), "clipboard" (copy + prompt), "none" (save only).
     public string PasteMethod { get; set; } = "auto";
 
+    // Vocabulary — SHIPS VISIBLE (inside Advanced features) and DEFAULT OFF. Default-off is the whole
+    // safety: nothing downloads, nothing loads and no transcript is touched until the user asks. The
+    // section is no longer Visibility="Collapsed" — note that also means Settings search reaches it,
+    // because search force-reveals the whole Advanced pane. The term list itself lives
+    // in <DataDir>\Vocabulary\vocabulary.json, not here — it is user data, not a setting.
+    public bool VocabularyEnabled { get; set; }
+    public bool VocabularyChipEnabled { get; set; } = true;   // "Tell me when a term is used" — the pill chip
+
     // AI (no Apple Intelligence on Windows — user must pick a provider)
     public string AiProvider { get; set; } = "None"; // None | OpenAI | Anthropic | Gemini | Ollama
     public string? AiBaseUrl { get; set; }

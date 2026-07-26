@@ -57,6 +57,7 @@ public sealed class PillController
     public void Attach()
     {
         _recorder.StateChanged += OnStateChanged;
+        _recorder.CorrectionsReady += c => _pendingCorrections = c;
         _recorder.TranscriptReady += OnTranscriptReady;
         _recorder.PartialTranscript += OnPartial;
         _recorder.Failed += OnFailed;
@@ -175,9 +176,19 @@ public sealed class PillController
         }
     }
 
+    // Consume-once slot for the vocabulary chip, filled only by CorrectionsReady. The trap it exists
+    // for: _rewrite.Succeeded routes into OnTranscriptReady too (see Attach), and rewrite output
+    // never passes the gate — without the clear, a rewrite would inherit the previous dictation's
+    // chip.
+    private IReadOnlyList<Jot.Vocabulary.VocabularyCorrection> _pendingCorrections = [];
+
     private void OnTranscriptReady(string text)
     {
         _transient = true;
+        IReadOnlyList<Jot.Vocabulary.VocabularyCorrection> corrections = _pendingCorrections;
+        _pendingCorrections = [];
+        // The opt-out ("Tell me when a term is used") is the only real throttle this surface has.
+        Pill.SetCorrections(_settings.Current.VocabularyChipEnabled ? corrections : []);
         Pill.SetState(PillState.Success, text.Trim());
         Pill.SetCopyVisible(!_isRewrite);   // a dictation result is copyable; a voice-rewrite result is not
         ScheduleHide(4000);

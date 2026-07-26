@@ -206,12 +206,27 @@
 
                     <!-- Read-only borderless transparent TextBox: reads like body text but supports
                          drag-select + Ctrl+C (a TextBlock can't). Style="{x:Null}" opts out of WPF-UI's
-                         input-box styling so it doesn't look like a field. -->
-                    <TextBox Text="{Binding Item.Transcript, Mode=OneWay}" Style="{x:Null}"
+                         input-box styling so it doesn't look like a field.
+                         The explicit ContextMenu REPLACES the built-in one, so Copy and Select All are
+                         re-wired by hand — dropping them would be a regression, not a simplification.
+                         The menu lives on the READ-ONLY box only, never the edit-mode box below. -->
+                    <TextBox x:Name="TranscriptBox" Text="{Binding Item.Transcript, Mode=OneWay}" Style="{x:Null}"
                              IsReadOnly="True" IsReadOnlyCaretVisible="False" BorderThickness="0"
                              Background="Transparent" Padding="0" TextWrapping="Wrap" FontSize="16"
                              Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                             Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                             Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                        <TextBox.ContextMenu>
+                            <ContextMenu Opened="OnTranscriptMenuOpened">
+                                <MenuItem Header="Copy" Command="ApplicationCommands.Copy"
+                                          CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <MenuItem Header="Select All" Command="ApplicationCommands.SelectAll"
+                                          CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <Separator />
+                                <MenuItem x:Name="AddToVocabularyItem" Header="Add to Vocabulary…"
+                                          Click="OnAddToVocabulary" />
+                            </ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
 
                     <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
                         <ui:TextBox Text="{Binding EditableTranscript, UpdateSourceTrigger=PropertyChanged}"
@@ -222,6 +237,121 @@
                             <ui:Button Content="Done" Appearance="Primary" Command="{Binding SaveEditCommand}" />
                         </StackPanel>
                     </StackPanel>
+
+                    <!-- REVIEW + LEARN (ux §5). Directly under the transcript, and rendered only when
+                         this recording actually has gate proposals — a rewrite row or a demo row has
+                         none, so it can never appear on one. -->
+                    <TextBlock Margin="0,14,0,0" FontSize="12" TextWrapping="Wrap"
+                               Text="{Binding Review.LanguageNote, Mode=OneWay}"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                               Visibility="{Binding Review.ShowLanguageNote, Converter={StaticResource BoolToVis}}" />
+
+                    <ui:CardExpander Margin="0,16,0,0" Icon="{ui:SymbolIcon Sparkle24}"
+                                     Visibility="{Binding Review.IsVisible, Converter={StaticResource BoolToVis}}">
+                        <ui:CardExpander.Header>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Review.HeaderText, Mode=OneWay}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Review.HeaderSubtitle, Mode=OneWay}" FontSize="12"
+                                           Margin="0,2,0,0"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                           Visibility="{Binding Review.HasHeaderSubtitle, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                        </ui:CardExpander.Header>
+                        <StackPanel DataContext="{Binding Review}">
+                            <!-- Degrade honestly rather than mis-anchor: when nothing lines up any
+                                 more we say so and stop offering picks. What the owner already
+                                 taught is keyed on the pair, not the offset, so none of it is lost. -->
+                            <TextBlock TextWrapping="Wrap" FontSize="12"
+                                       Text="{Binding StaleNote, Mode=OneWay}"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                       Visibility="{Binding AnchorsStale, Converter={StaticResource BoolToVis}}" />
+
+                            <ItemsControl ItemsSource="{Binding Rows}"
+                                          Visibility="{Binding AnchorsStale, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,10" Padding="0,0,0,10"
+                                                BorderThickness="0,0,0,1"
+                                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                                            <StackPanel>
+                                                <!-- Context line FIRST: when several rows share a word it
+                                                     is the only thing that says WHICH occurrence this is. -->
+                                                <TextBlock FontStyle="Italic" TextWrapping="Wrap" MaxHeight="40"
+                                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                                                    <Run Text="{Binding ContextBefore, Mode=OneWay}" />
+                                                    <Run Text="{Binding ContextWord, Mode=OneWay}"
+                                                         Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                                         TextDecorations="Underline" />
+                                                    <Run Text="{Binding ContextAfter, Mode=OneWay}" />
+                                                </TextBlock>
+
+                                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                                                            Visibility="{Binding IsUnresolved, Converter={StaticResource BoolToVis}}">
+                                                    <Border Padding="6,1" CornerRadius="4" VerticalAlignment="Center"
+                                                            Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                                            Visibility="{Binding IsChanged, Converter={StaticResource BoolToVis}}">
+                                                        <TextBlock Text="CHANGED" FontSize="9" FontWeight="Bold"
+                                                                   Foreground="White" />
+                                                    </Border>
+                                                    <Border Padding="6,1" CornerRadius="4" VerticalAlignment="Center"
+                                                            BorderThickness="1"
+                                                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                                            Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                                            Visibility="{Binding IsChanged, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                                                        <TextBlock Text="KEPT" FontSize="9" FontWeight="Bold"
+                                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                    </Border>
+                                                    <TextBlock Text="{Binding OriginalLabel}" Margin="8,0,0,0" FontSize="12"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                </StackPanel>
+
+                                                <!-- Original chip FIRST, then the term: "pick the word you
+                                                     meant", never yes/no. -->
+                                                <WrapPanel Margin="0,8,0,0"
+                                                           Visibility="{Binding IsUnresolved, Converter={StaticResource BoolToVis}}">
+                                                    <ui:Button Margin="0,0,8,0"
+                                                               AutomationProperties.Name="{Binding OriginalChipName}"
+                                                               Command="{Binding DataContext.PickOriginalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                               CommandParameter="{Binding}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding OriginalWord}" />
+                                                            <TextBlock Text="  IN TEXT" FontSize="9" VerticalAlignment="Center"
+                                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                                                       Visibility="{Binding OriginalInText, Converter={StaticResource BoolToVis}}" />
+                                                        </StackPanel>
+                                                    </ui:Button>
+                                                    <ui:Button AutomationProperties.Name="{Binding TermChipName}"
+                                                               Command="{Binding DataContext.PickTermCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                               CommandParameter="{Binding}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding Term}" />
+                                                            <TextBlock Text="  IN TEXT" FontSize="9" VerticalAlignment="Center"
+                                                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                                                       Visibility="{Binding TermInText, Converter={StaticResource BoolToVis}}" />
+                                                        </StackPanel>
+                                                    </ui:Button>
+                                                </WrapPanel>
+
+                                                <Grid Margin="0,8,0,0"
+                                                      Visibility="{Binding IsResolved, Converter={StaticResource BoolToVis}}">
+                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                                        <ui:SymbolIcon Symbol="Checkmark24" FontSize="14" VerticalAlignment="Center"
+                                                                       Foreground="{DynamicResource JotSuccessBrush}" />
+                                                        <TextBlock Text="{Binding ResolvedText, Mode=OneWay}" Margin="8,0,0,0"
+                                                                   VerticalAlignment="Center" FontWeight="SemiBold" />
+                                                    </StackPanel>
+                                                    <ui:Button Content="Undo" Appearance="Transparent" HorizontalAlignment="Right"
+                                                               Command="{Binding DataContext.UndoPickCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                               CommandParameter="{Binding}" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ui:CardExpander>
 
                     <StackPanel Margin="0,16,0,0"
                                 Visibility="{Binding HasSpeakers, Converter={StaticResource BoolToVis}}">

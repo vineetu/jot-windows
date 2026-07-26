@@ -1,0 +1,7 @@
+[
+  {"name": "basic", "originalWord": "jamie", "term": "Jamy", "expected": "jamie|jamy"},
+  {"name": "original-side-fully-normalized", "originalWord": "(Jamie).", "term": "Jamy", "expected": "jamie|jamy"},
+  {"name": "original-whitespace-collapsed", "originalWord": "sri   ram", "term": "Sriram", "expected": "sri ram|sriram"},
+  {"name": "term-side-lowercased-not-normalized", "originalWord": "x", "term": "Claude Code.", "expected": "x|claude code."},
+  {"name": "term-multiword-space-preserved", "originalWord": "cloud code", "term": "Claude Code", "expected": "cloud code|claude code"}
+]

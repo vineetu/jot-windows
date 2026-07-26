@@ -1,0 +1,93 @@
+{
+  "mapOffsets": [
+    {
+      "name": "insertion-shifts-trailing-anchor",
+      "offsets": [0, 6],
+      "old": "hello world",
+      "new": "hello big world",
+      "expected": [0, 10]
+    },
+    {
+      "name": "removal-shifts-trailing-anchor",
+      "offsets": [0, 10],
+      "old": "hello big world",
+      "new": "hello world",
+      "expected": [0, 6]
+    },
+    {
+      "name": "anchor-in-removed-region-maps-to-point",
+      "offsets": [0, 8],
+      "old": "hello world",
+      "new": "hello",
+      "expected": [0, 5]
+    }
+  ],
+  "verdicts": [
+    {
+      "name": "term-pick-contributes-plus-one",
+      "seedPayloadJSON": "{\"records\":[{\"originalWord\":\"jamie\",\"term\":\"Jamy\",\"decision\":\"APPLY\",\"outcome\":\"applied\",\"confidence\":0.85,\"margin\":3.5,\"unsure\":false,\"occurrenceIndex\":0,\"originalStart\":0,\"originalLength\":5,\"publishedStart\":0,\"publishedLength\":4}],\"verdicts\":{},\"contributions\":{}}",
+      "operations": [
+        {"op": "setVerdict", "recordKey": "jamie|jamy|0", "verdict": "term"}
+      ],
+      "expectDeltas": [
+        [{"originalWord": "jamie", "term": "Jamy", "delta": 1}]
+      ]
+    },
+    {
+      "name": "two-occurrences-clamp-to-one",
+      "seedPayloadJSON": "{\"records\":[{\"originalWord\":\"jamie\",\"term\":\"Jamy\",\"decision\":\"APPLY\",\"outcome\":\"applied\",\"confidence\":0.85,\"margin\":3.5,\"unsure\":false,\"occurrenceIndex\":0,\"originalStart\":0,\"originalLength\":5,\"publishedStart\":0,\"publishedLength\":4},{\"originalWord\":\"jamie\",\"term\":\"Jamy\",\"decision\":\"APPLY\",\"outcome\":\"applied\",\"confidence\":0.85,\"margin\":3.5,\"unsure\":false,\"occurrenceIndex\":1,\"originalStart\":20,\"originalLength\":5,\"publishedStart\":20,\"publishedLength\":4}],\"verdicts\":{},\"contributions\":{}}",
+      "operations": [
+        {"op": "setVerdict", "recordKey": "jamie|jamy|0", "verdict": "term"},
+        {"op": "setVerdict", "recordKey": "jamie|jamy|20", "verdict": "term"}
+      ],
+      "expectDeltas": [
+        [{"originalWord": "jamie", "term": "Jamy", "delta": 1}],
+        []
+      ]
+    },
+    {
+      "name": "mixed-verdicts-net-zero",
+      "seedPayloadJSON": "{\"records\":[{\"originalWord\":\"jamie\",\"term\":\"Jamy\",\"decision\":\"APPLY\",\"outcome\":\"applied\",\"confidence\":0.85,\"margin\":3.5,\"unsure\":false,\"occurrenceIndex\":0,\"originalStart\":0,\"originalLength\":5,\"publishedStart\":0,\"publishedLength\":4},{\"originalWord\":\"jamie\",\"term\":\"Jamy\",\"decision\":\"APPLY\",\"outcome\":\"applied\",\"confidence\":0.85,\"margin\":3.5,\"unsure\":false,\"occurrenceIndex\":1,\"originalStart\":20,\"originalLength\":5,\"publishedStart\":20,\"publishedLength\":4}],\"verdicts\":{},\"contributions\":{}}",
+      "operations": [
+        {"op": "setVerdict", "recordKey": "jamie|jamy|0", "verdict": "term"},
+        {"op": "setVerdict", "recordKey": "jamie|jamy|20", "verdict": "original"}
+      ],
+      "expectDeltas": [
+        [{"originalWord": "jamie", "term": "Jamy", "delta": 1}],
+        [{"originalWord": "jamie", "term": "Jamy", "delta": -1}]
+      ]
+    },
+    {
+      "name": "alt0-pick-moves-alternate-mapping",
+      "seedPayloadJSON": "{\"records\":[{\"originalWord\":\"cloud\",\"term\":\"Claude\",\"decision\":\"BLOCK\",\"outcome\":\"kept\",\"confidence\":0.85,\"margin\":3.5,\"unsure\":false,\"occurrenceIndex\":0,\"originalStart\":0,\"originalLength\":5,\"publishedStart\":0,\"publishedLength\":5,\"alternates\":[{\"term\":\"Claude Code\",\"find\":\"cloud code\"}]}],\"verdicts\":{},\"contributions\":{}}",
+      "operations": [
+        {"op": "setVerdict", "recordKey": "cloud|claude|0", "verdict": "alt0"}
+      ],
+      "expectDeltas": [
+        [{"originalWord": "cloud", "term": "Claude Code", "delta": 1}]
+      ]
+    },
+    {
+      "name": "clear-verdict-reverses-contribution",
+      "seedPayloadJSON": "{\"records\":[{\"originalWord\":\"jamie\",\"term\":\"Jamy\",\"decision\":\"APPLY\",\"outcome\":\"applied\",\"confidence\":0.85,\"margin\":3.5,\"unsure\":false,\"occurrenceIndex\":0,\"originalStart\":0,\"originalLength\":5,\"publishedStart\":0,\"publishedLength\":4}],\"verdicts\":{},\"contributions\":{}}",
+      "operations": [
+        {"op": "setVerdict", "recordKey": "jamie|jamy|0", "verdict": "term"},
+        {"op": "clearVerdict", "recordKey": "jamie|jamy|0"}
+      ],
+      "expectDeltas": [
+        [{"originalWord": "jamie", "term": "Jamy", "delta": 1}],
+        [{"originalWord": "jamie", "term": "Jamy", "delta": -1}]
+      ]
+    },
+    {
+      "name": "legacy-key-fallback-prevents-double-count",
+      "seedPayloadJSON": "{\"records\":[{\"originalWord\":\"Jamie.\",\"term\":\"Jamy\",\"decision\":\"APPLY\",\"outcome\":\"applied\",\"confidence\":0.85,\"margin\":3.5,\"unsure\":false,\"occurrenceIndex\":0,\"originalStart\":0,\"originalLength\":6,\"publishedStart\":0,\"publishedLength\":4}],\"verdicts\":{},\"contributions\":{\"jamie.|jamy\":1}}",
+      "operations": [
+        {"op": "setVerdict", "recordKey": "jamie.|jamy|0", "verdict": "term"}
+      ],
+      "expectDeltas": [
+        []
+      ]
+    }
+  ]
+}

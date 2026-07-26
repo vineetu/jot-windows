@@ -11,7 +11,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Jot</AssemblyName>
     <RootNamespace>Jot</RootNamespace>
-    <Version>1.2.1</Version> <!-- keep aligned with Package*.appxmanifest Identity Version (feeds feedback reports + env log) -->
+    <Version>1.2.2</Version> <!-- keep aligned with Package*.appxmanifest Identity Version (feeds feedback reports + env log) -->
     <ApplicationIcon>Assets\jot.ico</ApplicationIcon>
     <!-- ONNX Runtime ships native (win-x64) libraries; pin the platform so they are restored/copied. -->
     <Platforms>x64</Platforms>
@@ -28,6 +28,15 @@
   <ItemGroup>
     <!-- Tests exercise internal engine pieces (MelFrontend/StreamingMel byte-exactness). -->
     <InternalsVisibleTo Include="Jot.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Common-word frequency lists for the vocabulary gate's over-correction brake (21 languages,
+         ~5 MB), copied from jot-shared @5326460. EMBEDDED, not Content, on purpose: on macOS the
+         #1 shipped bug in this feature was the list silently missing from the bundle, which turns
+         the brake into a no-op and makes every "name" become "Jamy". An embedded resource cannot
+         go missing without failing the build. -->
+    <EmbeddedResource Include="Vocabulary\Resources\common-words*.txt" />
   </ItemGroup>
 
   <!-- Flavor gate: defines the SONY compile symbol used by Services/Ai/PfbGateway.cs, PfbAuth.cs
@@ -58,6 +67,10 @@
     <!-- Newer DirectML runtime than the 1.15.2 that ORT.DirectML bundles: 1.15.2 rejects Nemotron's
          int4 (4-bit) ops on this GPU ("parameter is incorrect"); 1.15.4 supports them. -->
     <PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" />
+    <!-- SentencePiece BPE encoder for the CTC word spotter (term → token ids). Fully managed; its
+         only transitive dep is Google.Protobuf, also managed — so unlike WindowsAppSDK it brings no
+         second native runtime and cannot recreate the APPX1101 duplicate-payload collision above. -->
+    <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
   </ItemGroup>
 
   <ItemGroup>

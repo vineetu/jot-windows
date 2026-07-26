@@ -24,8 +24,8 @@ past. Microsoft explicitly asks for "any steps required to access hidden or lock
 >    it finishes. Please let it finish — it is required for transcription (time depends on the connection).
 > 3. Finish the wizard (pick a microphone; the remaining steps can be left at their defaults).
 > 4. Click into any text field (Notepad, a browser box, even this form). Press the dictation hotkey —
->    default Alt+Space (the current binding is shown in Settings → Shortcuts) — speak a sentence, then press
->    it again to stop. Your words are typed at the cursor.
+>    default Ctrl+Shift+Space (the current binding is always shown on the Shortcuts page) — speak a sentence,
+>    then press it again to stop. Your words are typed at the cursor.
 >
 > Notes:
 > • Microphone access is required; Windows prompts on first use — please Allow.
@@ -64,15 +64,25 @@ telemetry. After a one-time model download on first run, Jot works fully offline
 WHY JOT
 • Type at the speed of speech — dictate into any app, hands on the keyboard.
 • Truly private — transcription runs on your PC; your voice never leaves the device.
-• Instant — GPU-accelerated (DirectML) with a CPU fallback that's still real-time.
+• Instant — Jot checks your GPU on its own and switches to GPU acceleration when it will
+  actually be faster, with a CPU path that's still real-time.
 • A live caption pill shows a waveform and your words as you speak, so you always know
-  it's listening.
+  it's listening. Click it to see the whole transcript as it builds.
 • Free, with no account and no ads.
 
-REWRITE & CLEAN UP (OPTIONAL)
-• A keyboard-first "Rewrite with…" palette turns dictated text into a cleaner version —
-  make it shorter, fix spelling & grammar, convert to bullet points, improve the writing,
-  and more.
+SPEAK IT YOUR WAY
+• Toggle dictation with one hotkey, or hold a key and talk — push-to-talk, your choice.
+• 40 spoken languages, with automatic detection if you switch between them.
+• Every shortcut is yours to change: dictate, push-to-talk, rewrite, and paste-your-last-
+  transcript from anywhere.
+
+REWRITE & TRANSFORM (OPTIONAL)
+• A keyboard-first "Rewrite with…" palette turns dictated text into a finished version —
+  shorten it, fix spelling & grammar, convert to bullet points or a checklist, translate it,
+  rewrite a ramble as a clean email, and more. 33 prompts are built in, and you can add
+  your own.
+• Or just say what you want changed: speak the direction — "make it friendlier and about
+  half as long" — instead of picking a prompt.
 • Optional transcript clean-up removes filler words and fixes punctuation.
 • These optional AI features are bring-your-own-provider: connect Ollama to run fully
   on-device, or add your own OpenAI, Anthropic, or Google Gemini API key. Core dictation
@@ -80,9 +90,10 @@ REWRITE & CLEAN UP (OPTIONAL)
 
 MORE
 • Transcribe existing audio or video files — just drop them in.
-• Searchable history of everything you've dictated, kept locally.
+• Searchable history of everything you've dictated, kept locally: replay the audio, tag it,
+  edit the text.
 • Native Windows 11 design: Fluent UI, Mica, light/dark, system tray, global hotkeys.
-• Works with many spoken languages (English is the most accurate).
+• Short built-in tours, so nothing stays hidden.
 
 Jot is designed around a simple idea: dictation should be instant, private, and out of your
 way. Install it, pick a hotkey, and start talking.
@@ -91,12 +102,15 @@ way. Install it, pick a hotkey, and start talking.
 Press a hotkey, speak, and text is typed at your cursor in any app
 100% on-device transcription — your voice never leaves your PC
 Works offline after a one-time model download
-GPU-accelerated (DirectML) with a real-time CPU fallback
+Automatic GPU acceleration, with a real-time CPU path on any machine
+Push-to-talk: hold a key and talk, or toggle hands-free
+40 spoken languages with automatic detection
 Live caption pill with waveform while you speak
-"Rewrite with…" palette: shorten, fix grammar, bulletize, and more
-Optional AI clean-up and rewrite (bring your own key, or run Ollama locally)
+"Rewrite with…" palette: 33 prompts — shorten, bulletize, translate, and more
+Speak your rewrite instruction instead of picking a prompt
+Optional AI rewrite (bring your own key, or run Ollama locally)
 Transcribe your own audio and video files
-Local, searchable dictation history
+Local, searchable dictation history with playback
 Free — no account, no ads, no telemetry
 
 ## Search terms / keywords (up to 7, not shown to users)
@@ -138,17 +152,28 @@ Free
 
 ---
 
-## Screenshots (in store-assets/listing/, 1920×1080 PNG — Store-ready)
-1. 01-main.png     — Recents: the main app, dictation history
-2. 02-pill.png     — the live recording pill (waveform + caption + timer)
-3. 03-rewrite.png  — the "Rewrite with…" prompt palette
-4. 04-settings.png — Settings (clean view, advanced features off) + AI section
-5. 05-ai.png       — AI section: bring-your-own-provider, model, and API-key entry
+## Screenshots — UPLOAD THESE (store-assets/listing-final/, 1920×1080 PNG, Store-ready)
 
-Suggested order for the listing: 01, 02, 03, 05, 04.
-Recommended captions (Partner Center lets you add one per screenshot):
-1. "Press a hotkey, speak, and it's typed at your cursor."
-2. "A live pill shows it's listening — waveform and words as you talk."
-3. "Rewrite dictated text: shorten, fix grammar, bulletize — from the keyboard."
-4. "Bring your own AI provider, or run Ollama fully on-device."
-5. "Simple, native Windows settings. Private by default."
+Replaces the old five in store-assets/listing/ (kept only for history — do not upload those).
+Shot in the 1.2.1 build against a demo library, so every transcript on screen is realistic and
+sanitized. Upload in filename order; the numbering IS the listing order. Captions go in the
+"Description" field Partner Center offers per screenshot.
+
+| # | File | Caption |
+|---|------|---------|
+| 1 | 01-dictate-anywhere.png | Press a hotkey, speak, and your words are typed at the cursor — in any app. |
+| 2 | 02-live-pill.png | A live pill shows it's listening: waveform, your words, and the timer. |
+| 3 | 03-transform-before-after.png | Turn a rambling dictation into a finished email — one prompt, before and after. |
+| 4 | 04-prompt-palette.png | 33 built-in rewrite prompts: shorten, bulletize, translate, fix grammar. |
+| 5 | 05-speak-your-direction.png | Or just say what you want changed — speak the direction instead of picking a prompt. |
+| 6 | 06-pill-expanded.png | Click the pill to watch the full transcript build as you talk. |
+| 7 | 07-shortcuts.png | Your keys, your way — toggle, push-to-talk, rewrite, paste-last. |
+| 8 | 08-languages-and-ai.png | 40 languages with auto-detect. Bring your own AI provider, or run Ollama on-device. |
+| 9 | 09-local-history.png | Everything stays on your PC — replay the audio, tag it, edit the text. |
+| 10 | 10-private-by-default.png | 100% on-device: no account, no telemetry, works offline. |
+
+Also captured but NOT in the listing cut (store-assets/screenshots-1.2.1/ + listing-1.2.1/):
+09-prompts (redundant with the palette shot), 11-help, 12-ask-jot (empty state — reshoot with a
+real conversation before using it), 13-quick-tour.
+
+Regenerate the whole set with `store-assets\capture-all.ps1` then `compose-all.ps1`.

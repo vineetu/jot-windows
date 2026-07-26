@@ -38,17 +38,27 @@ public partial class ModelDownload : ObservableObject
     [ObservableProperty] private double _progress;      // 0..100, for a bound ProgressBar
     [ObservableProperty] private string _statusText = "";
 
+    /// <summary>Last attempt ended in an error (the message is already in <see cref="StatusText"/>).
+    /// Exists so the button can say "Retry" — the same button, because retrying IS re-running the
+    /// idempotent, resumable Ensure; a separate retry command would be a second path to drift.</summary>
+    [ObservableProperty] private bool _failed;
+
     /// <summary>Show a "Download" affordance only when it makes sense: not present and not already running.</summary>
     public bool ShowButton => !IsInstalled && !IsDownloading;
+    public string ButtonText => Failed ? "Retry" : "Download";
     partial void OnIsInstalledChanged(bool value) => OnPropertyChanged(nameof(ShowButton));
     partial void OnIsDownloadingChanged(bool value) => OnPropertyChanged(nameof(ShowButton));
+    partial void OnFailedChanged(bool value) => OnPropertyChanged(nameof(ButtonText));
 
     /// <summary>Re-check disk (e.g. when a screen opens) in case the model appeared or was removed elsewhere.</summary>
     public void Refresh()
     {
         if (IsDownloading) return;
         IsInstalled = _installer.IsInstalled;
-        StatusText = IsInstalled ? _installedText : _notInstalledText;
+        // Don't erase a failure message the user hasn't seen a resolution for — only a model that is
+        // actually present clears it. Otherwise re-opening Settings would silently hide "Download failed".
+        if (IsInstalled) Failed = false;
+        if (IsInstalled || !Failed) StatusText = IsInstalled ? _installedText : _notInstalledText;
     }
 
     [RelayCommand]
@@ -62,12 +72,18 @@ public partial class ModelDownload : ObservableObject
     {
         if (IsInstalled || IsDownloading) return IsInstalled;
         IsDownloading = true;
+        Failed = false;
         Progress = 0;
         StatusText = _installer.Manifest.DescribeProgress(0);
         try
         {
             var progress = new Progress<double>(f =>
             {
+                // Progress<T> hands the callback to a SynchronizationContext (the dispatcher here), so a
+                // report can still be in flight after the attempt has ended. Without this guard a late
+                // one overwrites the terminal "Installed" / "Download failed — …" line with a stale
+                // "Downloading… 50%", which reads as the download having gone backwards.
+                if (!IsDownloading) return;
                 Progress = f * 100;
                 StatusText = _installer.Manifest.DescribeProgress(f);
             });
@@ -77,6 +93,7 @@ public partial class ModelDownload : ObservableObject
         }
         catch (Exception ex)
         {
+            Failed = true;
             StatusText = "Download failed — " + ex.Message;
         }
         finally { IsDownloading = false; }
