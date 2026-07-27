@@ -38,5 +38,267 @@
     "detections": [{"term": "Sriram", "aliases": [], "score": 0.9, "startTime": 0.4, "endTime": 0.6}],
     "expectText": "talk to vikram",
     "expectProposalCount": 0
+  },
+
+  {
+    "_comment": "── A · multi-word placement. Every case above this line is a SINGLE-WORD term with no aliases, which is exactly why neither defect below was ever caught here. Derived from the Windows C# gate at ae2ce1c; see docs/vocabulary-windows-findings.md.",
+    "name": "spot-multiword-absorbs-duplicated-tail",
+    "transcript": "logged. Claude code generated most of the boiler plate for the installer",
+    "totalAudioDuration": 4.0,
+    "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "logged. Claude Code generated most of the boiler plate for the installer",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "Claude code", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+  },
+  {
+    "name": "spot-multiword-already-written-correctly-is-noop",
+    "transcript": "Claude Code generated the installer",
+    "totalAudioDuration": 1.0,
+    "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "Claude Code generated the installer",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-multiword-wrong-case-still-corrects",
+    "transcript": "claude code generated the installer",
+    "totalAudioDuration": 1.0,
+    "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "Claude Code generated the installer",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "claude code", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+  },
+  {
+    "name": "spot-multiword-never-absorbs-a-real-following-word",
+    "transcript": "Claude code code review",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "Claude Code code review",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "Claude code", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+  },
+  {
+    "name": "spot-multiword-absorb-keeps-trailing-punctuation",
+    "transcript": "we ship Claude code.",
+    "totalAudioDuration": 1.0,
+    "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "we ship Claude Code.",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "Claude code", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+  },
+  {
+    "name": "spot-multiword-absorb-across-punctuation-blocks",
+    "transcript": "ask Claude, code review is done",
+    "totalAudioDuration": 3.0,
+    "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "ask Claude, code review is done",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "Claude,", "outcome": "kept", "decision": "BLOCK", "askCandidate": false}]
+  },
+  {
+    "name": "spot-multiword-tail-that-differs-is-an-insertion",
+    "transcript": "Claude wrote the installer",
+    "totalAudioDuration": 1.0,
+    "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "Claude Code wrote the installer",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "Claude", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+  },
+  {
+    "name": "spot-multiword-placed-on-two-word-window",
+    "transcript": "I love cloud code.",
+    "totalAudioDuration": 2.5,
+    "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 1.38, "endTime": 2.18}],
+    "expectText": "I love Claude Code.",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "cloud code", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+  },
+  {
+    "name": "spot-threeword-term-placed-on-three-word-window",
+    "transcript": "use the model context protocall now",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Model Context Protocol", "aliases": [], "score": -0.36, "startTime": 0.5, "endTime": 1.5}],
+    "expectText": "use the Model Context Protocol now",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "model context protocall", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+  },
+  {
+    "name": "spot-window-words-must-each-align",
+    "transcript": "the load code runs",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "the load code runs",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-merged-single-token-still-hosts-multiword-term",
+    "transcript": "call ramanathan tomorrow",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Ramaa Nathan", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "call Ramaa Nathan tomorrow",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "ramanathan", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+  },
+  {
+    "name": "spot-alias-word-count-drives-window-width",
+    "transcript": "the pera keet model is fast",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Parakeet", "aliases": ["pera keet"], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
+    "expectText": "the Parakeet model is fast",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "pera keet", "outcome": "applied", "decision": "APPLY", "askCandidate": true}]
+  },
+  {
+    "name": "spot-window-claims-every-word-it-covers",
+    "transcript": "we use cloud code today",
+    "totalAudioDuration": 2.0,
+    "detections": [
+      {"term": "Claude Code", "aliases": [], "score": -0.3, "startTime": 0.5, "endTime": 1.0},
+      {"term": "Kode", "aliases": [], "score": -0.9, "startTime": 1.0, "endTime": 1.4}
+    ],
+    "expectText": "we use Claude Code today",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "cloud code", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+  },
+
+  {
+    "_comment": "── B1 · possessive / apostrophe guard. skeleton() drops the apostrophe, so a possessive measures 0.00 against its own plural.",
+    "name": "spot-possessive-is-not-rewritten-as-the-plural",
+    "transcript": "the Mariana's trench expedition",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Marianas", "aliases": [], "score": -1.0, "startTime": 0.5, "endTime": 1.0}],
+    "expectText": "the Mariana's trench expedition",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "Mariana's", "outcome": "kept", "decision": "BLOCK", "askCandidate": false}]
+  },
+  {
+    "name": "spot-possessive-curly-apostrophe-counts-too",
+    "transcript": "the Mariana’s trench",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Marianas", "aliases": [], "score": -1.0, "startTime": 0.5, "endTime": 1.0}],
+    "expectText": "the Mariana’s trench",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "Mariana’s", "outcome": "kept", "decision": "BLOCK", "askCandidate": false}]
+  },
+  {
+    "name": "spot-possessive-guard-measured-usoc",
+    "transcript": "we asked the USOC's board",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "USOC", "aliases": [], "score": -1.0, "startTime": 0.5, "endTime": 1.0}],
+    "expectText": "we asked the USOC's board",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "USOC's", "outcome": "kept", "decision": "BLOCK", "askCandidate": false}]
+  },
+  {
+    "name": "spot-term-carrying-an-apostrophe-still-corrects",
+    "transcript": "we met obrien yesterday",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "O'Brien", "aliases": [], "score": -1.0, "startTime": 0.5, "endTime": 1.0}],
+    "expectText": "we met O'Brien yesterday",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "obrien", "outcome": "applied", "decision": "APPLY", "askCandidate": true}]
+  },
+  {
+    "name": "spot-alias-carrying-the-apostrophe-unblocks-it",
+    "transcript": "we met o'conners today",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "OConnor", "aliases": ["O'Connor"], "score": -1.0, "startTime": 0.5, "endTime": 1.0}],
+    "expectText": "we met OConnor today",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "o'conners", "outcome": "applied", "decision": "APPLY", "askCandidate": true}]
+  },
+
+  {
+    "_comment": "── B2 · inflection guard. PARTIAL by measurement — it catches 5 of E7's 29 measured overwrites. The two cases named 'limit' below pin what it deliberately does NOT reach.",
+    "name": "spot-inflected-everyday-word-is-not-overwritten-ru",
+    "transcript": "построили три пирамид высотой",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Пирамида", "aliases": [], "score": -0.14, "startTime": 0.5, "endTime": 1.0}],
+    "commonWordsResource": "common-words-ru",
+    "expectText": "построили три пирамид высотой",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "пирамид", "outcome": "kept", "decision": "BLOCK", "askCandidate": false}]
+  },
+  {
+    "name": "spot-inflected-everyday-word-is-not-overwritten-pl",
+    "transcript": "zbudowali piramid o wysokości",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Piramida", "aliases": [], "score": -0.14, "startTime": 0.5, "endTime": 1.0}],
+    "commonWordsResource": "common-words-pl",
+    "expectText": "zbudowali piramid o wysokości",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "piramid", "outcome": "kept", "decision": "BLOCK", "askCandidate": false}]
+  },
+  {
+    "name": "spot-inflection-guard-limit-proper-noun-is-still-overwritten",
+    "transcript": "мы поехали в Аризона летом",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Аризоны", "aliases": [], "score": -0.14, "startTime": 0.5, "endTime": 1.0}],
+    "commonWordsResource": "common-words-ru",
+    "expectText": "мы поехали в Аризоны летом",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "Аризона", "outcome": "applied", "decision": "APPLY", "askCandidate": true}]
+  },
+  {
+    "name": "spot-inflection-guard-limit-short-span-is-below-the-floor",
+    "transcript": "w noc wigili spotkanie",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Wigilii", "aliases": [], "score": -0.14, "startTime": 0.5, "endTime": 1.0}],
+    "commonWordsResource": "common-words-pl",
+    "expectText": "w noc Wigilii spotkanie",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "wigili", "outcome": "applied", "decision": "APPLY", "askCandidate": true}]
+  },
+  {
+    "name": "spot-inflection-guard-ordinary-near-miss-still-corrects",
+    "transcript": "talk to shriram",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Sriram", "aliases": [], "score": -0.14, "startTime": 0.5, "endTime": 1.0}],
+    "expectText": "talk to Sriram",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "shriram", "outcome": "applied", "decision": "APPLY", "askCandidate": true}]
+  },
+
+  {
+    "_comment": "── D · confidence-conditional (earned) plausibility ceiling. `acoustic` is a NEW field on Detection; absent means false, which is why every case above and every pre-existing case is unaffected.",
+    "name": "spot-strongly-heard-term-earns-headroom",
+    "transcript": "Herrakit remains the fallback engine",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Parakeet", "aliases": [], "score": -0.313, "startTime": 0.0, "endTime": 0.6, "acoustic": true}],
+    "expectText": "Parakeet remains the fallback engine",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "Herrakit", "outcome": "applied", "decision": "APPLY", "askCandidate": true}]
+  },
+  {
+    "name": "spot-weakly-heard-term-earns-no-headroom",
+    "transcript": "Herrakit remains the fallback engine",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Parakeet", "aliases": [], "score": -2.4, "startTime": 0.0, "endTime": 0.6, "acoustic": true}],
+    "expectText": "Herrakit remains the fallback engine",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-ramp-midpoint-earns-partial-headroom",
+    "transcript": "Herrakit remains the fallback engine",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Parakeet", "aliases": [], "score": -1.4, "startTime": 0.0, "endTime": 0.6, "acoustic": true}],
+    "expectText": "Herrakit remains the fallback engine",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-non-acoustic-score-earns-no-headroom",
+    "transcript": "Herrakit remains the fallback engine",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Parakeet", "aliases": [], "score": -0.313, "startTime": 0.0, "endTime": 0.6}],
+    "expectText": "Herrakit remains the fallback engine",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-earned-headroom-does-not-beat-the-common-word-brake",
+    "transcript": "we finished the project today",
+    "totalAudioDuration": 2.0,
+    "detections": [{"term": "Prochet", "aliases": [], "score": -0.05, "startTime": 0.0, "endTime": 0.6, "acoustic": true}],
+    "expectText": "we finished the project today",
+    "expectProposalCount": 1,
+    "expectProposals": [{"originalWord": "project", "outcome": "kept", "decision": "BLOCK", "askCandidate": true}]
   }
 ]

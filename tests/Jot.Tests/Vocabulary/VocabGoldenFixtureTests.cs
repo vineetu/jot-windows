@@ -158,10 +158,15 @@ public class VocabGoldenFixtureTests
 
     // MARK: - 4 · VocabularyGate.ApplyFromDetections (the no-fork Nemotron path Windows uses)
 
+    /// <param name="Acoustic">Absent in JSON ⇒ false, which is the shipped default and why every
+    /// pre-existing case is unaffected by the earned ceiling. Present ONLY on cases that pin
+    /// <see cref="VocabularyGate.EffectiveCeiling"/>.</param>
     private sealed record DetectionFixture(
-        string Term, List<string> Aliases, float Score, double StartTime, double EndTime);
+        string Term, List<string> Aliases, float Score, double StartTime, double EndTime,
+        bool Acoustic = false);
 
-    private sealed record DetectionExpectProposal(string OriginalWord, string Outcome, bool? AskCandidate);
+    private sealed record DetectionExpectProposal(
+        string OriginalWord, string Outcome, string? Decision, bool? AskCandidate);
 
     private sealed record DetectionCase(
         string Name,
@@ -178,12 +183,22 @@ public class VocabGoldenFixtureTests
     public void VocabularyGateApplyFromDetections_MatchesGolden()
     {
         var cases = Load<List<DetectionCase>>("detections_apply");
-        Assert.NotEmpty(cases);
+        // Anti-vacuum: a truncated/mis-parsed fixture file that silently loads a handful of cases
+        // would pass this test while asserting nothing about the multi-word, apostrophe, inflection
+        // and earned-ceiling behaviour. Pin the count and pin that every case names itself.
+        Assert.Equal(33, cases.Count);
+        Assert.All(cases, c => Assert.False(string.IsNullOrWhiteSpace(c.Name)));
+        // Every case must assert SOMETHING beyond "the text came back": either an expected proposal
+        // count or at least one expected proposal.
+        Assert.All(cases, c => Assert.True(
+            c.ExpectProposalCount is not null || (c.ExpectProposals?.Count ?? 0) > 0,
+            $"detections[{c.Name}] asserts nothing about proposals"));
 
         foreach (DetectionCase c in cases)
         {
             var dets = c.Detections
-                .Select(d => new VocabularyGate.Detection(d.Term, d.Aliases, d.Score, d.StartTime, d.EndTime))
+                .Select(d => new VocabularyGate.Detection(
+                    d.Term, d.Aliases, d.Score, d.StartTime, d.EndTime, d.Acoustic))
                 .ToList();
             var overrides = (c.Overrides ?? [])
                 .Select(o => new OverrideEntry(o.OriginalWord, o.Term, o.Net, o.AlwaysReplace)).ToList();
@@ -207,6 +222,9 @@ public class VocabGoldenFixtureTests
                 Assert.True(p is not null, $"detections[{c.Name}] missing proposal for {ep.OriginalWord}");
                 Assert.True(ep.Outcome == p!.Outcome,
                     $"detections[{c.Name}] outcome expected {ep.Outcome}, got {p.Outcome}");
+                if (ep.Decision is { } decision)
+                    Assert.True(decision == p.Decision,
+                        $"detections[{c.Name}] decision expected {decision}, got {p.Decision}");
                 if (ep.AskCandidate is { } ask)
                     Assert.True(ask == p.AskCandidate, $"detections[{c.Name}] askCandidate expected {ask}");
             }
