@@ -85,7 +85,7 @@ public static class VocabularyGate
     ///
     /// WHY A RAMP AND NOT A NUMBER. String similarity and acoustic evidence are substitutes: a term the
     /// model was 60 % sure of per token does not need the engine's spelling to vouch for it, and one it
-    /// barely heard does. `Herrakit` → `Parakeet` is 0.50 away — one guard too far — and was heard at
+    /// barely heard does. `Herrakit` → `Parakeet` is 0.625 away — one guard too far — and was heard at
     /// −0.313, the best score of five terms in that dictation.
     ///
     /// EVERY NUMBER IS MEASURED, on E5's 433 detections over 1041 clips of real speech. Admitted rows
@@ -456,7 +456,7 @@ public static class VocabularyGate
     /// against the WHOLE term. So the two-word term "Claude Code" either landed on just "Claude" and
     /// left the transcript's own "code" behind it (defect 1 — and Decide step (2) waves every
     /// multi-word term through as "precise and self-gating"), or, when the engine wrote no single
-    /// word close enough on its own — skeleton("cloud") vs skeleton("Claude Code") is 0.56 against a
+    /// word close enough on its own — skeleton("cloud") vs skeleton("Claude Code") is 0.60 against a
     /// 0.45 ceiling — it was discarded outright (defect 3), even though the two-word WINDOW
     /// "cloud code" measures 0.20 and is obviously the right host. Defect 1 CORRUPTS text the
     /// transcriber already got right, and the result is pasted before anyone can review it; defect 3
@@ -515,7 +515,7 @@ public static class VocabularyGate
 
             // ── WINDOWS DIVERGENCE (defect 3 — "I love cloud code."). See the class-level block.
             // A candidate host is a CONTIGUOUS N-WORD WINDOW, not just one token. Comparing one word
-            // against a whole multi-word term is near-hopeless: "cloud" vs "Claude Code" is 0.56
+            // against a whole multi-word term is near-hopeless: "cloud" vs "Claude Code" is 0.60
             // against the 0.45 ceiling and the detection is thrown away, while the window
             // "cloud code" is 0.20. Widths come from the term AND its aliases, so a 2-word alias can
             // host a 1-word term ("nemo tron" → "Nemotron") and vice versa; width 1 is always tried
@@ -575,7 +575,7 @@ public static class VocabularyGate
             // nothing happened" undiagnosable: the user cannot tell a spotter miss (recall) from a
             // plausibility block (precision), and those are opposite bugs with opposite fixes.
             // Observed: spotter found "Parakeet" at -0.313 (best of five) while the engine had written
-            // "Herrakit" — gap 0.50 against the 0.45 ceiling, one guard too far.
+            // "Herrakit" — gap 0.625 against the 0.45 ceiling, one guard too far.
             //
             // A LOG, not a review row: a review row needs OriginalStart/OriginalLength anchors into the
             // published text, and there is no span to anchor to. Synthesizing a zero-length one would
@@ -596,7 +596,7 @@ public static class VocabularyGate
                         ? "—"
                         : nearestGap.ToString("F2", CultureInfo.InvariantCulture),
                     // The ceiling this detection actually earned, not the constant — otherwise the log
-                    // reads "gap 0.50 against a 0.45 ceiling" for a row that was refused at 0.62.
+                    // reads "gap 0.45 against a 0.45 ceiling" for a row that was refused at its earned 0.62.
                     ["ceiling"] = ceiling.ToString("F2", CultureInfo.InvariantCulture),
                 });
         }
@@ -974,7 +974,7 @@ public static class VocabularyGate
     /// genuine multi-word windows:
     ///
     ///  * WORD-FOR-WORD ALIGNMENT against a term/alias of the same width. Whole-window plausibility
-    ///    alone is far too loose to place text with: "Claude wrote" measures 0.36 against
+    ///    alone is far too loose to place text with: "Claude wrote" measures 0.27 against
     ///    "Claude Code", inside the ceiling, and would silently overwrite "wrote".
     ///  * CROSS PLAIN SPACES ONLY, and never a word's own punctuation. Widening across the comma in
     ///    "ask Claude, code review" would eat a boundary the engine deliberately wrote; the dedup
@@ -1312,7 +1312,7 @@ public static class VocabularyGate
     /// <summary>The number the ceiling is compared against:
     /// the SMALLEST normalized edit distance from the heard word
     /// to the term or any alias. Split out so a rejection can be REPORTED with its margin ("herrakit
-    /// vs parakeet, 0.50 against a 0.45 ceiling") instead of vanishing as a bare false.
+    /// vs parakeet, 0.625 against a 0.45 ceiling") instead of vanishing as a bare false.
     ///
     /// Two edges preserved exactly as the boolean had them: an empty heard skeleton is always
     /// plausible (0), and a candidate with an empty skeleton is no candidate at all
