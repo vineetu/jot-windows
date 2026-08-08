@@ -180,22 +180,56 @@ public class VocabGoldenFixtureTests
         int? ExpectProposalCount);
 
     [Fact]
-    public void VocabularyGateApplyFromDetections_MatchesGolden()
+    public void VocabularyGateApplyFromDetections_MatchesGolden() =>
+        RunDetectionCases("detections_apply", 33, exceptions: new HashSet<string>());
+
+    /// <summary>
+    /// The SAME harness against jot-shared's own copy of the file (branch <c>claude/jot-cli-v2</c>),
+    /// which grew 17 cases after Windows sent its five divergences upstream — including three the
+    /// Swift review then found on top. Kept as a second file rather than merged into ours: this one is
+    /// upstream's to change, ours is a superset with Windows-only shapes, and a merge would make it
+    /// impossible to tell which side moved.
+    ///
+    /// <para><b>Exceptions are DELIBERATE DIVERGENCES, not TODOs.</b> Each one is a case where Windows
+    /// measured a different answer and wrote down why; the exception list is where that decision is
+    /// visible instead of buried. Adding one requires the same standard: a reason, in the gate.</para>
+    /// </summary>
+    [Fact]
+    public void VocabularyGateApplyFromDetections_MatchesUpstreamGolden() =>
+        RunDetectionCases("detections_apply_upstream", 22, exceptions: UpstreamDetectionExceptions);
+
+    private static readonly IReadOnlySet<string> UpstreamDetectionExceptions =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            // The multi-word IDENTITY relation. Swift makes it depend on HOW the span was reached
+            // (dedup-widened → ordinal, window-placed → case-insensitive), so upstream leaves a
+            // window-placed "Claude code" alone. Windows uses ORDINAL for every multi-word span,
+            // because for a multi-word proper noun the casing IS the term — it is what the user typed
+            // and the reason they added it — and a rule that depends on which mechanism found the span
+            // gives one transcript two answers. Pinned the other way by our own
+            // `spot-multiword-wrong-case-still-corrects`. See the identity note in ApplyFromDetections.
+            "spot-multiword-already-correct-is-noop",
+        };
+
+    private static void RunDetectionCases(string file, int expectedCount, IReadOnlySet<string> exceptions)
     {
-        var cases = Load<List<DetectionCase>>("detections_apply");
+        var cases = Load<List<DetectionCase>>(file);
         // Anti-vacuum: a truncated/mis-parsed fixture file that silently loads a handful of cases
         // would pass this test while asserting nothing about the multi-word, apostrophe, inflection
         // and earned-ceiling behaviour. Pin the count and pin that every case names itself.
-        Assert.Equal(33, cases.Count);
+        Assert.Equal(expectedCount, cases.Count);
         Assert.All(cases, c => Assert.False(string.IsNullOrWhiteSpace(c.Name)));
         // Every case must assert SOMETHING beyond "the text came back": either an expected proposal
         // count or at least one expected proposal.
         Assert.All(cases, c => Assert.True(
             c.ExpectProposalCount is not null || (c.ExpectProposals?.Count ?? 0) > 0,
             $"detections[{c.Name}] asserts nothing about proposals"));
+        // An exception that no longer names a real case is a stale excuse — fail rather than skip.
+        Assert.All(exceptions, name => Assert.Contains(cases, c => c.Name == name));
 
         foreach (DetectionCase c in cases)
         {
+            if (exceptions.Contains(c.Name)) continue;
             var dets = c.Detections
                 .Select(d => new VocabularyGate.Detection(
                     d.Term, d.Aliases, d.Score, d.StartTime, d.EndTime, d.Acoustic))
@@ -230,6 +264,94 @@ public class VocabGoldenFixtureTests
             }
         }
     }
+
+    // MARK: - 4c · VocabularyCorrector — the model-free 19-language path, end to end
+
+    private sealed record CorrectorTermFixture(string Text, List<string>? Aliases);
+
+    private sealed record CorrectorCase(
+        string Name,
+        string Transcript,
+        string Language,
+        List<CorrectorTermFixture> Terms,
+        string ExpectText,
+        List<DetectionExpectProposal>? ExpectProposals,
+        int? ExpectProposalCount,
+        int? ExpectDetectionCount);
+
+    /// <summary>
+    /// Corrector → gate, on jot-shared's fixtures. This composes the two exactly as a caller must
+    /// (<c>docs/plans/jot-cli-windows.md</c> §5.3): the corrector is served iff the language's number
+    /// was MEASURED (<see cref="VocabularyLimits.TextualShips"/>) and a frequency list exists to brake
+    /// it with — deliberately not <see cref="VocabularyRunner.ModeFor"/>, which routes English to the
+    /// acoustic spotter and would make the English rows vacuous.
+    /// </summary>
+    [Fact]
+    public void VocabularyCorrectorApply_MatchesGolden()
+    {
+        var cases = Load<List<CorrectorCase>>("corrector_apply");
+        Assert.Equal(12, cases.Count);
+        Assert.All(cases, c => Assert.False(string.IsNullOrWhiteSpace(c.Name)));
+
+        var corrector = new VocabularyCorrector();
+        foreach (CorrectorCase c in cases)
+        {
+            if (CorrectorExceptions.Contains(c.Name)) continue;
+
+            List<VocabularyTerm> terms = [.. c.Terms.Select(t => new VocabularyTerm
+            {
+                Text = t.Text,
+                Aliases = t.Aliases ?? [],
+            })];
+
+            string? resource = EmbeddedCommonWordsProvider.ResourceFor(c.Language);
+            bool served = VocabularyLimits.TextualShips(c.Language) && resource is not null;
+
+            IReadOnlyList<VocabularyGate.Detection> detections = served
+                ? corrector.Spot(c.Transcript, terms, 1.0, VocabularyLimits.TextualMaxDistance(c.Language))
+                : [];
+
+            if (c.ExpectDetectionCount is { } expectedDetections)
+                Assert.True(expectedDetections == detections.Count,
+                    $"corrector[{c.Name}] detection count expected {expectedDetections}, got {detections.Count}");
+
+            VocabularyGate.Result result = detections.Count == 0
+                ? new VocabularyGate.Result(c.Transcript, 0, [], [])
+                : VocabularyGate.ApplyFromDetections(
+                    c.Transcript, detections, 1.0, Common, commonWordsResource: resource);
+
+            Assert.True(c.ExpectText == result.Text,
+                $"corrector[{c.Name}] text\n  expected: {c.ExpectText}\n  actual:   {result.Text}");
+
+            if (c.ExpectProposalCount is { } count)
+                Assert.True(count == result.Proposals.Count,
+                    $"corrector[{c.Name}] proposal count expected {count}, got {result.Proposals.Count}");
+
+            foreach (DetectionExpectProposal ep in c.ExpectProposals ?? [])
+            {
+                VocabularyGate.Proposal? p = result.Proposals.FirstOrDefault(
+                    x => string.Equals(x.OriginalWord, ep.OriginalWord, StringComparison.OrdinalIgnoreCase));
+                Assert.True(p is not null, $"corrector[{c.Name}] missing proposal for {ep.OriginalWord}");
+                Assert.True(ep.Outcome == p!.Outcome,
+                    $"corrector[{c.Name}] outcome expected {ep.Outcome}, got {p.Outcome}");
+                if (ep.AskCandidate is { } ask)
+                    Assert.True(ask == p.AskCandidate, $"corrector[{c.Name}] askCandidate expected {ask}");
+            }
+        }
+    }
+
+    private static readonly IReadOnlySet<string> CorrectorExceptions =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            // The inflection guard's LEXICAL arm, and the two ports read the spec sentence "the span is
+            // an everyday word minus its final character" in opposite directions. Upstream blocks a span
+            // that is a list word PLUS one trailing character ("abläufe" + n). Windows blocks a span that
+            // is a list word MINUS its final character ("пирамид" ← "пирамиды"), and measured the other
+            // reading on E6's 1207 applied corrections: it widens the class from 21 rows to 63 and turns
+            // a 4:17 recall-to-precision trade into 30:33 — most of what it adds is CORRECT corrections.
+            // See CommonWordStems. Windows keeps the measured reading; upstream's example is exempt.
+            "corrector-inflection-guard-blocks-overwrite",
+        };
 
     // MARK: - 4b · AskPolicy.Select — the "don't nag me twice" throttle
 
