@@ -1,0 +1,115 @@
+[
+  {
+    "name": "corrector-recovers-oov-name-with-no-model",
+    "_why": "§1, the headline capability. No spotter, no checkpoint, no download — just fuzzy-matching the decoded text against the user's terms. E5: recovers 34.1% of the terms the engine got wrong at 0.27 false applies/1000 words.",
+    "transcript": "talk to shriram",
+    "language": "en",
+    "terms": [{ "text": "Sriram" }],
+    "expectText": "talk to Sriram",
+    "expectProposals": [{ "originalWord": "shriram", "outcome": "applied" }]
+  },
+  {
+    "name": "corrector-finds-multi-word-term-written-as-separate-words",
+    "_why": "the corrector composes with the §3 window scan: it proposes the two-word window, the gate places it.",
+    "transcript": "I love cloud code.",
+    "language": "en",
+    "terms": [{ "text": "Claude Code" }],
+    "expectText": "I love Claude Code.",
+    "expectProposals": [{ "originalWord": "cloud code", "outcome": "applied" }]
+  },
+  {
+    "name": "corrector-skips-already-correct-term",
+    "_why": "a distance of exactly 0 is the term already written correctly — don't spend a detection on it.",
+    "transcript": "talk to Sriram",
+    "language": "en",
+    "terms": [{ "text": "Sriram" }],
+    "expectText": "talk to Sriram",
+    "expectDetectionCount": 0,
+    "expectProposalCount": 0
+  },
+  {
+    "name": "corrector-common-word-brake-still-applies",
+    "_why": "the corrector's ONLY safety net beyond its edit budget is the common-word brake. An everyday word is proposed-and-asked, never silently rewritten.",
+    "transcript": "the cloud today",
+    "language": "en",
+    "terms": [{ "text": "Claude" }],
+    "expectText": "the cloud today",
+    "expectProposals": [{ "originalWord": "cloud", "outcome": "kept" }]
+  },
+  {
+    "name": "corrector-german-cap-refuses-what-english-accepts",
+    "_why": "§1.1: German is capped at 0.15 — its long words absorb an edit, and uncapped it measured 0.96 adversarial FP/1k. grunvalt/Grunwald is 0.25: inside English's uncapped budget, outside German's.",
+    "transcript": "wir waren in grunvalt gestern",
+    "language": "de",
+    "terms": [{ "text": "Grunwald" }],
+    "expectText": "wir waren in grunvalt gestern",
+    "expectDetectionCount": 0,
+    "expectProposalCount": 0
+  },
+  {
+    "name": "corrector-same-pair-accepted-in-english",
+    "_why": "control for the row above — the pair itself is fine, it is the per-language cap that refuses it. Confirms the cap is the actual control (§8: per-language plausibility ceilings are a no-op; the corrector's acceptance distance is the knob).",
+    "transcript": "we were in grunvalt yesterday",
+    "language": "en",
+    "terms": [{ "text": "Grunwald" }],
+    "expectText": "we were in Grunwald yesterday",
+    "expectProposals": [{ "originalWord": "grunvalt", "outcome": "applied" }]
+  },
+  {
+    "name": "corrector-slovenian-is-not-served",
+    "_why": "§1.1: Slovenian is deliberately absent. 1.72 adversarial FP/1k, and the only setting under 0.5 recovers 16% of missed terms — 43% of what it recovers uncapped. The engine is also at 58.6% WER there, so the premise (a mostly-right transcript with a few mis-spelled terms) does not hold.",
+    "transcript": "govoril sem s shriram danes",
+    "language": "sl",
+    "terms": [{ "text": "Sriram" }],
+    "expectText": "govoril sem s shriram danes",
+    "expectDetectionCount": 0,
+    "expectProposalCount": 0
+  },
+  {
+    "name": "corrector-croatian-has-no-brake-so-is-not-served",
+    "_why": "§1.1: Croatian has no common-word list at all. Running the corrector there means running with the brake ABSENT. Do NOT enable it on the basis that a model exists.",
+    "transcript": "razgovarao sam sa shriram danas",
+    "language": "hr",
+    "terms": [{ "text": "Sriram" }],
+    "expectText": "razgovarao sam sa shriram danas",
+    "expectDetectionCount": 0,
+    "expectProposalCount": 0
+  },
+  {
+    "name": "corrector-unmeasured-language-fails-closed",
+    "_why": "§1.2: the default for anything not in the table is the TIGHTEST shipped value, not the loosest — and it should be unreachable, because the selector answers Off for anything absent. Fail closed.",
+    "transcript": "talk to shriram",
+    "language": "xx",
+    "terms": [{ "text": "Sriram" }],
+    "expectText": "talk to shriram",
+    "expectDetectionCount": 0,
+    "expectProposalCount": 0
+  },
+  {
+    "name": "corrector-locale-suffix-still-resolves",
+    "_why": "a caller's locale identifier (es-MX, pt_BR) must not silently fall off the table into fail-closed.",
+    "transcript": "hablé con shriram ayer",
+    "language": "es-MX",
+    "terms": [{ "text": "Sriram" }],
+    "expectText": "hablé con Sriram ayer",
+    "expectProposals": [{ "originalWord": "shriram", "outcome": "applied" }]
+  },
+  {
+    "name": "corrector-inflection-guard-blocks-overwrite",
+    "_why": "§5, and the guard is load-bearing here: 'abläufen' (dative plural of Abläufe) is correctly transcribed but is NOT in the bundled de list, so the common-word brake does not catch it and the term would otherwise be applied. Structural arm: 7-scalar shared stem, diverging only in a 1-scalar tail either side. Lexical arm: ≥7 scalars, and the frequency list widened by one trailing character contains it ('abläufe' IS in the list). Neither arm is safe alone; the conjunction lifts precision ×4.65 on this slice.",
+    "transcript": "wir haben die abläufen geprüft",
+    "language": "de",
+    "terms": [{ "text": "Abläufer" }],
+    "expectText": "wir haben die abläufen geprüft",
+    "expectProposals": [{ "originalWord": "abläufen", "outcome": "kept", "askCandidate": false }]
+  },
+  {
+    "name": "corrector-inflection-guard-KNOWN-LIMIT-oblique-proper-nouns",
+    "_why": "§5 is PARTIAL and this pins the documented limit. 'Аризона' is not in any frequency list, so the lexical arm cannot fire and the overwrite goes through. The same Russian corpus contains Аризона→Аризоны (wrong) and Аризоне→Аризоны (right) from the same term — identical length, stem, tail and distance. No threshold separates them; firing on shape ALONE destroys 30 real corrections to prevent 33 bad ones. Do not 'fix' this without a new measurement.",
+    "transcript": "мы поехали в аризона летом",
+    "language": "ru",
+    "terms": [{ "text": "Аризоны" }],
+    "expectText": "мы поехали в Аризоны летом",
+    "expectProposals": [{ "originalWord": "аризона", "outcome": "applied" }]
+  }
+]

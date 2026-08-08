@@ -95,13 +95,13 @@
     "expectProposals": [{"originalWord": "Claude,", "outcome": "kept", "decision": "BLOCK", "askCandidate": false}]
   },
   {
-    "name": "spot-multiword-tail-that-differs-is-an-insertion",
+    "name": "spot-multiword-not-placed-on-one-of-its-own-words",
+    "_why": "WAS 'tail-that-differs-is-an-insertion', dumped from this gate and named after the behaviour rather than judged: the term was published over its own correctly-transcribed first word, INSERTING 'Code' where the decoder wrote 'wrote'. jot-shared found the same shape independently while implementing the earned ceiling (which reaches 0.60, enough to hand a bare 'code' the whole term) and both ports now refuse it. 'claude' is 0.00 from the term's own first word and 0.40 from the whole term.",
     "transcript": "Claude wrote the installer",
     "totalAudioDuration": 1.0,
     "detections": [{"term": "Claude Code", "aliases": [], "score": -0.36, "startTime": 0.4, "endTime": 0.6}],
-    "expectText": "Claude Code wrote the installer",
-    "expectProposalCount": 1,
-    "expectProposals": [{"originalWord": "Claude", "outcome": "applied", "decision": "APPLY", "askCandidate": false}]
+    "expectText": "Claude wrote the installer",
+    "expectProposalCount": 0
   },
   {
     "name": "spot-multiword-placed-on-two-word-window",

@@ -1,0 +1,47 @@
+[
+  {
+    "name": "empty input returns empty",
+    "input": "",
+    "expected": ""
+  },
+  {
+    "name": "trims leading and trailing whitespace",
+    "input": "  hello world  ",
+    "expected": "hello world"
+  },
+  {
+    "name": "collapses doubled interior spaces",
+    "input": "hello  world",
+    "expected": "hello world"
+  },
+  {
+    "name": "collapses tabs and stray single newlines to one space",
+    "input": "hello\tworld\nagain",
+    "expected": "hello world again"
+  },
+  {
+    "name": "removes space before period",
+    "input": "hello world .",
+    "expected": "hello world."
+  },
+  {
+    "name": "removes space before comma and question mark",
+    "input": "well , is it ?",
+    "expected": "well, is it?"
+  },
+  {
+    "name": "preserves paragraph boundaries while cleaning inside each",
+    "input": "first  paragraph .\n\nsecond  paragraph .",
+    "expected": "first paragraph.\n\nsecond paragraph."
+  },
+  {
+    "name": "trims whitespace around each paragraph",
+    "input": " first paragraph \n\n second paragraph ",
+    "expected": "first paragraph\n\nsecond paragraph"
+  },
+  {
+    "name": "clean text passes through unchanged",
+    "input": "Already clean text, with punctuation.",
+    "expected": "Already clean text, with punctuation."
+  }
+]

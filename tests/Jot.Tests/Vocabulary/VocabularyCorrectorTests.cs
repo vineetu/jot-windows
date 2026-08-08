@@ -21,8 +21,11 @@ public class VocabularyCorrectorTests
 
     private static VocabularyGate.Result Run(string text, IReadOnlyList<VocabularyTerm> terms)
     {
+        // An explicit locale, because that is what the shipping caller passes (VocabularyRunner hands
+        // it the settings' Language) — and because omitting it now means "no language known", which
+        // resolves to the TIGHTEST distance in the table, not English's.
         IReadOnlyList<VocabularyGate.Detection> detections =
-            new VocabularyCorrector().Spot(text, terms, Seconds);
+            new VocabularyCorrector().Spot(text, terms, Seconds, "en-US");
         return VocabularyGate.ApplyFromDetections(
             text, detections, Seconds, EmbeddedCommonWordsProvider.Shared, "common-words");
     }

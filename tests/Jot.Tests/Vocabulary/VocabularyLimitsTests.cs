@@ -73,12 +73,12 @@ public class VocabularyLimitsTests
     public void SerbianCannotBeSelectedAtAll()
     {
         Assert.DoesNotContain(NemotronLocales.All, l => l.Code.StartsWith("sr", StringComparison.OrdinalIgnoreCase));
-        // And so a stored "sr-RS" is not Serbian-with-no-ceiling, it is English: Normalize folds every
-        // unknown value to the default locale. That is also why asking TextualShips("sr") is not the
-        // test — it would answer for English. The list is what is unreachable.
+        // A stored "sr-RS" therefore transcribes as English — Normalize folds every unknown value to
+        // the default locale — while the vocabulary table, which fails closed instead, serves it not
+        // at all. Two different answers to "what language is this?", both deliberate: one must pick a
+        // model, the other must refuse to guess. The list is what is unreachable either way.
         Assert.Equal("en-US", NemotronLocales.Normalize("sr-RS"));
-        Assert.Equal("common-words",
-            EmbeddedCommonWordsProvider.ResourceFor(NemotronLocales.Normalize("sr-RS")));
+        Assert.False(VocabularyLimits.TextualShips("sr-RS"));
         Assert.DoesNotContain("sr", VocabularyLimits.Languages);
     }
 
@@ -138,6 +138,36 @@ public class VocabularyLimitsTests
     [Fact]
     public void AnUnmeasuredLanguageGetsTheTightestSetting() =>
         Assert.Equal(VocabularyLimits.Unmeasured, VocabularyLimits.TextualMaxDistance("mt-MT"));
+
+    /// <summary>
+    /// The table must FAIL CLOSED on anything it does not know, and the trap is that
+    /// <c>NemotronLocales.Normalize</c> answers "en-US" for every value it fails to resolve — so a
+    /// lookup that funnels through it hands an unknown language ENGLISH's uncapped setting. A bare
+    /// subtag is the everyday shape of this ("de" is not a Nemotron code; "de-DE" is), and it must
+    /// resolve to the language it names, not to English.
+    /// </summary>
+    [Theory]
+    [InlineData("de", true, 0.15)]        // German's measured cap, not English's no-limit
+    [InlineData("es", true, VocabularyLimits.NoLimit)]
+    [InlineData("es-MX", true, VocabularyLimits.NoLimit)]   // an unlisted REGION resolves by subtag
+    [InlineData("ru", true, 0.20)]
+    [InlineData("xx", false, VocabularyLimits.Unmeasured)]
+    [InlineData("hr", false, VocabularyLimits.Unmeasured)]  // no frequency list ships — never served
+    [InlineData("sl", false, VocabularyLimits.Unmeasured)]  // measured unsafe — never served
+    [InlineData(null, false, VocabularyLimits.Unmeasured)]  // "no language known" is not "English"
+    public void AnUnrecognisedValueNeverInheritsEnglishsSetting(string? language, bool ships, double expected)
+    {
+        Assert.Equal(expected, VocabularyLimits.TextualMaxDistance(language));
+        Assert.Equal(ships, VocabularyLimits.TextualShips(language));
+    }
+
+    /// <summary>The legacy display names older settings files still hold must keep resolving.</summary>
+    [Theory]
+    [InlineData("English", VocabularyLimits.NoLimit)]
+    [InlineData("German", 0.15)]
+    [InlineData("Croatian", VocabularyLimits.Unmeasured)]
+    public void LegacyDisplayNamesStillResolve(string name, double expected) =>
+        Assert.Equal(expected, VocabularyLimits.TextualMaxDistance(name));
 
     /// <summary>
     /// The distance is a real brake, not a stored number: at Greek's 0.20 the corrector refuses a

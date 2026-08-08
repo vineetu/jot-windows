@@ -439,12 +439,13 @@ public static class VocabularyGate
     /// Margin is 0 (the spotter score is on a different scale), which keeps the earned-margin
     /// branch from mis-firing.
     ///
-    /// ═══ DELIBERATE DIVERGENCE FROM jot-shared — DO NOT "RE-SYNC" THIS AWAY ═══
-    /// Three guards below have NO counterpart in Swift's `applyFromDetections`, which has the same
-    /// holes. They are marked inline with `WINDOWS DIVERGENCE`. No golden fixture covers them
-    /// (`detections_apply.json` has only single-word terms), so a fixture refresh will NOT catch
-    /// their removal — it will just silently re-introduce the corruption. Both bugs were observed
-    /// end-to-end with the shipping Nemotron + CTC spotter, on 2026-07-25:
+    /// ═══ THE GUARDS BELOW ARE LOAD-BEARING — DO NOT "SIMPLIFY" THEM AWAY ═══
+    /// The five marked inline with `WINDOWS DIVERGENCE` were found HERE and sent upstream, where
+    /// jot-shared has since grown its own versions; defect 6 came back the other way, off a Swift
+    /// review. Golden fixtures now cover all six on both sides, which was NOT true when they were
+    /// written — the original note said a fixture refresh could silently delete them. Keep them
+    /// covered: the corruption they prevent is silent and is pasted before anyone can review it.
+    /// Both bugs were observed end-to-end with the shipping Nemotron + CTC spotter, on 2026-07-25:
     ///
     ///     engine wrote:  "Claude code generated most of the boiler plate"
     ///     vocabulary ON: "Claude Code code generated most of the boiler plate"      ← defects 1 · 2
@@ -470,8 +471,8 @@ public static class VocabularyGate
     /// for the narrow span, <see cref="AlignmentWindow"/> for the wide one) since the port; only this
     /// path was missing them.
     ///
-    /// Regression cover: <c>Jot.Tests/Vocabulary/DetectionPathDedupTests.cs</c>. It is the only thing
-    /// that will notice if these guards are deleted.
+    /// Regression cover: <c>Jot.Tests/Vocabulary/DetectionPathDedupTests.cs</c>, plus the
+    /// <c>detections_apply</c> and <c>detections_apply_upstream</c> fixture suites.
     /// </summary>
     /// <param name="inflectionGuard">SHIPPING VALUE IS TRUE and no product code passes anything else.
     /// It exists so E7's harness can score the guard's own counterfactual arm — the same transcripts,
@@ -671,6 +672,33 @@ public static class VocabularyGate
                 }
             }
 
+            // ── Defect 6 — a multi-word term placed on ONE OF ITS OWN WORDS. Checked AFTER the widening
+            // above, so a span the dedup completed is judged on its full width, and skipped outright
+            // (no proposal, no review row): the only row it could ever produce reads "we considered
+            // Claude Code over 'claude'", which is noise.
+            //
+            //     "I love claude wrote today"  + "Claude Code" → "I love Claude Code wrote today"
+            //     "I love load code today"     + "Claude Code" → "I love load Claude Code today"
+            //
+            // Both INSERT a word the decoder never wrote. The span is the term's first word, correctly
+            // transcribed, and the term's remaining words are simply not in the text. The second row is
+            // why this cannot be deferred: the earned ceiling reaches 0.65 and "code" vs "claudecode" is
+            // 0.60, so a strongly-heard detection otherwise hands a bare "code" the whole two-word term.
+            // Threshold-free on purpose — see SpanIsOnlyPartOfTerm.
+            //
+            // Not reached when the dedup refused to guess (dedupAmbiguous): that row is a deliberate
+            // reviewable "kept", and turning it into a silent skip would lose the only trace of it.
+            if (!dedupAmbiguous && SpanIsOnlyPartOfTerm(originalWord, det.Term))
+            {
+                diagnostics.Record(DiagnosticsCategory.VocabularyGate,
+                    $"partial-term-skipped {originalWord} → {det.Term}",
+                    new Dictionary<string, string>
+                    {
+                        ["score"] = det.Score.ToString("F2", CultureInfo.InvariantCulture),
+                    });
+                continue;
+            }
+
             // ── WINDOWS DIVERGENCE (defect 4 — "Mariana's" → "Marianas"). Swift's applyFromDetections
             // has this hole too. Skeleton() drops the apostrophe, so a POSSESSIVE measures as its own
             // plural: skeleton("Mariana's") == skeleton("Marianas"), gap 0.00, and the term is applied
@@ -729,8 +757,13 @@ public static class VocabularyGate
             //    casing, and for a multi-word proper noun ("Claude Code") that casing IS the term —
             //    it is what the user typed and the reason they added it. "Claude code" therefore
             //    corrects, while an already-perfect "Claude Code" skips and fires no chip or review
-            //    row for a correction that never happened. No fixture covers a multi-word span (see
-            //    the divergence note on this method), so this relation is ours to choose.
+            //    row for a correction that never happened.
+            //
+            //    DELIBERATE DIVERGENCE FROM jot-shared, and its fixture
+            //    `spot-multiword-already-correct-is-noop` is exempted for it: upstream makes the
+            //    relation depend on HOW the span was reached (dedup-widened → ordinal, window-placed →
+            //    case-insensitive), so a window-placed "Claude code" is left alone there. One
+            //    transcript must not get two answers depending on which mechanism found it.
             string[] spanWords = SplitWords(originalWord);
             if (spanWords.Length >= 2
                 ? string.Equals(originalWord, det.Term, StringComparison.Ordinal)
@@ -1127,6 +1160,42 @@ public static class VocabularyGate
             if (equal) return new CharRange(range.Start, follow[k - 1].LetterEnd);
         }
         return null;
+    }
+
+    // MARK: - Partial-term guard (multi-word term over ONE of its own words)
+
+    /// <summary>
+    /// Is this span better explained by ONE of the term's own words than by the whole term? If so the
+    /// span is that word, correctly transcribed, and publishing the term would INSERT the rest —
+    /// "I love claude wrote today" + "Claude Code" → "I love Claude Code wrote today".
+    ///
+    /// THRESHOLD-FREE ON PURPOSE: it compares the span's distance to the whole term against its
+    /// distance to each of the term's words, so it needs no new tunable and cannot drift out of
+    /// agreement with the plausibility ceiling. The legitimate merged-token case — the only way a
+    /// multi-word term landed before window placement existed — is untouched, because "claudecode" is
+    /// 0.00 from the whole term and 0.40 from "claude".
+    ///
+    /// Narrower spans only. A span that already covers every term word (directly, or after
+    /// <see cref="AbsorbTrailingDuplicates"/> widened it) is the alignment guard's domain, not this one.
+    /// </summary>
+    private static bool SpanIsOnlyPartOfTerm(string span, string term)
+    {
+        string[] termWords = SplitWords(term);
+        if (termWords.Length < 2 || SplitWords(span).Length >= termWords.Length) return false;
+
+        Rune[] heard = Skeleton(span);
+        Rune[] whole = Skeleton(term);
+        if (heard.Length == 0 || whole.Length == 0) return false;
+
+        double toWholeTerm = (double)Levenshtein(heard, whole) / Math.Max(heard.Length, whole.Length);
+        foreach (string word in termWords)
+        {
+            Rune[] one = Skeleton(word);
+            if (one.Length == 0) continue;
+            if ((double)Levenshtein(heard, one) / Math.Max(heard.Length, one.Length) < toWholeTerm)
+                return true;
+        }
+        return false;
     }
 
     // MARK: - Extension alternates (3-option ask)

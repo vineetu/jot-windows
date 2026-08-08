@@ -33,6 +33,8 @@
          Windows vocabulary gate to the shipping Mac/iOS behaviour. -->
     <Content Include="Fixtures\vocab\*.json" Link="Fixtures\vocab\%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\text\*.json" Link="Fixtures\text\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

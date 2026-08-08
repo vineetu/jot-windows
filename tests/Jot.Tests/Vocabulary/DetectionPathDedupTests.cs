@@ -8,10 +8,11 @@ namespace Jot.Tests.Vocabulary;
 /// against <see cref="VocabularyGate.ApplyFromDetections"/> so they need no model, no audio and no
 /// recorder — just the exact strings the shipping engine produced.
 ///
-/// THESE COVER A DELIBERATE DIVERGENCE FROM jot-shared. Swift's `applyFromDetections` has the same
-/// hole, so no golden fixture exercises any of this (`detections_apply.json` is single-word terms
-/// only) and a fixture refresh cannot validate — or protect — the fix. If a future re-sync deletes
-/// the guards in ApplyFromDetections, this file is the only thing that will say so.
+/// THESE WERE WRITTEN WHEN NOTHING ELSE COVERED THEM. jot-shared's `applyFromDetections` had the same
+/// holes and its fixtures were single-word terms only, so a fixture refresh could not validate — or
+/// protect — the fix. Both sides now carry the guards and the fixtures to match
+/// (`detections_apply_upstream`), but these stay: they assert the diagnostics and the span anchors,
+/// which no fixture reads.
 /// </summary>
 public class DetectionPathDedupTests
 {
@@ -109,13 +110,15 @@ public class DetectionPathDedupTests
         Assert.Equal("Claude Code code review", r.Text);
     }
 
-    /// <summary>A term whose tail does NOT match what follows is not a dedup case at all — the
-    /// insertion is the correction the user asked for.</summary>
+    /// <summary>A term whose tail does NOT match what follows is not a dedup case at all, so the
+    /// widening does nothing — and with nothing to widen onto, the partial-term guard refuses the
+    /// placement outright rather than inserting the term's missing words. See
+    /// <see cref="Window_WhereOnlyTheHeadAligns_DoesNotFallBackToTheSingleWord"/>.</summary>
     [Fact]
     public void Absorb_DoesNothingWhenTheFollowingWordIsDifferent()
     {
         VocabularyGate.Result r = Apply("Claude wrote the installer", Det("Claude Code"));
-        Assert.Equal("Claude Code wrote the installer", r.Text);
+        Assert.Equal("Claude wrote the installer", r.Text);
     }
 
     /// <summary>Trailing punctuation on the ABSORBED word survives outside the replaced span.</summary>
@@ -251,15 +254,18 @@ public class DetectionPathDedupTests
         Assert.Contains(sink.Lines, l => l.StartsWith("spot-unplaced", StringComparison.Ordinal));
     }
 
-    /// <summary>The head word aligns but the tail does not: the window is refused, and the term is
-    /// INSERTED at the single word instead — the correction the user actually asked for.</summary>
+    /// <summary>The head word aligns but the tail does not, so the window is refused — and the term is
+    /// NOT then dropped onto the single word, because that word is the term's own first word,
+    /// correctly transcribed, and publishing over it INSERTS "Code" where the engine wrote "wrote".
+    /// Nothing downstream would catch it: Decide waves every multi-word term through as
+    /// self-gating.</summary>
     [Fact]
-    public void Window_WhereOnlyTheHeadAligns_FallsBackToTheSingleWord()
+    public void Window_WhereOnlyTheHeadAligns_DoesNotFallBackToTheSingleWord()
     {
         VocabularyGate.Result r = Apply("Claude wrote the installer", Det("Claude Code"));
 
-        Assert.Equal("Claude Code wrote the installer", r.Text);
-        Assert.Equal("Claude", Assert.Single(r.Proposals).OriginalWord);
+        Assert.Equal("Claude wrote the installer", r.Text);
+        Assert.Empty(r.Proposals);
     }
 
     /// <summary>The reverse shape, and the reason width 1 is always tried: the engine MERGED the term

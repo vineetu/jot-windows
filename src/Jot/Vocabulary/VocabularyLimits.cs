@@ -89,6 +89,22 @@ public static class VocabularyLimits
     /// the Store listing cannot state a number the table has stopped having.</summary>
     public static readonly IReadOnlyList<string> Languages = [.. Ships.Keys];
 
-    private static string Key(string? language) =>
-        NemotronLocales.Normalize(language).Split('-')[0].ToLowerInvariant();
+    /// <summary>
+    /// The table's key: a primary language subtag, resolved so an unrecognised language FAILS CLOSED.
+    ///
+    /// <see cref="NemotronLocales.Normalize"/> alone cannot be used here: it answers the DEFAULT locale
+    /// (en-US) for anything it does not recognise, which is indistinguishable from a real English hit —
+    /// so a bare subtag ("de") or an unknown one ("xx") would inherit ENGLISH's uncapped setting, the
+    /// loosest in the table, in the exact place <see cref="Unmeasured"/> above promises the tightest.
+    /// <see cref="NemotronLocales.TryGetSlot"/> is the honest "was this recognised?", so a stored
+    /// display name ("German") still resolves through the locale table, and everything else keeps its
+    /// OWN subtag and simply misses.
+    /// </summary>
+    private static string Key(string? language)
+    {
+        if (string.IsNullOrWhiteSpace(language)) return "";
+        string raw = language.Trim();
+        string code = NemotronLocales.TryGetSlot(raw, out _) ? NemotronLocales.Normalize(raw) : raw;
+        return code.Split('-', '_')[0].ToLowerInvariant();
+    }
 }

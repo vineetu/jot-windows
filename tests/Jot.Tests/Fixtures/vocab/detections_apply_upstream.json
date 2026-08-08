@@ -1,0 +1,439 @@
+[
+  {
+    "name": "spot-applies-oov-name",
+    "transcript": "talk to shriram",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Sriram",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.6
+      }
+    ],
+    "expectText": "talk to Sriram",
+    "expectProposals": [
+      {
+        "originalWord": "shriram",
+        "outcome": "applied",
+        "askCandidate": true
+      }
+    ]
+  },
+  {
+    "name": "spot-blocks-common-word",
+    "transcript": "the cloud today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.6
+      }
+    ],
+    "expectText": "the cloud today",
+    "expectProposals": [
+      {
+        "originalWord": "cloud",
+        "outcome": "kept",
+        "askCandidate": true
+      }
+    ]
+  },
+  {
+    "name": "spot-preserves-edge-punctuation",
+    "transcript": "call shriram, then rest",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Sriram",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.2,
+        "endTime": 0.3
+      }
+    ],
+    "expectText": "call Sriram, then rest",
+    "expectProposals": [
+      {
+        "originalWord": "shriram,",
+        "outcome": "applied"
+      }
+    ]
+  },
+  {
+    "name": "spot-identity-is-noop",
+    "transcript": "talk to sriram",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Sriram",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.6
+      }
+    ],
+    "expectText": "talk to sriram",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-implausible-skips",
+    "transcript": "talk to vikram",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Sriram",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.6
+      }
+    ],
+    "expectText": "talk to vikram",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-multiword-places-across-two-words",
+    "_why": "spec §3. The placement loop compared ONE token against the WHOLE term, so a multi-word term only ever landed when the engine happened to merge it into one token. cloud(5)/claudecode(10) = 0.60 and code(4)/claudecode(10) = 0.60 are both rejected at width 1; the width-2 window cloudcode(9)/claudecode(10) = 0.20 is what matches. Found by real dictation, and it was SILENT.",
+    "transcript": "I love cloud code.",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.9
+      }
+    ],
+    "expectText": "I love Claude Code.",
+    "expectProposals": [
+      {
+        "originalWord": "cloud code",
+        "outcome": "applied"
+      }
+    ]
+  },
+  {
+    "name": "spot-multiword-window-ends-at-last-alphanumeric",
+    "_why": "spec §3: the span ends at the last alphanumeric of the final word — the same boundary absorbTrailingDuplicates picks — so the sentence punctuation survives OUTSIDE the replaced range.",
+    "transcript": "we shipped cloud code, then rested",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.3,
+        "endTime": 0.65
+      }
+    ],
+    "expectText": "we shipped Claude Code, then rested",
+    "expectProposals": [
+      {
+        "originalWord": "cloud code",
+        "outcome": "applied"
+      }
+    ]
+  },
+  {
+    "name": "spot-multiword-per-word-alignment-refuses-plausible-window",
+    "_why": "spec §3: whole-window plausibility ALONE is a text-corrupting brake — load code measures 0.40 against Claude Code, inside the 0.45 ceiling. Per-word alignment (load↔Claude = 0.50) is what refuses it. Regression pin: the new width-2 machinery must not open this door.",
+    "transcript": "I love load code today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.8
+      }
+    ],
+    "expectText": "I love load code today",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-multiword-window-never-crosses-own-punctuation",
+    "_why": "spec §3: cross plain spaces only, never a word's own punctuation. 'Claude,' + 'code' is not a window, so the width-2 scan must not fuse across the comma.",
+    "transcript": "I love cloud, code today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.8
+      }
+    ],
+    "expectText": "I love cloud, code today",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-multiword-already-correct-is-noop",
+    "_why": "jot-shared#1, verbatim. applyFromDetections placed the two-word term onto the single token 'Claude' and the transcript's own 'code' survived after it → 'Claude Code code generated...'. decide step (2) waves every multi-word term through as precise and self-gating, so nothing downstream caught it. The width-2 window matches exactly here, so this is an identity no-op: unchanged text, and NO review row / UI chip.",
+    "transcript": "Claude code generated most of the boiler plate",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.0,
+        "endTime": 0.3
+      }
+    ],
+    "expectText": "Claude code generated most of the boiler plate",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-multiword-absorbs-trailing-duplicate",
+    "_why": "spec §2: when the detection sits on the FIRST word only, the width-1 pick wins on proportional position and absorbTrailingDuplicates widens it onto the duplicated tail. Identity is then ORDINAL (not normalized) — the widening already proved the term's words are present, and casing IS the term for a multi-word proper noun — so the casing fix applies instead of being swallowed as a no-op.",
+    "transcript": "Claude code generated most of the boiler plate",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.0,
+        "endTime": 0.1
+      }
+    ],
+    "expectText": "Claude Code generated most of the boiler plate",
+    "expectProposals": [
+      {
+        "originalWord": "Claude code",
+        "outcome": "applied"
+      }
+    ]
+  },
+  {
+    "name": "spot-multiword-host-token-punctuation-blocks",
+    "_why": "spec §2, the sub-case Windows hit while implementing: the host token carries its OWN trailing punctuation. Widening eats the comma ('ask Claude Code review'); not widening publishes the duplicate ('ask Claude Code, code review'). Both mutate text on a guess → block and log.",
+    "transcript": "ask Claude, code review",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.1,
+        "endTime": 0.25
+      }
+    ],
+    "expectText": "ask Claude, code review",
+    "expectProposals": [
+      {
+        "originalWord": "Claude,",
+        "outcome": "kept",
+        "askCandidate": false
+      }
+    ]
+  },
+  {
+    "name": "spot-multiword-does-not-eat-a-real-following-word",
+    "_why": "absorb at most (term words − span words): a span that already covers every term word absorbs NOTHING, so a genuine following 'code' survives.",
+    "transcript": "I love cloud code code review",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.3,
+        "endTime": 0.6
+      }
+    ],
+    "expectText": "I love Claude Code code review",
+    "expectProposals": [
+      {
+        "originalWord": "cloud code",
+        "outcome": "applied"
+      }
+    ]
+  },
+  {
+    "name": "spot-possessive-is-not-overwritten",
+    "_why": "spec §4. The skeleton drops apostrophes, so Mariana's measures 0.00 against the term Marianas — a perfect match — and the gate silently rewrote a correctly-transcribed word. 5 of 20 false applies in the English measurement; the guard took the shipping spotter 0.89 → 0.67 FP/1k.",
+    "transcript": "I read Mariana's book",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Marianas",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.6
+      }
+    ],
+    "expectText": "I read Mariana's book",
+    "expectProposals": [
+      {
+        "originalWord": "Mariana's",
+        "outcome": "kept",
+        "askCandidate": false
+      }
+    ]
+  },
+  {
+    "name": "spot-acoustic-ceiling-admits-strongly-heard-term",
+    "_why": "spec §6. Herrakit → Parakeet is 0.625 string distance — well beyond the flat 0.45 ceiling — but was heard at −0.313, the best score of five terms. Acoustic evidence is doing work string similarity cannot see; 35 such detections were already found by the spotter and then discarded. Worth +4.7 points of end-to-end recall for zero additional false applies.",
+    "transcript": "we use herrakit today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Parakeet",
+        "aliases": [],
+        "score": -0.313,
+        "startTime": 0.4,
+        "endTime": 0.6,
+        "acoustic": true
+      }
+    ],
+    "expectText": "we use Parakeet today",
+    "expectProposals": [
+      {
+        "originalWord": "herrakit",
+        "outcome": "applied"
+      }
+    ]
+  },
+  {
+    "name": "spot-acoustic-ceiling-is-conditional-not-flat",
+    "_why": "spec §6: it MUST be conditional. A flat 0.65 admits 30 right and 25 wrong — two populations. At −2.0 (below the −1.8 floor, read off the strongest score among beyond-ceiling detections whose term was never spoken) the flat 0.45 holds and the same span is refused.",
+    "transcript": "we use herrakit today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Parakeet",
+        "aliases": [],
+        "score": -2.0,
+        "startTime": 0.4,
+        "endTime": 0.6,
+        "acoustic": true
+      }
+    ],
+    "expectText": "we use herrakit today",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-acoustic-ceiling-ramps-between-anchors",
+    "_why": "spec §6: −1.4 is the midpoint of the −1.8 → −1.0 ramp, so the ceiling is 0.55 and a 0.625 span is still refused. Pins the ramp itself, not just its two ends.",
+    "transcript": "we use herrakit today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Parakeet",
+        "aliases": [],
+        "score": -1.4,
+        "startTime": 0.4,
+        "endTime": 0.6,
+        "acoustic": true
+      }
+    ],
+    "expectText": "we use herrakit today",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-non-acoustic-detection-keeps-flat-ceiling",
+    "_why": "spec §6: the flag exists because `score` carries two incompatible scales. A detection that is NOT acoustic keeps 0.45 no matter how good its score looks — the model-free corrector's per-language distances are its own knob.",
+    "transcript": "we use herrakit today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Parakeet",
+        "aliases": [],
+        "score": -0.313,
+        "startTime": 0.4,
+        "endTime": 0.6
+      }
+    ],
+    "expectText": "we use herrakit today",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-possessive-term-still-applies",
+    "_why": "the guard refuses to swap a possessive span for a NON-possessive term; a possessive term is untouched by it.",
+    "transcript": "I read marianna's book",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Mariana's",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.6
+      }
+    ],
+    "expectText": "I read Mariana's book",
+    "expectProposals": [
+      {
+        "originalWord": "marianna's",
+        "outcome": "applied"
+      }
+    ]
+  },
+  {
+    "name": "spot-multiword-not-placed-on-one-of-its-own-words",
+    "_why": "NOT in the Windows spec — a third bug in the §2/§3 family, found while implementing §6 and reported upstream. 'claude' is 0.00 from the term's own first word and 0.40 from the whole term, so it is the first word correctly transcribed — 'Code' is simply not in the text. Publishing the term INSERTS a word: 'I love Claude Code wrote today'.",
+    "transcript": "I love claude wrote today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.8
+      }
+    ],
+    "expectText": "I love claude wrote today",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-multiword-partial-guard-holds-under-acoustic-ceiling",
+    "_why": "the reason the partial-term guard could not wait: §6 widens the ceiling to 0.65 and code(4)/claudecode(10) is 0.60, so the acoustic ramp otherwise hands a bare 'code' the whole two-word term — 'I love load Claude Code today'.",
+    "transcript": "I love load code today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": -0.3,
+        "startTime": 0.4,
+        "endTime": 0.8,
+        "acoustic": true
+      }
+    ],
+    "expectText": "I love load code today",
+    "expectProposalCount": 0
+  },
+  {
+    "name": "spot-multiword-merged-token-still-applies",
+    "_why": "the partial-term guard must NOT close the merged-token door — before §3 that was the only way a multi-word term ever landed. 'claudecode' is 0.00 from the whole term and 0.40 from 'claude', so the whole term wins and the apply stands.",
+    "transcript": "I love claudecode today",
+    "totalAudioDuration": 1.0,
+    "detections": [
+      {
+        "term": "Claude Code",
+        "aliases": [],
+        "score": 0.9,
+        "startTime": 0.4,
+        "endTime": 0.7
+      }
+    ],
+    "expectText": "I love Claude Code today",
+    "expectProposals": [
+      {
+        "originalWord": "claudecode",
+        "outcome": "applied"
+      }
+    ]
+  }
+]
