@@ -67,6 +67,12 @@ internal sealed class CliVocabulary
         return new CliVocabulary(terms, ReadOverrides(paths), canonicalLocale);
     }
 
+    /// <summary>One committed stream segment. The duration is only the gate's positional axis — the
+    /// spotter encodes each match as a fraction of it and the gate divides it straight back out — so any
+    /// positive constant keeps placement self-consistent without inventing timings the stream never
+    /// carried.</summary>
+    public string ApplySegment(string text) => Apply(text, 1.0);
+
     public string Apply(string text, double durationSeconds)
     {
         if (string.IsNullOrWhiteSpace(text)) return text;

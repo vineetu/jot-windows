@@ -10,10 +10,11 @@ internal static class Cli
     public const string Version = "0.1.0-windows";
 
     public const string Usage = """
-        jot — on-device transcription utility.
+        jot — on-device transcription utility (batch files and live streaming).
 
         USAGE:
           jot transcribe <file> [options]     Transcribe an audio/video file.
+          jot --stream [options]              Stream raw PCM from stdin, emit NDJSON finals.
           jot --help | --version
 
         TRANSCRIBE OPTIONS (default output: cleaned plain text on stdout):
@@ -27,6 +28,18 @@ internal static class Cli
           --data-dir <dir>     Jot data root (models\, Vocabulary\, settings.json).
           --device <mode>      auto (default, follows Jot's setting), cpu, or gpu.
           --                   End of options (for input files starting with "-").
+
+        STREAM OPTIONS (in: 16 kHz mono PCM on stdin; out: one JSON object per line):
+          --language <code>    One language per stream, fixed at startup.
+          --rate <hz>          Input sample rate. Only 16000 is supported.
+          --encoding <enc>     s16le (default) or f32le. A leading WAV header is
+                                detected and skipped; --encoding governs decoding.
+          --model-dir <dir>    As above.
+          --data-dir <dir>     As above.
+          --device <mode>      As above.
+          Finals are vocabulary-corrected per segment; there is no cleanup chain
+          in stream mode. PowerShell pipes re-encode binary data — use cmd's
+          `type file.pcm | jot --stream`, ffmpeg, or any native producer.
 
         VOCABULARY:
           --no-vocab           Disable custom-vocabulary correction.
@@ -78,6 +91,20 @@ internal static class Program
             ["--device"] = "--device",
         };
 
+    private static readonly HashSet<string> StreamFlags = new(StringComparer.Ordinal) { "--no-vocab" };
+
+    private static readonly Dictionary<string, string> StreamOptionNames =
+        new(StringComparer.Ordinal)
+        {
+            ["--language"] = "--language",
+            ["--rate"] = "--rate",
+            ["--encoding"] = "--encoding",
+            ["--vocab"] = "--vocab",
+            ["--model-dir"] = "--model-dir",
+            ["--data-dir"] = "--data-dir",
+            ["--device"] = "--device",
+        };
+
     public static async Task<int> Main(string[] args)
     {
         IReadOnlyList<string> head = CliArgParser.PreEndOfOptions(args);
@@ -93,11 +120,7 @@ internal static class Program
             Console.WriteLine($"jot {Cli.Version}");
             return 0;
         }
-        if (head.Contains("--stream"))
-        {
-            Console.Error.WriteLine("jot: error: stream mode not yet wired");
-            return 1;
-        }
+        if (head.Contains("--stream")) return RunStream(args, head.Count);
         if (args[0] != "transcribe") return Cli.UsageFail($"unknown command '{args[0]}'");
 
         ParsedArgs parsed = CliArgParser.Parse(args.Skip(1).ToList(), TranscribeFlags, TranscribeOptions);
@@ -121,6 +144,41 @@ internal static class Program
             VocabFile: parsed.Options.GetValueOrDefault("--vocab"),
             Language: parsed.Options.GetValueOrDefault("--language"),
             OutputPath: parsed.Options.GetValueOrDefault("-o"),
+            ModelDir: parsed.Options.GetValueOrDefault("--model-dir"),
+            DataDir: parsed.Options.GetValueOrDefault("--data-dir"),
+            Device: device));
+    }
+
+    /// <param name="boundary">How many tokens precede "--". A "--stream" past it is a positional, not the
+    /// mode switch, so only the ones before it are stripped.</param>
+    private static int RunStream(string[] args, int boundary)
+    {
+        List<string> rest = args
+            .Where((tok, i) => !(tok == "--stream" && i < boundary))
+            .ToList();
+
+        ParsedArgs parsed = CliArgParser.Parse(rest, StreamFlags, StreamOptionNames);
+        if (parsed.Error is not null) return Cli.UsageFail(parsed.Error);
+        if (parsed.Positionals.Count > 0)
+            return Cli.UsageFail($"unexpected argument '{parsed.Positionals[0]}' in --stream mode");
+
+        string rate = parsed.Options.GetValueOrDefault("--rate", "16000");
+        if (rate != "16000")
+            return Cli.UsageFail($"unsupported --rate '{rate}': only 16000 is supported");
+
+        string encodingRaw = parsed.Options.GetValueOrDefault("--encoding", "s16le");
+        if (!StdinAudioReader.TryParseEncoding(encodingRaw, out PcmEncoding encoding))
+            return Cli.UsageFail($"unsupported --encoding '{encodingRaw}': use s16le or f32le");
+
+        string device = parsed.Options.GetValueOrDefault("--device", "auto");
+        if (device is not ("auto" or "cpu" or "gpu"))
+            return Cli.UsageFail($"unsupported --device '{device}': use auto, cpu or gpu");
+
+        return StreamMode.Run(new StreamOptions(
+            Encoding: encoding,
+            NoVocab: parsed.Flags.Contains("--no-vocab"),
+            VocabFile: parsed.Options.GetValueOrDefault("--vocab"),
+            Language: parsed.Options.GetValueOrDefault("--language"),
             ModelDir: parsed.Options.GetValueOrDefault("--model-dir"),
             DataDir: parsed.Options.GetValueOrDefault("--data-dir"),
             Device: device));

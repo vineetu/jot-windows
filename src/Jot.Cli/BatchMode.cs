@@ -146,7 +146,7 @@ internal static class BatchMode
 
     // auto keeps whatever the app is configured for (including its GPU-tier verdict); cpu/gpu are the
     // same two explicit picks the Settings picker offers.
-    private static JotSettings ApplyDevice(JotSettings s, string device)
+    public static JotSettings ApplyDevice(JotSettings s, string device)
     {
         s.TranscriptionDevice = device switch
         {
