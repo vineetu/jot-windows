@@ -386,7 +386,7 @@ public partial class App : System.Windows.Application
         // Warm up the model off the UI thread so the first dictation isn't a cold start.
         var transcriber = Services.GetRequiredService<ITranscriber>();
         var settings = Services.GetRequiredService<ISettingsStore>();
-        SettingsViewModel.ApplyLanguage(transcriber, settings.Current.Language);
+        Transcription.TranscriberFactory.ApplyLanguage(transcriber, settings.Current.Language);
 
         // Finish any data-folder move interrupted by a crash/kill before warming up (so warmup reads the
         // settled folder and doesn't pin files the resume needs to delete). The app already points at a
@@ -2419,29 +2419,12 @@ public partial class App : System.Windows.Application
         // on DirectML. Selection is EngineSelector's pure rule: explicit picks honored, "Auto" (default)
         // takes the GPU tier only with the fp16 model on disk AND a probe verdict earned on the current
         // adapter+driver. Backend read once at construction; a changed verdict applies next launch.
-        services.AddSingleton<ITranscriber>(sp =>
-        {
-            var s = sp.GetRequiredService<ISettingsStore>().Current;
-            var fp16Model = sp.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>();
-            var adapter = Platform.GpuInfo.TryGetPrimaryAdapter(); // ~1 ms enumeration, no D3D device
-            bool keyMatches = adapter is not null && s.GpuProbeKey == adapter.CacheKey;
-            var choice = Transcription.EngineSelector.Select(
-                s.TranscriptionDevice, fp16Model.IsInstalled, s.GpuProbeVerdict, keyMatches);
-            JotLog.Info($"engine: {choice} (device={s.TranscriptionDevice}, " +
-                $"verdict={s.GpuProbeVerdict ?? "none"}, keyMatch={keyMatches}, fp16={fp16Model.IsInstalled})");
-            var factory = sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>();
-            return choice switch
-            {
-                Transcription.EngineChoice.Fp16Dml => new Transcription.Nemotron.NemotronFp16Transcriber(
-                    fp16Model, factory, Transcription.Onnx.ComputeBackend.DirectML),
-                Transcription.EngineChoice.Int4DmlEncoder => new Transcription.Nemotron.NemotronTranscriber(
-                    sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(), factory,
-                    Transcription.Onnx.ComputeBackend.DirectML),
-                _ => new Transcription.Nemotron.NemotronTranscriber(
-                    sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(), factory,
-                    Transcription.Onnx.ComputeBackend.Cpu),
-            };
-        });
+        services.AddSingleton<ITranscriber>(sp => Transcription.TranscriberFactory.Create(
+            sp.GetRequiredService<ISettingsStore>().Current,
+            sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
+            sp.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>(),
+            sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
+            JotLog.Info));   // the per-launch `engine: …` line must keep landing in the app log
         // Vocabulary (SHIPS VISIBLE inside Advanced features, master toggle default off). All three
         // stores take the SAME
         // containerRoot — the data folder — and append `Vocabulary\` themselves, so the one folder

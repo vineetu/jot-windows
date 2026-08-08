@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using Jot.Models;
 using Jot.Services.Abstractions;
@@ -50,7 +49,7 @@ public sealed class MediaImporter
 
             (string text, double duration) = await Task.Run(async () =>
             {
-                (float[] samples, double dur) = Decode(path);
+                (float[] samples, double dur) = FfmpegDecoder.DecodeToMono16k(FfmpegPath, path);
                 if (samples.Length == 0) throw new InvalidOperationException("No audio found in this file.");
                 string t = (await _transcriber.TranscribeAsync(samples, TargetSampleRate)).Trim();
                 return (t, dur);
@@ -67,44 +66,6 @@ public sealed class MediaImporter
             item.Transcript = "Couldn't import this file: " + ex.Message;
             item.Status = RecordingStatus.Complete;
         }
-    }
-
-    /// <summary>Decodes any media file to 16 kHz mono Float32 PCM via the bundled FFmpeg.</summary>
-    private static (float[] samples, double durationSeconds) Decode(string path)
-    {
-        if (!File.Exists(FfmpegPath))
-            throw new FileNotFoundException("FFmpeg download did not complete.", FfmpegPath);
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = FfmpegPath,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        foreach (string a in new[]
-        {
-            "-hide_banner", "-loglevel", "error",
-            "-i", path,
-            "-ac", "1", "-ar", TargetSampleRate.ToString(),
-            "-f", "f32le", "-",   // raw 32-bit float little-endian PCM to stdout
-        }) psi.ArgumentList.Add(a);
-
-        using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Could not start FFmpeg.");
-        Task<string> errTask = proc.StandardError.ReadToEndAsync();
-        using var ms = new MemoryStream();
-        proc.StandardOutput.BaseStream.CopyTo(ms);
-        proc.WaitForExit();
-        string err = errTask.GetAwaiter().GetResult();
-
-        if (proc.ExitCode != 0)
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(err) ? "FFmpeg could not decode this file." : err.Trim());
-
-        byte[] bytes = ms.ToArray();
-        var samples = new float[bytes.Length / sizeof(float)];
-        Buffer.BlockCopy(bytes, 0, samples, 0, samples.Length * sizeof(float));
-        return (samples, samples.Length / (double)TargetSampleRate);
     }
 
     private static string TitleFrom(string transcript)

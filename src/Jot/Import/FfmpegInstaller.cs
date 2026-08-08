@@ -21,12 +21,17 @@ public sealed class FfmpegInstaller
     public static bool IsInstalled => File.Exists(ExePath) && new FileInfo(ExePath).Length > 0;
 
     /// <summary>Downloads FFmpeg if not already present. Safe to call every time before use.</summary>
-    public async Task EnsureInstalledAsync(CancellationToken ct = default)
+    /// <param name="installDir">Where ffmpeg.exe lands. Null = <see cref="InstallDir"/>. The `jot` CLI has
+    /// no package identity, so <see cref="InstallDir"/> can't see a Store install's tools folder and it
+    /// passes the root it actually resolved.</param>
+    public async Task EnsureInstalledAsync(string? installDir = null, CancellationToken ct = default)
     {
-        if (IsInstalled) return;
+        string dir = installDir ?? InstallDir;
+        string exePath = Path.Combine(dir, "ffmpeg.exe");
+        if (File.Exists(exePath) && new FileInfo(exePath).Length > 0) return;
 
-        Directory.CreateDirectory(InstallDir);
-        string tempPath = ExePath + ".part";
+        Directory.CreateDirectory(dir);
+        string tempPath = exePath + ".part";
 
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         var response = await http.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct)
@@ -43,6 +48,6 @@ public sealed class FfmpegInstaller
         }
         finally { await source.DisposeAsync().ConfigureAwait(false); }
 
-        File.Move(tempPath, ExePath, overwrite: true);
+        File.Move(tempPath, exePath, overwrite: true);
     }
 }

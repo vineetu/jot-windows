@@ -364,7 +364,9 @@ public sealed class VocabularyRunner
     // Feed-time alias enrichment (see VocabularyStore.FeedAliases) plus the user's own aliases, which
     // the spotter has no reason to carry back. Detections for terms no longer in the list pass
     // through untouched rather than being dropped — the gate still guards them.
-    private static IReadOnlyList<VocabularyGate.Detection> Enrich(
+    // Internal, not private: the CLI runs the same gate call and skipping this silently changes the
+    // gate's plausibility inputs.
+    internal static IReadOnlyList<VocabularyGate.Detection> Enrich(
         IReadOnlyList<VocabularyGate.Detection> detections, IReadOnlyList<VocabularyTerm> terms)
     {
         var byText = new Dictionary<string, VocabularyTerm>(StringComparer.Ordinal);

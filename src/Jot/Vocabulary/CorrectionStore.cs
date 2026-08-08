@@ -80,7 +80,9 @@ public sealed class CorrectionStore
 
     // Swift's JSONEncoder omits nil optionals and does not \u-escape non-ASCII; matching both keeps
     // a Windows-written ledger byte-comparable with the Mac's for the same state.
-    private static readonly JsonSerializerOptions Json = new()
+    // Internal, not private: the CLI reads corrections.json WITHOUT constructing this store (FilePath()
+    // creates directories on the read path) and must decode with these exact options.
+    internal static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

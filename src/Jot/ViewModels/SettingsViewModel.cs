@@ -299,17 +299,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         RaiseVocabularyComputed();
     }
 
-    /// <summary>Applies the stored language (locale code, or a legacy display name) to the engine.
-    /// Called at startup and on change; takes effect on the NEXT dictation (sessions snapshot it).</summary>
-    public static void ApplyLanguage(ITranscriber transcriber, string language)
-    {
-        NemotronLocales.TryGetSlot(language, out long slot); // unknown → en-US, never a wrong guess
-        if (transcriber is NemotronTranscriber n)
-            n.SetLanguageId(slot);
-        else if (transcriber is NemotronFp16Transcriber f)
-            f.SetLanguageSlot(slot);   // same slot space in both exports (languages.json)
-    }
-
     private void LoadDevices()
     {
         InputDevices.Clear();
@@ -334,7 +323,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         S.Language = value;
         Save();
-        ApplyLanguage(_transcriber, value);
+        TranscriberFactory.ApplyLanguage(_transcriber, value);
         RaiseVocabularyComputed();   // the English-only banner is language-derived
     }
     partial void OnTranscriptionDeviceChanged(string value) { S.TranscriptionDevice = value; Save(); }

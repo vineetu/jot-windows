@@ -28,6 +28,9 @@
   <ItemGroup>
     <!-- Tests exercise internal engine pieces (MelFrontend/StreamingMel byte-exactness). -->
     <InternalsVisibleTo Include="Jot.Tests" />
+    <!-- The CLI reuses app internals rather than forking them (VocabularyRunner.Enrich, the
+         corrections.json serializer options). -->
+    <InternalsVisibleTo Include="Jot.Cli" />
   </ItemGroup>
 
   <ItemGroup>

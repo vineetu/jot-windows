@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Jot\Jot.csproj" />
+    <ProjectReference Include="..\..\src\Jot.Cli\Jot.Cli.csproj" />
   </ItemGroup>
 
   <ItemGroup>
