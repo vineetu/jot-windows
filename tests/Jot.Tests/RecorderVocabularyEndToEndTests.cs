@@ -367,6 +367,20 @@ public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDispos
         {
             if (!detections.Any(d => d.Term == term)) { unheard.Add(term); continue; }
 
+            // The other REFUSAL that is attribution rather than a silent drop: a multi-word term whose
+            // only plausible host is one of its own words. Publishing there would insert the term's
+            // missing words into text the engine got right ("Claw code" → "Claw Claude Code"), so the
+            // gate refuses and says so. No alias remedy applies — the engine's spelling of the OTHER
+            // words is what is missing — so this branch ends here.
+            string? partial = on.Diagnostics.Lines.FirstOrDefault(
+                l => l.Contains("partial-term-skipped", StringComparison.Ordinal)
+                     && l.Contains($"→ {term}", StringComparison.Ordinal));
+            if (partial is not null)
+            {
+                output.WriteLine($"  {term,-12} heard, but its only host is one of its own words — logged: {partial}");
+                continue;
+            }
+
             string? log = on.Diagnostics.Lines.FirstOrDefault(
                 l => l.Contains($"spot-unplaced {term}", StringComparison.Ordinal));
             if (log is null)
