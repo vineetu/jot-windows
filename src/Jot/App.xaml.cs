@@ -200,6 +200,24 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // `--ggmltest <wav> [--backend cpu|vulkan] [--r 3|6|13] [--lang <code>]` runs the ggml engine
+        // → %TEMP%\jot-ggmltest.txt. Dev-only; natives via JOT_GGML_NATIVE, GGUF via JOT_GGML_MODEL.
+        int ggmlArg = Array.IndexOf(e.Args, "--ggmltest");
+        if (ggmlArg >= 0 && ggmlArg + 1 < e.Args.Length)
+        {
+            int langArg = Array.IndexOf(e.Args, "--lang");
+            string? lang = langArg >= 0 && langArg + 1 < e.Args.Length ? e.Args[langArg + 1] : null;
+            int rArg = Array.IndexOf(e.Args, "--r");
+            int? r = null;
+            if (rArg >= 0 && rArg + 1 < e.Args.Length && int.TryParse(e.Args[rArg + 1], out int parsedR))
+                r = parsedR;
+            int beArg = Array.IndexOf(e.Args, "--backend");
+            string? backend = beArg >= 0 && beArg + 1 < e.Args.Length ? e.Args[beArg + 1] : null;
+            RunGgmlTest(e.Args[ggmlArg + 1], backend, r, lang);
+            Shutdown();
+            return;
+        }
+
         // `--probetest` runs the GPU identity + fp16/DML benchmark probe → %TEMP%\jot-probetest.txt.
         if (e.Args.Contains("--probetest"))
         {
@@ -1576,6 +1594,55 @@ public partial class App : System.Windows.Application
         }
     }
 
+    private static void RunGgmlTest(string wavPath, string? backend, int? r, string? langCode)
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-ggmltest.txt");
+        try
+        {
+            var model = new Transcription.Ggml.NemotronGgufModel();
+            if (!model.IsInstalled)
+            {
+                System.IO.File.WriteAllText(outPath, $"MODEL NOT INSTALLED at {model.ModelPath}\n");
+                return;
+            }
+            if (!Transcription.Ggml.GgmlNativeLocator.IsPresent())
+            {
+                System.IO.File.WriteAllText(outPath,
+                    "NATIVES NOT INSTALLED (set JOT_GGML_NATIVE to official v0.1.3 / a94e021)\n");
+                return;
+            }
+            var s = new JotSettings { UseGgmlEngine = true, Language = langCode ?? "en-US" };
+            if (r is int lookahead) s.GgmlAttContextRight = lookahead;
+            var env = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(backend)) env["JOT_GGML_BACKEND"] = backend;
+            string? native = Environment.GetEnvironmentVariable("JOT_GGML_NATIVE");
+            if (!string.IsNullOrWhiteSpace(native)) env["JOT_GGML_NATIVE"] = native;
+            Func<string, string?> lookup = k => env.TryGetValue(k, out string? v) ? v : Environment.GetEnvironmentVariable(k);
+            var opts = Transcription.Ggml.GgmlEngineOptions.Resolve(s, Transcription.EngineChoice.Int4Cpu, lookup);
+            using var transcriber = new Transcription.Ggml.GgmlNemotronTranscriber(model, opts);
+            if (langCode is not null) transcriber.SetLanguage(langCode);
+            float[] samples = WavAudio.ReadMono16k(wavPath);
+
+            var loadTimer = System.Diagnostics.Stopwatch.StartNew();
+            string text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
+            loadTimer.Stop();
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
+            sw.Stop();
+
+            double seconds = samples.Length / (double)WavAudio.SampleRate;
+            System.IO.File.WriteAllText(outPath,
+                $"OK\nbackend={opts.Backend}\nr={opts.AttContextRight}\n" +
+                $"audio_s={seconds:0.00}\ncold_ms={loadTimer.ElapsedMilliseconds}\nwarm_ms={sw.ElapsedMilliseconds}\n" +
+                $"TEXT={text}\n");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
+        }
+    }
+
     private static void RunProbeTest()
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-probetest.txt");
@@ -2508,6 +2575,8 @@ public partial class App : System.Windows.Application
             new Transcription.Nemotron.NemotronModel(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
         services.AddSingleton<Transcription.Nemotron.NemotronFp16Model>(sp =>
             new Transcription.Nemotron.NemotronFp16Model(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
+        services.AddSingleton<Transcription.Ggml.NemotronGgufModel>(sp =>
+            new Transcription.Ggml.NemotronGgufModel(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
         services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>();
         services.AddSingleton<Transcription.Nemotron.NemotronFp16ModelInstaller>();
         services.AddSingleton<ModelDownload>();   // shared model-download state (wizard + settings)
@@ -2525,6 +2594,7 @@ public partial class App : System.Windows.Application
             sp.GetRequiredService<ISettingsStore>().Current,
             sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
             sp.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>(),
+            sp.GetRequiredService<Transcription.Ggml.NemotronGgufModel>(),
             sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
             JotLog.Info));   // the per-launch `engine: …` line must keep landing in the app log
         // Vocabulary (SHIPS VISIBLE inside Advanced features, master toggle default off). All three

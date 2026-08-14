@@ -28,6 +28,10 @@ public sealed class JotSettings
     public string Language { get; set; } = "en-US"; // locale code (NemotronLocales); legacy display names still resolve
     public string TranscriptionDevice { get; set; } = "Auto"; // Auto | CPU | GPU (DirectML) — see EngineSelector; existing "CPU" holders migrate to Auto once
     public bool TranscriptionDeviceMigrated { get; set; }     // one-time CPU→Auto migration marker; makes a later explicit CPU choice sticky
+    // Hidden ggml/Vulkan engine (Phase 3). Default OFF — shipping users stay on ONNX. Not shown in
+    // Settings; JOT_ENGINE=ggml also enables. R=3 is the live lookahead; 6/13 are experimental.
+    public bool UseGgmlEngine { get; set; }
+    public int GgmlAttContextRight { get; set; } = 3;
     public bool ToggleHotkeyMigrated { get; set; }            // one-time Alt+Space→Ctrl+Shift+Space rescue (Alt+Space = Windows system menu)
     // GPU probe verdict cache — keyed to the exact adapter+driver it was measured on (GpuInfo.CacheKey);
     // a key mismatch (new GPU / driver update) invalidates the verdict and triggers a background re-probe.

@@ -3,6 +3,7 @@ using System.Text;
 using Jot.Import;
 using Jot.Services.Abstractions;
 using Jot.Transcription;
+using Jot.Transcription.Ggml;
 using Jot.Transcription.Nemotron;
 using Jot.Transcription.Onnx;
 
@@ -37,9 +38,11 @@ internal static class BatchMode
 
         var int4 = new NemotronModel(paths.Int4Dir);
         var fp16 = new NemotronFp16Model(paths.Fp16Dir);
+        var gguf = new NemotronGgufModel(paths.GgufDir);
+        bool ggml = GgmlEngineOptions.IsEnabled(paths.Settings);
         // Models before decode: on a fresh install the actionable error should arrive immediately, not
         // after ffmpeg has chewed through the input.
-        if (!int4.IsInstalled && !fp16.IsInstalled)
+        if (!int4.IsInstalled && !fp16.IsInstalled && !(ggml && gguf.IsInstalled))
         {
             return Cli.Fail(
                 $"No transcription model found under {paths.ModelsParent}. " +
@@ -67,7 +70,7 @@ internal static class BatchMode
         try
         {
             ITranscriber transcriber = TranscriberFactory.Create(
-                settings, int4, fp16, new OnnxSessionFactory());
+                settings, int4, fp16, gguf, new OnnxSessionFactory());
             if (!transcriber.IsModelInstalled)
             {
                 return Cli.Fail(

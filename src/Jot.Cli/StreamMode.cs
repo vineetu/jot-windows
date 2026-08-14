@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using Jot.Services;
 using Jot.Transcription;
+using Jot.Transcription.Ggml;
 using Jot.Transcription.Nemotron;
 using Jot.Transcription.Onnx;
 
@@ -58,7 +59,9 @@ internal static class StreamMode
 
         var int4 = new NemotronModel(paths.Int4Dir);
         var fp16 = new NemotronFp16Model(paths.Fp16Dir);
-        if (!int4.IsInstalled && !fp16.IsInstalled)
+        var gguf = new NemotronGgufModel(paths.GgufDir);
+        bool ggml = GgmlEngineOptions.IsEnabled(paths.Settings);
+        if (!int4.IsInstalled && !fp16.IsInstalled && !(ggml && gguf.IsInstalled))
         {
             return Cli.Fail(
                 $"No transcription model found under {paths.ModelsParent}. " +
@@ -87,7 +90,7 @@ internal static class StreamMode
         try
         {
             transcriber = TranscriberFactory.Create(
-                BatchMode.ApplyDevice(paths.Settings, o.Device), int4, fp16, factory);
+                BatchMode.ApplyDevice(paths.Settings, o.Device), int4, fp16, gguf, factory);
         }
         catch (Exception ex)
         {
@@ -109,7 +112,8 @@ internal static class StreamMode
             Ndjson.EmitFinal,
             SpacelessScripts.Contains(locale.Split('-')[0]));
 
-        int chunkSamples = transcriber is NemotronFp16Transcriber ? Fp16ChunkSamples : Int4ChunkSamples;
+        int chunkSamples = transcriber is NemotronFp16Transcriber or GgmlNemotronTranscriber
+            ? Fp16ChunkSamples : Int4ChunkSamples;
         return new Pump(streaming, emitter, chunkSamples).Run(o.Encoding);
     }
 
