@@ -41,6 +41,10 @@ public class DetectionPathDedupTests
     /// THE regression. Verbatim from the end-to-end run: the engine wrote "Claude code" (already
     /// almost right), and vocabulary turned it into "Claude Code code" — corrupting text that was
     /// fine, in a string that is pasted before anyone can review it.
+    ///
+    /// The pair is now claimed as a window when it is eligible (containing-window promotion). The
+    /// published span is the same one absorb used to construct; absorb remains the fallback for a
+    /// merged token or a partial host with no containing window.
     /// </summary>
     [Fact]
     public void MultiWordTerm_HostedOnOneWord_AbsorbsTheDuplicatedTail()
@@ -374,13 +378,19 @@ public class DetectionPathDedupTests
     }
 
     /// <summary>An overlap dropped because an earlier pick's widening swallowed the word is logged
-    /// too — a silently vanished correction is the same untraceable shape as an unplaced one.</summary>
+    /// too — a silently vanished correction is the same untraceable shape as an unplaced one.
+    ///
+    /// The host is a MERGED token, so it is not only-part-of-term (closer to the whole term than to
+    /// either word). Window placement keeps the one-word pick; absorb then eats the following
+    /// "code"; the second detection's pick is the one that vanishes. A split host ("Claude code")
+    /// is now claimed as the pair up front, and this path cannot fire on it.
+    /// </summary>
     [Fact]
     public void OverlapDrop_IsLogged()
     {
         var sink = new Sink();
         VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
-            "we use Claude code today",
+            "we use claudecode code today",
             [
                 new VocabularyGate.Detection("Claude Code", [], -0.3f, 0.5, 1.0),
                 // Claims "code" on its own; the first pick's widening eats it first.

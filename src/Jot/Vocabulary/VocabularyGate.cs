@@ -675,11 +675,11 @@ public static class VocabularyGate
             // ApplyFromDetections: Swift's applyFromDetections has neither of the next two guards and
             // is expected to corrupt the same way. No fixture covers them.
             //
-            // A placement can still land NARROWER than the term — window placement needs a plausible
-            // word-for-word window, and the leftover single word often wins on position anyway
-            // ("Claude" alone is 0.40, inside the ceiling) — leaving the term's own tail duplicated
-            // behind it. Widen the span to absorb the following words when they duplicate the term's
-            // trailing words — the identical guard the rescore path runs, reused verbatim rather than
+            // A placement can still land NARROWER than the term — a merged token, or a partial host
+            // with no eligible containing window (the leftover single word used to win on position
+            // even when the pair was eligible; that case is now claimed as the pair up front).
+            // Widen the span to absorb the following words when they duplicate the term's trailing
+            // words — the identical guard the rescore path runs, reused verbatim rather than
             // re-derived, so the two paths can never disagree about what a "Claude Code" span is.
             //
             // COMPOSES WITH WINDOW PLACEMENT BY CONSTRUCTION, not by luck: maxAbsorb is
