@@ -117,6 +117,7 @@ public class CliPathsTests : IDisposable
         Assert.Equal(models, r.ModelsParent);
         Assert.Equal(Path.Combine(models, NemotronModel.ModelFolder), r.Int4Dir);
         Assert.Equal(Path.Combine(models, NemotronFp16Model.ModelFolder), r.Fp16Dir);
+        Assert.Equal(Path.Combine(models, Jot.Transcription.Ggml.NemotronGgufModel.ModelFolder), r.GgufDir);
     }
 
     [Fact]
