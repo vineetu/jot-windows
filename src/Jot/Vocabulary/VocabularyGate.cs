@@ -431,7 +431,8 @@ public static class VocabularyGate
     /// term (the SAME plausibility metric Apply uses) — one word, or a contiguous N-word window when
     /// the term/alias is itself N words. When several qualify, disambiguate by PROPORTIONAL
     /// position — the detection's mid-audio time over total duration mapped to a fractional index
-    /// across the words.
+    /// across the words. A positional winner that is only part of the term yields to a wider
+    /// eligible window covering the same words; otherwise the later partial-term guard refuses it.
     ///
     /// Decision: the SAME Decide the rescore path uses. With no confidence, every word reads as
     /// LowConfidence, so the 0.998-protector cannot fire (correct — there is no confidence to
@@ -558,6 +559,46 @@ public static class VocabularyGate
                         bestRange = window;
                         bestDistance = positional;
                     }
+                }
+            }
+            // E8 makes a bare tail eligible ("code" vs "claudecode" is 0.60). Position then prefers
+            // that tail over the local pair. Unconstrained retry would splice a distant same-shape
+            // window; no containing pair: keep this pick so the later partial-term / dedup-ambiguous
+            // guards still fire (ask Claude, code → kept, not spot-unplaced).
+            if (bestIndex >= 0
+                && SpanIsOnlyPartOfTerm(Slice(originalTranscript, bestRange), det.Term))
+            {
+                int hostIndex = bestIndex;
+                int hostWidth = bestWidth;
+                int widerIndex = -1;
+                int widerWidth = 0;
+                CharRange widerRange = default;
+                double widerDistance = double.MaxValue;
+                for (int w = hostWidth + 1; w <= maxWidth; w++)
+                {
+                    for (int i = 0; i + w <= words.Count; i++)
+                    {
+                        if (i > hostIndex || i + w < hostIndex + hostWidth) continue;
+                        if (WindowRange(words, i, w, originalTranscript, shapes, claimed) is not { } window)
+                            continue;
+                        string spanText = Slice(originalTranscript, window);
+                        if (PlausibilityGap(Normalize(spanText), det.Term, det.Aliases) > ceiling) continue;
+                        double positional = Math.Abs((i + w / 2.0) / n - frac);
+                        if (widerIndex < 0 || positional < widerDistance ||
+                            (positional == widerDistance && w > widerWidth))
+                        {
+                            widerIndex = i;
+                            widerWidth = w;
+                            widerRange = window;
+                            widerDistance = positional;
+                        }
+                    }
+                }
+                if (widerIndex >= 0)
+                {
+                    bestIndex = widerIndex;
+                    bestWidth = widerWidth;
+                    bestRange = widerRange;
                 }
             }
             if (bestIndex >= 0)
