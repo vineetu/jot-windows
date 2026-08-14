@@ -426,6 +426,24 @@ public class DetectionPathDedupTests
     }
 
     /// <summary>
+    /// Two same-shape windows; times sit on the later tail. The term must land on the occurrence
+    /// the speaker said, not the earlier "cloud code".
+    /// </summary>
+    [Fact]
+    public void StronglyHeardLaterTail_DoesNotLandOnAnEarlierSameShapePair()
+    {
+        var det = new VocabularyGate.Detection(
+            "Claude Code", [], -0.36f, 8.2, 8.8, Acoustic: true);
+        const string text = "we tried cloud code yesterday then ran cloud code again";
+        VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
+            text, [det], 10.0, Common);
+
+        Assert.Equal("we tried cloud code yesterday then ran Claude Code again", r.Text);
+        Assert.Equal(1, r.Applied);
+        Assert.Equal("cloud code", Assert.Single(r.Proposals).OriginalWord);
+    }
+
+    /// <summary>
     /// Same Acoustic/−0.36 as the live miss, so the tail is E8-eligible. There is no containing pair
     /// ("load" fails per-word 0.45). The later partial-term guard must still refuse the insert.
     /// </summary>
