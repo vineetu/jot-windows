@@ -42,9 +42,9 @@ public sealed class JotSettings
     public bool AutoEnter { get; set; }
     public bool KeepInClipboard { get; set; }
     public bool ReturnToOrigin { get; set; }
-    // How Jot delivers the transcript — see Delivery.TextInjector.PasteMethod. "auto" (default) is the smart
-    // ladder (WM_PASTE → synthetic Ctrl+V if injection works → clipboard mode); other values: "ctrl_v",
-    // "shift_insert", "type" (synthesise characters), "clipboard" (copy + prompt), "none" (save only).
+    // How Jot delivers the transcript — see Delivery.TextInjector.PasteMethod. "auto" (default) and "ctrl_v"
+    // are the SAME path (the Ctrl+V chord, no fallback ladder behind it); other values: "shift_insert",
+    // "type" (synthesise characters), "clipboard" (copy + prompt), "none" (save only).
     public string PasteMethod { get; set; } = "auto";
 
     // Vocabulary — SHIPS VISIBLE (inside Advanced features) and DEFAULT OFF. Default-off is the whole

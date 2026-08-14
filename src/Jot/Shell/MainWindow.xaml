@@ -7,7 +7,7 @@
                  Icon="pack://application:,,,/Assets/jot.ico"
                  Width="1000" Height="700" MinWidth="680" MinHeight="480"
                  ExtendsContentIntoTitleBar="True"
-                 WindowBackdropType="Mica"
+                 WindowBackdropType="None"
                  WindowCornerPreference="Round"
                  WindowStartupLocation="CenterScreen">
     <Grid>

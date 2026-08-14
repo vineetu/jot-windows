@@ -6,7 +6,7 @@
                  Width="560" Height="660" MinWidth="460" MinHeight="420"
                  WindowStartupLocation="CenterOwner"
                  ExtendsContentIntoTitleBar="True"
-                 WindowBackdropType="Mica"
+                 WindowBackdropType="None"
                  WindowCornerPreference="Round">
     <Grid>
         <Grid.RowDefinitions>
@@ -33,7 +33,7 @@
                         Icon="{ui:SymbolIcon Search24}" TextChanged="OnSearchChanged" Visibility="Collapsed" />
         </StackPanel>
 
-        <ScrollViewer Grid.Row="2" Margin="10,0" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="2" Margin="10,0" Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <ui:ProgressRing x:Name="Spinner" IsIndeterminate="True" Margin="0,48"
                                  HorizontalAlignment="Center" />

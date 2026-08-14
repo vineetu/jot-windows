@@ -6,7 +6,7 @@
                  Icon="pack://application:,,,/Assets/jot.ico"
                  Width="480" SizeToContent="Height" ResizeMode="NoResize"
                  WindowStartupLocation="CenterScreen" Topmost="True" ShowInTaskbar="False"
-                 ExtendsContentIntoTitleBar="True" WindowBackdropType="Mica" WindowCornerPreference="Round">
+                 ExtendsContentIntoTitleBar="True" WindowBackdropType="None" WindowCornerPreference="Round">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />

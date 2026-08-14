@@ -101,7 +101,8 @@ public partial class App : System.Windows.Application
             return;
         }
         // `--injecttest` runs the synthetic-input probe → %TEMP%\jot-injecttest.txt. On a normal PC = works;
-        // on a machine whose EDR filters injected keystrokes = blocked (→ clipboard-mode fallback).
+        // on a machine whose EDR filters injected keystrokes = blocked. Diagnostic only — nothing branches
+        // on it, so this is how you tell a blocked-injection machine from a paste that landed somewhere else.
         if (e.Args.Contains("--injecttest"))
         {
             bool works = Delivery.TextInjector.SyntheticInputWorks();
@@ -288,6 +289,17 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // `--pastenotepadtest` pastes into real Win11 notepad.exe through the production path →
+        // %TEMP%\jot-pastenotepadtest.txt. Notepad used to be served by the WM_PASTE branch; now that the
+        // fallback ladder is gone it goes through the same chord as everything else, so this is the test
+        // that proves removing WM_PASTE didn't regress the app it was originally added for.
+        if (e.Args.Contains("--pastenotepadtest"))
+        {
+            RunPasteNotepadTest();
+            Shutdown();
+            return;
+        }
+
         // `--uiacapturetest` verifies the production selection path (UiaSelectionReader.TryReadSelection
         // — UI Automation, no keystroke/clipboard) against real notepad.exe → %TEMP%\jot-uiacapturetest.txt.
         if (e.Args.Contains("--uiacapturetest"))
@@ -354,6 +366,11 @@ public partial class App : System.Windows.Application
         }
 
         Services = BuildServices();
+        // Theme BEFORE any window exists. ThemeService.Initialize runs from MainWindow's constructor, but
+        // first launch shows the setup wizard and never builds a main window — so a Light-mode user's very
+        // first screen rendered in WPF-UI's default dark. Window-independent, so it is safe this early;
+        // Initialize still does the SystemThemeWatcher wiring once MainWindow exists.
+        Services.GetRequiredService<IThemeService>().ApplyTheme();
         // Upgrade adoption: if data still sits in the old real folder and no custom folder was chosen, point
         // the setting at it (no file move) so the model/history isn't stranded now that the default is the
         // container. Must run before anything resolves DataDir (recorder/transcriber/stores, below).
@@ -1303,6 +1320,87 @@ public partial class App : System.Windows.Application
         }
     }
 
+    /// <summary>Pastes into real notepad.exe via the shipped <c>PasteAtCursor</c> path and reads the result
+    /// back out of the UIA document. Deliberately targets Notepad BY HANDLE (not current focus) so it also
+    /// exercises the foreground-restore half that a live dictation depends on.</summary>
+    private static void RunPasteNotepadTest()
+    {
+        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-pastenotepadtest.txt");
+        const string marker = "JOT_NOTEPAD_PASTE_OK_5591";
+        var log = new System.Text.StringBuilder();
+        // Start from an empty file so anything in the document afterwards came from OUR paste.
+        string tmpFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"jot-pastenotepad-{Guid.NewGuid():N}.txt");
+        System.IO.File.WriteAllText(tmpFile, "");
+        try
+        {
+            SystemParametersInfo(0x2001, 0, IntPtr.Zero, 0); // defeat the foreground lock (headless self-test only)
+
+            foreach (var stale in System.Diagnostics.Process.GetProcessesByName("Notepad"))
+            { try { stale.Kill(); } catch { } }
+            Pump(500);
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe", $"\"{tmpFile}\"")
+            { UseShellExecute = true });
+            // Win11's notepad.exe is a stub that hands off to a separate same-named process which owns the
+            // window; poll by name for the one with a real HWND.
+            IntPtr hwnd = IntPtr.Zero;
+            var launchTimer = System.Diagnostics.Stopwatch.StartNew();
+            while (launchTimer.ElapsedMilliseconds < 8000)
+            {
+                foreach (var p in System.Diagnostics.Process.GetProcessesByName("Notepad"))
+                {
+                    p.Refresh();
+                    if (p.MainWindowHandle != IntPtr.Zero) { hwnd = p.MainWindowHandle; break; }
+                }
+                if (hwnd != IntPtr.Zero) break;
+                Pump(150);
+            }
+            log.AppendLine($"notepadHwnd={hwnd} (waited {launchTimer.ElapsedMilliseconds}ms)");
+            if (hwnd == IntPtr.Zero) throw new InvalidOperationException("Notepad never produced a main window.");
+
+            Delivery.TextInjector.FocusWindow(hwnd);
+            Pump(500); // packaged Notepad keeps initialising after its window appears
+            bool tabSelected = false;
+            var tabWait = System.Diagnostics.Stopwatch.StartNew();
+            while (tabWait.ElapsedMilliseconds < 5000)
+            {
+                tabSelected = SelectTabByName(hwnd, System.IO.Path.GetFileName(tmpFile));
+                if (tabSelected) break;
+                Pump(250);
+            }
+            log.AppendLine($"tabExplicitlySelected={tabSelected}");
+            // The tab being front doesn't give the text surface keyboard focus — without this the chord
+            // goes nowhere.
+            bool docFocused = FocusUiaDocument(hwnd);
+            log.AppendLine($"documentElementFocused={docFocused}");
+            Pump(300);
+            log.AppendLine($"[pre] UIA document text=[{ReadUiaDocumentText(hwnd)}]");
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var pr = Delivery.TextInjector.PasteAtCursor(marker, hwnd,
+                keepInClipboard: false, pressEnter: false,
+                method: Delivery.TextInjector.PasteMethod.Auto);
+            sw.Stop();
+            log.AppendLine($"pasteResult={pr} ms={sw.ElapsedMilliseconds}");
+            Pump(1200); // let Notepad service the keystroke and the UIA tree settle
+
+            string after = ReadUiaDocumentText(hwnd);
+            log.AppendLine($"[post] UIA document text=[{after}]");
+            bool pass = after.Contains(marker);
+            System.IO.File.WriteAllText(outPath, $"{(pass ? "PASS" : "FAIL")}\n{log}");
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n{log}");
+        }
+        finally
+        {
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName("Notepad"))
+            { try { p.Kill(); } catch { } }
+            try { System.IO.File.Delete(tmpFile); } catch { }
+        }
+    }
+
     private void RunPasteSelfTest()
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-pasteselftest.txt");
@@ -1335,12 +1433,16 @@ public partial class App : System.Windows.Application
             log.AppendLine($"tbKeyboardFocused={tb.IsKeyboardFocused}");
             log.AppendLine($"focusedElement={System.Windows.Input.Keyboard.FocusedElement?.GetType().Name ?? "null"}");
 
-            bool clipSet = false;
-            try { System.Windows.Clipboard.SetText(marker); clipSet = System.Windows.Clipboard.ContainsText() && System.Windows.Clipboard.GetText() == marker; } catch (Exception ex) { log.AppendLine("clipErr=" + ex.Message); }
-            log.AppendLine($"clipboardSet={clipSet}");
-
-            // Directly send scan-coded Ctrl+V (bypass the focus dance — we've already forced foreground).
-            Delivery.TextInjector.SendKeyChord(0x1D, 0x2F);
+            // Drive the REAL production path, not a hand-rolled chord: this test exists to prove what
+            // actually ships (clipboard sandwich + SendPasteChord) still lands in a focused text box.
+            // It used to send scan-coded Ctrl+V itself, which meant it kept passing while the shipped
+            // chord changed underneath it — the one thing a paste self-test must never do.
+            // IntPtr.Zero (not hwnd): the target IS our own window, which PasteAtCursor refuses to
+            // re-target, so it correctly resolves to current focus — which we just forced.
+            var pr = Delivery.TextInjector.PasteAtCursor(marker, IntPtr.Zero,
+                keepInClipboard: false, pressEnter: false,
+                method: Delivery.TextInjector.PasteMethod.Auto);
+            log.AppendLine($"pasteResult={pr}");
             Pump(800);
 
             string readback = tb.Text ?? "";
@@ -2654,7 +2756,7 @@ public partial class App : System.Windows.Application
             Delivery.TextInjector.ParsePasteMethod(s.PasteMethod));
         if (pr == Delivery.TextInjector.PasteResult.CopiedToClipboard)
             Notify("Transcript copied — press Ctrl+V to paste",
-                "This PC blocks apps from pasting for you, so Jot put the transcript on your clipboard.",
+                "Your paste method is set to \"Copy to clipboard\", so Jot didn't paste for you.",
                 Forms.ToolTipIcon.Info);
     }
 

@@ -68,7 +68,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     public sealed record PasteMethodOption(string Value, string Label);
     public PasteMethodOption[] PasteMethods { get; } =
     [
-        new("auto", "Automatic (recommended)"),
+        new("auto", "Ctrl+V (recommended)"),
+        // Kept so a profile that already persisted "ctrl_v" still selects an entry; same path as "auto".
         new("ctrl_v", "Ctrl+V"),
         new("shift_insert", "Shift+Insert (terminals)"),
         new("type", "Type it out"),

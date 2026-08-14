@@ -5,7 +5,7 @@
                  Title="Add to Vocabulary"
                  Width="420" SizeToContent="Height" ResizeMode="NoResize"
                  WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-                 ExtendsContentIntoTitleBar="True" WindowBackdropType="Mica" WindowCornerPreference="Round">
+                 ExtendsContentIntoTitleBar="True" WindowBackdropType="None" WindowCornerPreference="Round">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />

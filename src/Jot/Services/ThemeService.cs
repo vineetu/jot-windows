@@ -1,5 +1,4 @@
 using System.Windows;
-using Jot.Platform;
 using Jot.Services.Abstractions;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
@@ -7,10 +6,9 @@ using Wpf.Ui.Controls;
 namespace Jot.Services;
 
 /// <summary>
-/// Applies light/dark plus the window backdrop. On Windows 11 that backdrop is Mica; on
-/// Windows 10 (no DWM system-backdrop) we fall back to <c>None</c> and paint the shell with a
-/// solid Fluent surface brush so the app never renders as a bare translucent slab. Persists the
-/// chosen mode and, in System mode, follows OS theme changes live via <see cref="SystemThemeWatcher"/>.
+/// Applies light/dark plus the window backdrop, and paints the shell with a solid Fluent surface
+/// brush so the app never renders as a bare translucent slab. Persists the chosen mode and, in
+/// System mode, follows OS theme changes live via <see cref="SystemThemeWatcher"/>.
 /// </summary>
 public sealed class ThemeService : IThemeService
 {
@@ -21,8 +19,10 @@ public sealed class ThemeService : IThemeService
 
     public AppThemeMode Mode => _settings.Current.Theme;
 
-    private static WindowBackdropType Backdrop =>
-        OsInfo.SupportsMica ? WindowBackdropType.Mica : WindowBackdropType.None;
+    // Not Mica: it composites the desktop wallpaper into every layer, so Fluent's translucent card
+    // and text brushes came out wallpaper-tinted and no two surfaces (pane / content / card / title
+    // bar) resolved to the same tone. A solid surface makes both themes deterministic.
+    private const WindowBackdropType Backdrop = WindowBackdropType.None;
 
     public void ApplyTheme() => Apply(Mode);
 
@@ -61,8 +61,6 @@ public sealed class ThemeService : IThemeService
 
         ApplicationThemeManager.Apply(theme, Backdrop, true);
 
-        // Win10 has no Mica: give the shell an explicit opaque surface instead of see-through.
-        if (!OsInfo.SupportsMica && _window is not null)
-            _window.SetResourceReference(Window.BackgroundProperty, "ApplicationBackgroundBrush");
+        _window?.SetResourceReference(Window.BackgroundProperty, "ApplicationBackgroundBrush");
     }
 }

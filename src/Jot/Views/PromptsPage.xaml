@@ -22,9 +22,13 @@
                     Icon="{ui:SymbolIcon Search24}"
                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
 
+        <!-- Right padding is the scrollbar gutter: WPF-UI's scrollbar overlays the content, so without
+             it the thumb sits on top of each card's rounded right edge. -->
         <ListView Grid.Row="2" ItemsSource="{Binding Prompts}" Background="Transparent" BorderThickness="0"
+                  Padding="0,0,12,0"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                  VirtualizingPanel.IsVirtualizingWhenGrouping="True">
+                  VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                  VirtualizingPanel.ScrollUnit="Item">
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />

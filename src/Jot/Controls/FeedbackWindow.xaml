@@ -6,7 +6,7 @@
                  Width="540" Height="560" MinWidth="420" MinHeight="420"
                  WindowStartupLocation="CenterOwner"
                  ExtendsContentIntoTitleBar="True"
-                 WindowBackdropType="Mica"
+                 WindowBackdropType="None"
                  WindowCornerPreference="Round">
     <Grid Margin="0">
         <Grid.RowDefinitions>

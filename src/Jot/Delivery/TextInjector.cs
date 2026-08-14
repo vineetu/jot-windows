@@ -17,14 +17,28 @@ public static class TextInjector
     private const uint KEYEVENTF_SCANCODE = 0x0008;
     private const uint KEYEVENTF_UNICODE = 0x0004;
     private const ushort SCAN_CONTROL = 0x1D;
-    private const ushort SCAN_V = 0x2F;
     private const ushort SCAN_C = 0x2E;
     internal const ushort SCAN_A = 0x1E;
     private const ushort SCAN_RETURN = 0x1C;
     internal const ushort SCAN_ALT = 0x38;
     private const ushort SCAN_SHIFT = 0x2A;
-    private const uint WM_PASTE = 0x0302;        // "paste" as a window MESSAGE, not a synthetic keystroke
-    private const uint SMTO_ABORTIFHUNG = 0x0002;
+    private const ushort VK_V = 0x56;
+    private const uint MAPVK_VK_TO_VSC_EX = 4;
+    // Unassigned VK injected as the "menu mask". The shell arms a menu (Win → Start, Alt → the focused
+    // window's menu bar) only when a Win/Alt down→up pair passes with NO other key between them; this inert
+    // keystroke breaks that pair so we can release a held Win/Alt without opening anything. 0xE8 maps to no
+    // command anywhere — it is AutoHotkey's mask key, and handy-keys (what Handy ships) uses the same one.
+    private const ushort MENU_MASK_VK = 0xE8;
+    // Stamped on our injected mask events so a keyboard hook can recognise its own injection ("JOTM").
+    private static readonly IntPtr MenuMaskMarker = new(0x4A4F_544D);
+    // How long Ctrl stays held after the V click. Most apps read the modifier off the V event's flags and
+    // need no hold, but apps that poll global keyboard state while handling the key need Ctrl still down.
+    // Matches enigo's ~100 ms hold, which is what Handy ships.
+    private const int ChordHoldMs = 100;
+    // Handy's paste_delay_ms (its shipping default is 60). Jot's post-paste restore stays at 150 ms rather
+    // than Handy's paste_delay_after_ms=60 — deliberately more conservative, since restoring too early is
+    // exactly how a slow target ends up pasting the user's OLD clipboard.
+    private const int ClipboardSettleMs = 60;
 
     /// <summary>The foreground window right now — capture this when recording starts so the
     /// transcript can be delivered back to the app the user was in, even if focus drifts.</summary>
@@ -44,14 +58,14 @@ public static class TextInjector
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
 
-    /// <summary>Outcome of a paste: it landed, or this PC blocks synthetic input so the transcript was left
-    /// on the clipboard for a manual Ctrl+V (the caller should tell the user).</summary>
+    /// <summary>Outcome of a paste: it landed, or the user's chosen method was <c>Clipboard</c> so the
+    /// transcript was left for a manual Ctrl+V (the caller should tell the user).</summary>
     public enum PasteResult { Pasted, CopiedToClipboard }
 
-    /// <summary>How to deliver the transcript (mirrors Handy's paste-method options). <c>Auto</c> = the smart
-    /// ladder (WM_PASTE → synthetic Ctrl+V if injection works → clipboard mode); <c>Type</c> = synthesise the
-    /// characters; <c>ShiftInsert</c> = the paste combo terminals honour; <c>Clipboard</c> = copy + prompt;
-    /// <c>None</c> = don't paste (save only).</summary>
+    /// <summary>How to deliver the transcript (mirrors Handy's paste-method options). <c>Auto</c> and
+    /// <c>CtrlV</c> both send the Ctrl+V chord — there is deliberately NO ladder behind Auto (see
+    /// <see cref="SendPasteChord"/>). <c>Type</c> = synthesise the characters; <c>ShiftInsert</c> = the paste
+    /// combo terminals honour; <c>Clipboard</c> = copy + prompt; <c>None</c> = don't paste (save only).</summary>
     public enum PasteMethod { Auto, CtrlV, ShiftInsert, Type, Clipboard, None }
 
     /// <summary>Maps the persisted setting string to a <see cref="PasteMethod"/> (default Auto).</summary>
@@ -103,8 +117,11 @@ public static class TextInjector
         // destroys a copied image/file list, then place our transcript. Restored after paste unless clipboard-mode.
         System.Windows.DataObject? saved = keepInClipboard ? null : SnapshotClipboard();
         bool clipOk = SetClipboardText(text);
+        // Let the clipboard write settle before the chord (Handy's paste_delay_ms, default 60). Pasting the
+        // instant after SetText can hand the target the PREVIOUS clipboard on machines where a clipboard
+        // manager / DLP agent hooks the change and delays it becoming readable.
+        if (method != PasteMethod.Clipboard) Thread.Sleep(ClipboardSettleMs);
 
-        IntPtr pasteTarget = restore ? restoreTo : GetForegroundWindow();
         PasteResult result;
         switch (method)
         {
@@ -112,36 +129,34 @@ public static class TextInjector
                 Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=clipboard-only (user setting)");
                 result = PasteResult.CopiedToClipboard;
                 break;
-            case PasteMethod.CtrlV:
-                ReleaseModifiers(); WaitForRealModifiersReleased();
-                Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=Ctrl+V(forced eventsSent={SendCtrlV()}/4)");
-                result = PasteResult.Pasted;
-                break;
             case PasteMethod.ShiftInsert:
                 ReleaseModifiers(); WaitForRealModifiersReleased();
                 SendShiftInsert();
                 Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=Shift+Insert");
                 result = PasteResult.Pasted;
                 break;
-            default: // Auto — the smart ladder
-                if (TryPasteViaMessage(pasteTarget))
+            default: // Auto and CtrlV are the same thing: send the chord.
+                ReleaseModifiers(); WaitForRealModifiersReleased();
+                // Hard gate: a V injected while Win is live is a Win+V, i.e. the clipboard-history flyout
+                // rather than a paste. If Win refuses to clear, leaving the transcript on the clipboard is
+                // the only honest outcome — sending the chord anyway would pop the flyout at the user.
+                if (!NeutralizeWin())
                 {
-                    // WM_PASTE MESSAGE (not a keystroke) → survives corporate endpoint-security. Standard editors.
-                    Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=auto/WM_PASTE(message)");
-                    result = PasteResult.Pasted;
-                }
-                else if (SyntheticInputWorks())
-                {
-                    ReleaseModifiers(); WaitForRealModifiersReleased();
-                    Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=auto/Ctrl+V(SendInput eventsSent={SendCtrlV()}/4)");
-                    result = PasteResult.Pasted;
-                }
-                else
-                {
-                    // Injection blocked (corporate EDR) + target not WM_PASTE-able → clipboard mode + prompt.
-                    Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=auto/clipboard-only (synthetic input blocked on this PC)");
+                    Jot.Services.JotLog.Warn(
+                        $"paste: clipboardSet={clipOk} SKIPPED Ctrl+V — Win key still held; left on clipboard");
                     result = PasteResult.CopiedToClipboard;
+                    break;
                 }
+                uint sent = SendPasteChord();
+                if (sent == 0)
+                {
+                    Jot.Services.JotLog.Warn(
+                        $"paste: clipboardSet={clipOk} ABORTED Ctrl+V — Win re-latched mid-chord; left on clipboard");
+                    result = PasteResult.CopiedToClipboard;
+                    break;
+                }
+                Jot.Services.JotLog.Info($"paste: clipboardSet={clipOk} method=Ctrl+V(vk eventsSent={sent}/4)");
+                result = PasteResult.Pasted;
                 break;
         }
 
@@ -162,11 +177,12 @@ public static class TextInjector
         return result;
     }
 
-    // One-time probe: does INJECTED keyboard input actually reach the input system here? Corporate
-    // endpoint-security silently drops synthetic keystrokes (and SendInput still returns success), so we can't
-    // tell from the paste itself. Inject a harmless key (F24) and check whether the input system registered it
-    // — GetAsyncKeyState is foreground-independent. Cached; probed once. Validated on a simulated EDR: a
-    // low-level hook that drops injected input makes this correctly return false.
+    // DIAGNOSTIC ONLY — deliberately NOT consulted by the paste path (`--injecttest` is its only caller).
+    // Probes whether INJECTED keyboard input reaches the input system: corporate endpoint-security can
+    // silently drop synthetic keystrokes while SendInput still reports success, so inject a harmless key
+    // (F24) and check whether the input system registered it — GetAsyncKeyState is foreground-independent.
+    // Cached; probed once. It used to gate an automatic clipboard-mode fallback; that ladder is gone, so this
+    // now only answers "is injection blocked on this machine?" when triaging a report.
     private static bool? _injectionWorks;
     public static bool SyntheticInputWorks()
     {
@@ -182,7 +198,7 @@ public static class TextInjector
         }
         catch { works = true; } // never break paste over a probe failure — assume input works
         _injectionWorks = works;
-        Jot.Services.JotLog.Info($"synthetic-input probe: injection {(works ? "WORKS" : "is BLOCKED -> clipboard-mode fallback")}");
+        Jot.Services.JotLog.Info($"synthetic-input probe: injection {(works ? "WORKS" : "is BLOCKED on this machine")}");
         return works;
     }
 
@@ -231,11 +247,14 @@ public static class TextInjector
         return captured;
     }
 
-    /// <summary>True if Alt, Ctrl, or Shift is physically down right now (real hardware state).</summary>
+    /// <summary>True if Alt, Ctrl, Shift or Win is physically down right now (real hardware state).
+    /// Win is included because a held Win key silently re-targets our Ctrl+V to the shell — see
+    /// <see cref="NeutralizeWin"/>.</summary>
     private static bool AnyModifierDown() =>
         (GetAsyncKeyState(VK_MENU) & 0x8000) != 0
         || (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
-        || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        || (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0
+        || WinDown();
 
     private static bool SetClipboardText(string text)
     {
@@ -289,9 +308,58 @@ public static class TextInjector
         catch { /* best effort */ }
     }
 
-    // Ctrl+V by SCAN CODE, not virtual-key: some apps (terminals, games, Electron surfaces) only
-    // honour scan-coded synthetic input.
-    private static uint SendCtrlV() => SendKeyChord(SCAN_CONTROL, SCAN_V);
+    /// <summary>
+    /// The Ctrl+V chord, byte-for-byte what Handy sends on Windows (enigo's <c>queue_key</c> path):
+    /// VIRTUAL-KEY driven with the scan code carried alongside, as FOUR separate SendInput calls with a
+    /// real hold between the V click and the Ctrl release.
+    /// </summary>
+    /// <remarks>
+    /// Three details here are load-bearing; do not "simplify" them back:
+    /// <list type="bullet">
+    /// <item>Virtual key, NOT <c>KEYEVENTF_SCANCODE</c>. wScan is populated (apps that read it get a sane
+    /// value) but the flag is off, so Windows dispatches on wVk. Scan-coded V is re-mapped through the
+    /// TARGET thread's keyboard layout, which is how the same chord means different things per app.</item>
+    /// <item>Separate SendInput calls, not one batch. A single batch is delivered atomically, so a target
+    /// that polls <c>GetKeyState(VK_CONTROL)</c> while handling V can observe Ctrl already released and
+    /// treat the keystroke as a bare "v".</item>
+    /// <item>The <see cref="ChordHoldMs"/> sleep. Same reason — the modifier must still be down while a
+    /// slow target services the V.</item>
+    /// </list>
+    /// </remarks>
+    /// <returns>Events accepted (4 = all); <c>0</c> means the chord was ABORTED because Win came back
+    /// between the caller's gate and the V — see the re-check below.</returns>
+    private static uint SendPasteChord()
+    {
+        uint sent = 0;
+        sent += SendInput(1, [VkChordInput(VK_CONTROL, keyUp: false)], Marshal.SizeOf<INPUT>());
+        // Last possible instant to check. A physically held Win auto-repeats, so it can re-latch after the
+        // caller's gate; injecting V now would be a Win+V. Back out cleanly instead of popping the flyout.
+        if (WinDown())
+        {
+            SendInput(1, [VkChordInput(VK_CONTROL, keyUp: true)], Marshal.SizeOf<INPUT>());
+            return 0;
+        }
+        sent += SendInput(1, [VkChordInput(VK_V, keyUp: false)], Marshal.SizeOf<INPUT>());
+        sent += SendInput(1, [VkChordInput(VK_V, keyUp: true)], Marshal.SizeOf<INPUT>());
+        Thread.Sleep(ChordHoldMs);
+        sent += SendInput(1, [VkChordInput(VK_CONTROL, keyUp: true)], Marshal.SizeOf<INPUT>());
+        return sent; // 4 = every event accepted; anything less means something dropped them
+    }
+
+    // wVk + wScan both set, KEYEVENTF_SCANCODE deliberately NOT set — see SendPasteChord.
+    private static INPUT VkChordInput(ushort vk, bool keyUp) => new()
+    {
+        type = INPUT_KEYBOARD,
+        u = new InputUnion
+        {
+            ki = new KEYBDINPUT
+            {
+                wVk = vk,
+                wScan = (ushort)MapVirtualKey(vk, MAPVK_VK_TO_VSC_EX),
+                dwFlags = keyUp ? KEYEVENTF_KEYUP : 0,
+            },
+        },
+    };
 
     // Shift+Insert — the paste combo consoles/terminals honour when Ctrl+V doesn't. VK-based (Insert is an
     // extended key that VK injection handles cleanly).
@@ -306,22 +374,80 @@ public static class TextInjector
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    /// <summary>Injects key-ups for Alt/Ctrl/Shift so a still-held global-hotkey modifier (e.g. the Alt
+    /// <summary>Injects key-ups for Alt/Ctrl/Shift/Win so a still-held global-hotkey modifier (e.g. the Alt
     /// of "Alt+/") doesn't corrupt the synthetic Ctrl+C/Ctrl+V we're about to send.</summary>
+    /// <remarks>
+    /// The <see cref="SendMenuMask"/> call is load-bearing and must come FIRST. Releasing Alt or Win with a
+    /// bare key-up turns the user's real key-down into a lone down→up tap, which is exactly the gesture the
+    /// shell watches for: measured 3/3, an unmasked Win release opens the Start menu, which steals foreground
+    /// and loses the paste. Masking first makes the release inert — measured 3/3 clean.
+    /// </remarks>
     private static void ReleaseModifiers()
     {
+        // Only mask when a menu-arming modifier is actually held; a mask keystroke is harmless but pointless
+        // otherwise, and this keeps the common no-modifier paste to a single SendInput.
+        if (MenuModifierDown()) SendMenuMask();
+
         var ups = new[]
         {
             ScanInput(SCAN_ALT, keyUp: true),
             ScanInput(SCAN_CONTROL, keyUp: true),
             ScanInput(SCAN_SHIFT, keyUp: true),
+            VkInput(VK_LWIN, keyUp: true),
+            VkInput(VK_RWIN, keyUp: true),
         };
         SendInput((uint)ups.Length, ups, Marshal.SizeOf<INPUT>());
+    }
+
+    /// <summary>True if a modifier that arms a shell menu (Alt or either Win) is physically down.</summary>
+    private static bool MenuModifierDown() =>
+        (GetAsyncKeyState(VK_MENU) & 0x8000) != 0 || WinDown();
+
+    /// <summary>True if either Win key is physically down right now.</summary>
+    private static bool WinDown() =>
+        (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 || (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+
+    // A press+release of an inert key, so a subsequent Alt/Win key-up no longer reads as a lone tap.
+    private static void SendMenuMask()
+    {
+        var mask = new[]
+        {
+            VkInput(MENU_MASK_VK, keyUp: false, extraInfo: MenuMaskMarker),
+            VkInput(MENU_MASK_VK, keyUp: true, extraInfo: MenuMaskMarker),
+        };
+        SendInput((uint)mask.Length, mask, Marshal.SizeOf<INPUT>());
+    }
+
+    /// <summary>
+    /// Drives the Win key to logically-released and reports whether it got there. Retries because a
+    /// physically held Win auto-repeats: each repeat re-latches the key after we let go of it.
+    /// </summary>
+    /// <remarks>
+    /// Why this exists at all: Windows routes Win+Ctrl+V to its Win+V handler, so with Win held the paste
+    /// chord opens the clipboard-history flyout instead of pasting (measured — foreground goes to
+    /// ControlCenterWindow, nothing lands). The extra Ctrl does NOT protect the chord.
+    /// </remarks>
+    private static bool NeutralizeWin(int timeoutMs = 300)
+    {
+        if (!WinDown()) return true;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        do
+        {
+            SendMenuMask();
+            var ups = new[] { VkInput(VK_LWIN, keyUp: true), VkInput(VK_RWIN, keyUp: true) };
+            SendInput((uint)ups.Length, ups, Marshal.SizeOf<INPUT>());
+            Thread.Sleep(15);
+            if (!WinDown()) return true;
+        }
+        while (sw.ElapsedMilliseconds < timeoutMs);
+        return false;
     }
 
     private const int VK_SHIFT = 0x10;
     private const int VK_CONTROL = 0x11;
     private const int VK_MENU = 0x12; // Alt
+    private const ushort VK_LWIN = 0x5B;
+    private const ushort VK_RWIN = 0x5C;
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
@@ -353,10 +479,13 @@ public static class TextInjector
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
     }
 
-    private static INPUT VkInput(ushort vk, bool keyUp) => new()
+    private static INPUT VkInput(ushort vk, bool keyUp, IntPtr extraInfo = default) => new()
     {
         type = INPUT_KEYBOARD,
-        u = new InputUnion { ki = new KEYBDINPUT { wVk = vk, dwFlags = keyUp ? KEYEVENTF_KEYUP : 0 } },
+        u = new InputUnion
+        {
+            ki = new KEYBDINPUT { wVk = vk, dwFlags = keyUp ? KEYEVENTF_KEYUP : 0, dwExtraInfo = extraInfo },
+        },
     };
 
     /// <summary>Presses a scan-coded key WITHOUT releasing it — dev/self-test use, to simulate a
@@ -455,48 +584,6 @@ public static class TextInjector
         return GetForegroundWindow() == hWnd;
     }
 
-    // Deliver the clipboard via a WM_PASTE MESSAGE to the focused edit control instead of a synthetic Ctrl+V
-    // keystroke. A window message is NOT injected keyboard input, so it isn't dropped by the corporate
-    // endpoint-security / anti-keylogger filters that silently discard SendInput keystrokes — the real reason
-    // paste fails on locked-down machines (see docs/plans). Restricted to standard editable control classes
-    // (Notepad's editor is "Edit"), so every other app keeps the unchanged Ctrl+V behaviour. Returns true
-    // only when a WM_PASTE was actually delivered to an editable control.
-    internal static bool TryPasteViaMessage(IntPtr targetTopLevel)
-    {
-        IntPtr focus = FocusedControlOf(targetTopLevel);
-        if (focus == IntPtr.Zero || !IsPasteableEditControl(focus)) return false;
-        // SendMessageTimeout (not SendMessage) so a hung target can't block the UI thread; nonzero = delivered.
-        return SendMessageTimeout(focus, WM_PASTE, IntPtr.Zero, IntPtr.Zero, SMTO_ABORTIFHUNG, 1000, out _) != IntPtr.Zero;
-    }
-
-    // The control that actually has keyboard focus inside the target window's GUI thread — the edit box, not
-    // the top-level frame. GetGUIThreadInfo reads another thread's focus without AttachThreadInput.
-    private static IntPtr FocusedControlOf(IntPtr topLevel)
-    {
-        IntPtr hwnd = topLevel != IntPtr.Zero ? topLevel : GetForegroundWindow();
-        if (hwnd == IntPtr.Zero) return IntPtr.Zero;
-        uint tid = GetWindowThreadProcessId(hwnd, out _);
-        var gti = new GUITHREADINFO { cbSize = Marshal.SizeOf<GUITHREADINFO>() };
-        return GetGUIThreadInfo(tid, ref gti) ? gti.hwndFocus : IntPtr.Zero;
-    }
-
-    // Standard Win32 editable controls that honour WM_PASTE (Notepad classic = "Edit"; WordPad/most editors
-    // = a RichEdit variant; Scintilla-based editors too). Anything else → let the caller fall back to Ctrl+V.
-    internal static bool IsPasteableEditControl(IntPtr hWnd)
-    {
-        var sb = new System.Text.StringBuilder(256);
-        if (GetClassName(hWnd, sb, sb.Capacity) == 0) return false;
-        return IsPasteableEditClass(sb.ToString());
-    }
-
-    /// <summary>Pure (testable) class-name check: does this window class honour WM_PASTE? Covers classic
-    /// Notepad ("Edit"), Windows 11 Notepad ("RichEditD2DPT") + WordPad ("RICHEDIT50W"), and Scintilla
-    /// editors. Everything else (browsers, WPF/WinUI/Electron surfaces) returns false → caller uses Ctrl+V.</summary>
-    public static bool IsPasteableEditClass(string cls) =>
-        cls.Equals("Edit", StringComparison.OrdinalIgnoreCase)
-        || cls.Contains("RichEdit", StringComparison.OrdinalIgnoreCase)
-        || cls.Contains("Scintilla", StringComparison.OrdinalIgnoreCase);
-
     private static bool IsOwnWindow(IntPtr hWnd)
     {
         GetWindowThreadProcessId(hWnd, out uint pid);
@@ -524,30 +611,14 @@ public static class TextInjector
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentProcessId();
 
-    [DllImport("user32.dll")]
-    private static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam,
-        uint flags, uint timeout, out IntPtr result);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct GUITHREADINFO
-    {
-        public int cbSize;
-        public uint flags;
-        public IntPtr hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
-        public int caretLeft, caretTop, caretRight, caretBottom;
-    }
-
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
+
+    [DllImport("user32.dll")]
+    private static extern uint MapVirtualKey(uint uCode, uint uMapType);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT

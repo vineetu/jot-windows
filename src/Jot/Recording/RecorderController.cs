@@ -260,11 +260,11 @@ public sealed class RecorderController : IDisposable
                     // path where a deck ran to completion.
                     IntPtr target = s.ReturnToOrigin || vocab.AskEntered ? _originWindow : IntPtr.Zero;
                     var pr = Paste(text, target, s);
-                    // This PC blocks synthetic input (corporate EDR) and the target wasn't a standard editor →
-                    // the transcript is on the clipboard; tell the user to paste it manually (a real Ctrl+V works).
+                    // Only reachable when the user picked "Copy to clipboard" as their paste method — Jot no
+                    // longer degrades into clipboard mode on its own.
                     if (pr == TextInjector.PasteResult.CopiedToClipboard)
                         Notice?.Invoke("Transcript copied — press Ctrl+V to paste",
-                            "This PC blocks apps from pasting for you, so Jot put the transcript on your clipboard.");
+                            "Your paste method is set to \"Copy to clipboard\", so Jot didn't paste for you.");
                 }
                 _sound.PlaySuccess();
                 // Corrections FIRST: the pill's slot is consume-once and TranscriptReady is what

@@ -7,7 +7,7 @@
                  Width="600" Height="600" ResizeMode="NoResize"
                  WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True"
-                 WindowBackdropType="Mica" WindowCornerPreference="Round">
+                 WindowBackdropType="None" WindowCornerPreference="Round">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
