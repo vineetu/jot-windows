@@ -13,8 +13,9 @@ is deliberately **not** a feature spec: it does not restate feature prose, it po
 functions or line numbers, so it survives refactors.
 
 **Stack.** WPF on .NET 10 (`net10.0-windows`, x64) + WPF-UI (Fluent). On-device speech-to-text is NVIDIA
-Nemotron 3.5 streaming multilingual (int4 ONNX) via ONNX Runtime — CPU by default, optional DirectML GPU
-backend. Microphone capture is WASAPI (NAudio); paste is a SendInput clipboard-sandwich; global hotkeys
+Nemotron 3.5 streaming multilingual (Q8_0 GGUF) via transcribe.cpp / ggml — Vulkan when a device
+initialises, else ggml-CPU. ONNX Runtime stays only for the optional Parakeet CTC 110M vocabulary
+spotter (CPU EP). Microphone capture is WASAPI (NAudio); paste is a SendInput clipboard-sandwich; global hotkeys
 are Win32 `RegisterHotKey`; the tray is a WinForms `NotifyIcon`. Optional AI (cleanup / rewrite / Ask Jot)
 is bring-your-own-provider (OpenAI / Anthropic / Gemini / local Ollama) over raw HTTP. Everything runs in
 a **single process** — there is no keyboard extension, watch app, or App Group as on iOS.
@@ -29,7 +30,8 @@ the repo root and `docs/`.
 | App host & lifecycle | Process startup, DI container wiring, tray, single-instance claim, update/uninstall hooks, packaged-vs-unpackaged detection, wiring every service to the pill/tray. | `App.xaml.cs` (`OnStartup`, `SetupTray`, `ClaimSingleInstance`, `IsRunningAsPackagedApp`, `WipeAllData`) |
 | Recording & pipeline | The record → transcribe → clean → save → paste state machine; stop-and-save Esc arming; origin-window capture. | `Recording/RecorderController.cs` (`RecorderState`, `Toggle`, `StopAndDeliverAsync`), `Recording/AudioRecorder.cs`, `Recording/LiveTranscription.cs` |
 | Hotkeys | Global `RegisterHotKey` on a message-only window; chord parsing; the (unused) low-level hook scaffolding. | `Recording/GlobalHotkey.cs`, `Recording/HotkeyManager.cs`, `Recording/HotkeyChord.cs`, `Recording/LowLevelHotkeys.cs` |
-| Transcription engine | On-device STT: Nemotron int4/fp16 streaming (cache-aware RNNT), mel frontend, model install, language table. | `Transcription/Nemotron/` (`NemotronTranscriber.cs`, `NemotronFp16Transcriber.cs`, `NemotronModel*.cs`, `MelFrontend.cs`, `NemotronLanguages.cs`, `NemotronModelInstaller.cs`), `Transcription/ITranscriber.cs` (`IStreamingTranscriber`) |
+| Transcription engine | On-device STT: Nemotron Q8_0 GGUF via ggml (Vulkan or CPU), locale table, GGUF installer. | `Transcription/Ggml/` (`GgmlNemotronTranscriber.cs`, `NemotronGgufModel*.cs`, `GgmlProbe.cs`), `Transcription/Nemotron/NemotronLocales.cs`, `Transcription/ITranscriber.cs` (`IStreamingTranscriber`) |
+| Vocabulary spotter | Post-stop CTC keyword spotter (Parakeet CTC 110M int8). Needs per-frame log-probs ggml cannot provide. | `Transcription/Ctc/`, `Transcription/Onnx/OnnxSessionFactory.cs`, `Vocabulary/CtcVocabularySpotter.cs` |
 | Offline text cleanup | Deterministic, always-on, non-AI tidy every transcript passes through. | `Text/TextPipeline.cs` (`Clean`, `CleanPartial`), `Text/ModelArtifactScrubber.cs`, `Text/FillerWordCleaner.cs`, `Text/NumberNormalizer.cs`, `Text/LanguageCode.cs` |
 | Delivery | Clipboard-sandwich paste via SendInput; foreground-window capture/restore; UI-Automation selection reader (for the not-yet-wired rewrite). | `Delivery/TextInjector.cs` (`PasteAtCursor`, `CaptureForegroundWindow`), `Delivery/UiaSelectionReader.cs` |
 | Status pill & waveform | Borderless topmost overlay reflecting pipeline state; live RMS waveform; expand-to-transcript. | `Services/PillController.cs`, `Controls/PillWindow.xaml(.cs)`, `Controls/PillState.cs`, `Controls/WaveformView.cs`, `Controls/MicMeter.cs` |
@@ -67,19 +69,21 @@ These are the boundary rules that reading one file won't reveal. Break one and s
   Store owns the packaged lifecycle, so running Velopack there would misfire. Keep packaged-vs-unpackaged
   logic behind this one check.
 
-- **Nemotron-only, no per-word timings.** There is one speech engine (Nemotron), streaming via a
-  cache-aware RNNT session whose encoder cache + decoder state thread forward per chunk. It does **not**
-  surface per-word timestamps, so WebVTT export fabricates fixed-length cues — treat any timing-dependent
-  feature as blocked until the engine surfaces real timings. Tensor cache dimensions
-  (`EncLayers/ChannelCache/Hidden/TimeCache`) and layer ordering differ between the int4 and fp16
-  transcribers and are byte-sensitive; they must match the validated reference.
+- **Nemotron-only, no per-word timings.** There is one speech engine (Nemotron Q8_0 via ggml),
+  streaming through transcribe.cpp's C API. It does **not** surface per-word timestamps in the
+  product path, so WebVTT export fabricates fixed-length cues — treat any timing-dependent feature
+  as blocked until the engine surfaces real timings.
 
-- **Native runtime pinning is load-bearing.** ONNX Runtime is pinned to a specific native build, and a
-  **newer DirectML** (`Microsoft.AI.DirectML`) is layered on top of the one ORT bundles because the older
-  runtime rejects Nemotron's int4 ops on this GPU. The `Microsoft.Windows.SDK.BuildTools.WinApp` package
-  is used **instead of** `Microsoft.WindowsAppSDK` specifically because the latter transitively ships its
-  own `onnxruntime.dll` that collides with the STT one (APPX1101 duplicate-payload build error). Don't
-  swap these package choices casually.
+- **ONNX Runtime is the CTC spotter only.** The Nemotron ONNX path (int4 CPU / fp16 DirectML) is
+  gone. The spotter stays on the CPU EP because Vulkan + DirectML in one process blew a 4000 ms
+  deadline (measured 15.7 s). `JOT_ENGINE=ort` is ignored. Leftover int4/fp16 folders are deleted
+  by `OrtModelCleanup` after a successful ggml warm-up, never before the GGUF is verified.
+
+- **Native runtime pinning is load-bearing.** ggml natives (`transcribe.dll`, `ggml-vulkan.dll`)
+  ship next to `Jot.exe` from the official v0.1.3 tarball. ONNX Runtime is pinned to 1.20.1 (CPU
+  package) for the spotter. The `Microsoft.Windows.SDK.BuildTools.WinApp` package is used
+  **instead of** `Microsoft.WindowsAppSDK` specifically because the latter transitively ships its
+  own `onnxruntime.dll` (APPX1101 duplicate-payload build error). Don't swap these casually.
 
 - **Icon is Resource-only, not Content.** `jot.ico` is embedded as a WPF `<Resource>` and explicitly
   **excluded** from the `<Content>` copy glob. Listing the same file as both drops the embedded copy, the
