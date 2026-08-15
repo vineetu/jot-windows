@@ -429,10 +429,13 @@ public static class VocabularyGate
     ///
     /// Placement: for each detection find a transcript SPAN that is an acoustic near-miss of the
     /// term (the SAME plausibility metric Apply uses) — one word, or a contiguous N-word window when
-    /// the term/alias is itself N words. When several qualify, disambiguate by PROPORTIONAL
+    /// the term/alias is itself N words, or a wider window whose concatenated letter-skeleton
+    /// equals a single-word term exactly (decoder-inserted spaces; English is spotter-only and
+    /// has no alias to unlock that width). When several qualify, disambiguate by PROPORTIONAL
     /// position — the detection's mid-audio time over total duration mapped to a fractional index
-    /// across the words. A positional winner that is only part of the term yields to a wider
-    /// eligible window covering the same words; otherwise the later partial-term guard refuses it.
+    /// across the words. A positional winner that is only part of the term, or a shard of a
+    /// single-word term whose containing window is an exact concat, yields to that wider window;
+    /// otherwise the later partial-term guard refuses it.
     ///
     /// Decision: the SAME Decide the rescore path uses. With no confidence, every word reads as
     /// LowConfidence, so the 0.998-protector cannot fire (correct — there is no confidence to
@@ -523,8 +526,20 @@ public static class VocabularyGate
             // host a 1-word term ("nemo tron" → "Nemotron") and vice versa; width 1 is always tried
             // and behaves exactly as before, which is what keeps the merged-token case
             // ("ramanathan" → "Ramaa Nathan") and all five golden fixtures byte-identical.
+            //
+            // A one-word term with no multi-word alias still has to see a decoder-split of
+            // itself: search up to the letter count (each extra word is at least one letter)
+            // and admit a wider window only when the concatenated skeleton equals the TERM
+            // (WindowRange). Inflating shapes instead would make AlignmentWindow return
+            // Unique=true for every wider span (termWords.Length < 2) and hand the 0.45/0.65
+            // ceiling the 2003-FP near-concat population concat-scan measured.
             string[][] shapes = [SplitWords(det.Term), .. det.Aliases.Select(SplitWords)];
             int maxWidth = Math.Clamp(shapes.Max(s => s.Length), 1, words.Count);
+            if (shapes[0].Length == 1)
+            {
+                int letters = Skeleton(det.Term).Length;
+                if (letters > maxWidth) maxWidth = Math.Min(letters, words.Count);
+            }
             // E8: how far this detection has EARNED the right to reach. Fixed 0.45 for everything the
             // corrector produces and everything Mac produces; more only when a real acoustic model was
             // sure. See EffectiveCeiling.
@@ -542,7 +557,7 @@ public static class VocabularyGate
             {
                 for (int i = 0; i + w <= words.Count; i++)
                 {
-                    if (WindowRange(words, i, w, originalTranscript, shapes, claimed) is not { } window)
+                    if (WindowRange(words, i, w, originalTranscript, shapes, claimed, det.Term) is not { } window)
                         continue;
                     string spanText = Slice(originalTranscript, window);
                     double gap = PlausibilityGap(Normalize(spanText), det.Term, det.Aliases);
@@ -565,8 +580,19 @@ public static class VocabularyGate
             // that tail over the local pair. Unconstrained retry would splice a distant same-shape
             // window; no containing pair: keep this pick so the later partial-term / dedup-ambiguous
             // guards still fire (ask Claude, code → kept, not spot-unplaced).
-            if (bestIndex >= 0
-                && SpanIsOnlyPartOfTerm(Slice(originalTranscript, bestRange), det.Term))
+            // Containing-window promotion. Two disjoint reasons, one loop:
+            //  * multi-word term hosted on one of its words (SpanIsOnlyPartOfTerm, 8194d62)
+            //  * single-word term hosted on a shard while a containing window IS the term,
+            //    split (exactness against the term — an alias-unlocked near-match must not
+            //    win this lift; that is the 2003-FP population)
+            // English is spotter-only: Acoustic + E8 makes a shard like 4/7 = 0.57 a
+            // candidate, and position-first then prefers it. Without this lift the widened
+            // search is inert on the path this change exists for.
+            string hostText = bestIndex >= 0 ? Slice(originalTranscript, bestRange) : "";
+            bool promotePartial = bestIndex >= 0 && SpanIsOnlyPartOfTerm(hostText, det.Term);
+            bool promoteExact = bestIndex >= 0 && !det.Term.Contains(' ')
+                && !IsExactSkeleton(hostText, det.Term);
+            if (promotePartial || promoteExact)
             {
                 int hostIndex = bestIndex;
                 int hostWidth = bestWidth;
@@ -579,9 +605,10 @@ public static class VocabularyGate
                     for (int i = 0; i + w <= words.Count; i++)
                     {
                         if (i > hostIndex || i + w < hostIndex + hostWidth) continue;
-                        if (WindowRange(words, i, w, originalTranscript, shapes, claimed) is not { } window)
+                        if (WindowRange(words, i, w, originalTranscript, shapes, claimed, det.Term) is not { } window)
                             continue;
                         string spanText = Slice(originalTranscript, window);
+                        if (promoteExact && !IsExactSkeleton(spanText, det.Term)) continue;
                         if (PlausibilityGap(Normalize(spanText), det.Term, det.Aliases) > ceiling) continue;
                         double positional = Math.Abs((i + w / 2.0) / n - frac);
                         if (widerIndex < 0 || positional < widerDistance ||
@@ -939,8 +966,7 @@ public static class VocabularyGate
         // (`Mid East` → `Mideast`), 0 FP. The same scan found 2003 near-match concatenations
         // (`there are` → `Therese` 0.25) that would be FP-absent if this were any plausible
         // concat rather than exact — do not loosen.
-        if (isCommon && baseWords.Length >= 2 && !term.Contains(' ')
-            && IsExactSkeleton(@base, term))
+        if (isCommon && IsExactConcatSplit(@base, term))
             isCommon = false;
         // Genuine acoustic uncertainty: a MEASURED confidence between "shaky" and "sure".
         // Unknown confidence (common for the OOV names this feature targets) is NOT unsure, so
@@ -1066,10 +1092,15 @@ public static class VocabularyGate
     ///  * END AT THE LAST ALPHANUMERIC of the final word, so a trailing "." / "," stays OUTSIDE the
     ///    replaced span — the same boundary <see cref="AbsorbTrailingDuplicates"/> picks, so a
     ///    window-placed span and a dedup-widened one are the same shape and carry the same anchors.
+    ///  * EXACT CONCAT of a single-word term. A decoder-split of the term has no same-width shape,
+    ///    so the alignment rule above would drop it. Admitted only when the concatenated
+    ///    letter-skeleton equals the term (never an alias — see <see cref="IsExactSkeleton"/>).
+    ///    Space and punctuation rules above still apply: a comma is still a boundary.
     /// </summary>
     private static CharRange? WindowRange(
         IReadOnlyList<(string Text, CharRange Range)> words,
-        int start, int width, string text, string[][] shapes, HashSet<int> claimed)
+        int start, int width, string text, string[][] shapes, HashSet<int> claimed,
+        string term)
     {
         for (int k = 0; k < width; k++)
         {
@@ -1093,7 +1124,8 @@ public static class VocabularyGate
 
         var window = new string[width];
         for (int k = 0; k < width; k++) window[k] = words[start + k].Text;
-        if (!shapes.Any(s => s.Length == width && AlignmentWindow(s, window).Unique)) return null;
+        bool shapeAligned = shapes.Any(s => s.Length == width && AlignmentWindow(s, window).Unique);
+        if (!shapeAligned && !IsExactConcatSplit(string.Join(' ', window), term)) return null;
 
         CharRange lastWord = words[start + width - 1].Range;
         int end = -1;
@@ -1375,6 +1407,13 @@ public static class VocabularyGate
         if (heard.Length == 0) return false;
         return Skeleton(term).AsSpan().SequenceEqual(heard);
     }
+
+    /// <summary>
+    /// Decoder-split of a single-word term: several words whose letters are the term exactly.
+    /// One source of exactness — <see cref="IsExactSkeleton"/>, term only, never an alias.
+    /// </summary>
+    private static bool IsExactConcatSplit(string span, string term) =>
+        !term.Contains(' ') && SplitWords(span).Length >= 2 && IsExactSkeleton(span, term);
 
     /// <summary>Shortest shared stem that counts as "the same word, differently ended". Below four
     /// scalars a shared head is a coincidence, not a paradigm.</summary>
