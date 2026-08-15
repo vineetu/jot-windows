@@ -369,6 +369,19 @@ public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDispos
                 continue;
             }
 
+            // Gate BLOCK is attribution, not a silent drop. ggml writes "Sri Ram"; the spotter
+            // hears Sriram; the brake refuses Ram→Sriram and says so. Same contract as
+            // spot-unplaced: the log names the term so "I added it and nothing happened" is
+            // answerable. ONNX used to miss this path (this test skipped after int4/fp16 left).
+            string? blocked = on.Diagnostics.Lines.FirstOrDefault(
+                l => l.Contains("decision=BLOCK", StringComparison.Ordinal)
+                     && l.Contains($"→ {term}", StringComparison.Ordinal));
+            if (blocked is not null)
+            {
+                output.WriteLine($"  {term,-12} heard, gate refused — logged: {blocked}");
+                continue;
+            }
+
             string? log = on.Diagnostics.Lines.FirstOrDefault(
                 l => l.Contains($"spot-unplaced {term}", StringComparison.Ordinal));
             if (log is null)
