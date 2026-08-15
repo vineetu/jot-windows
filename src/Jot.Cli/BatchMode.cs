@@ -70,7 +70,8 @@ internal static class BatchMode
         try
         {
             ITranscriber transcriber = TranscriberFactory.Create(
-                settings, int4, fp16, gguf, new OnnxSessionFactory());
+                settings, int4, fp16, gguf, new OnnxSessionFactory(),
+                msg => Console.Error.WriteLine("jot: " + msg));
             if (!transcriber.IsModelInstalled)
             {
                 return Cli.Fail(

@@ -89,7 +89,8 @@ internal static class StreamMode
         try
         {
             transcriber = TranscriberFactory.Create(
-                BatchMode.ApplyDevice(paths.Settings, o.Device), int4, fp16, gguf, factory);
+                BatchMode.ApplyDevice(paths.Settings, o.Device), int4, fp16, gguf, factory,
+                msg => Console.Error.WriteLine("jot: " + msg));
         }
         catch (Exception ex)
         {
