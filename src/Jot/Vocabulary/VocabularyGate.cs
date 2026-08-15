@@ -932,6 +932,16 @@ public static class VocabularyGate
         }
         float confidence = measured ?? LowConfidence;
         bool isCommon = IsCommonSpan(@base, commonWords);
+        // Exact-concat of a single-word term: the decoder split the term. The 24k list is a word
+        // list; looking up the shards asks whether the pieces are ordinary (`mid`/`east`, `nemo`),
+        // which they often are, and is the wrong question once the concatenated skeleton IS the
+        // term. MEASURED on E5's 1041 clips (concat-scan, 2026-08-14): 2 such windows, both TP
+        // (`Mid East` → `Mideast`), 0 FP. The same scan found 2003 near-match concatenations
+        // (`there are` → `Therese` 0.25) that would be FP-absent if this were any plausible
+        // concat rather than exact — do not loosen.
+        if (isCommon && baseWords.Length >= 2 && !term.Contains(' ')
+            && IsExactSkeleton(@base, term))
+            isCommon = false;
         // Genuine acoustic uncertainty: a MEASURED confidence between "shaky" and "sure".
         // Unknown confidence (common for the OOV names this feature targets) is NOT unsure, so
         // it doesn't over-prioritise asks.
@@ -1346,9 +1356,25 @@ public static class VocabularyGate
     /// THE over-correction brake, step (4): does this span contain an everyday word? Public because
     /// E6 measures how much of the gate's safety this one predicate is carrying in each language, and
     /// a harness that re-derives it would be measuring its own copy, not the shipped rule.
+    ///
+    /// Per-word on purpose — the 24k list is a word list. <see cref="Decide"/> declines to apply
+    /// this to a multi-word span whose concatenated skeleton is the term; it does not change the
+    /// predicate. A full-unit rewrite (lookup the concat, ignore the pieces) newly admits the
+    /// near-match concatenations E5's concat-scan counted as 2003 FP-absent.
     /// </summary>
     public static bool IsCommonSpan(string span, IReadOnlySet<string> commonWords) =>
         SplitWords(Normalize(span)).Any(w => commonWords.Contains(CorrectionKey.Lowercased(w)));
+
+    /// <summary>Letter-skeletons equal, empty-heard excluded (that path reports gap 0 for a
+    /// different reason). Against the TERM only: a width-unlock alias is the span itself, so
+    /// including aliases would make every unlocked near-match look exact.
+    /// </summary>
+    private static bool IsExactSkeleton(string span, string term)
+    {
+        Rune[] heard = Skeleton(span);
+        if (heard.Length == 0) return false;
+        return Skeleton(term).AsSpan().SequenceEqual(heard);
+    }
 
     /// <summary>Shortest shared stem that counts as "the same word, differently ended". Below four
     /// scalars a shared head is a coincidence, not a paradigm.</summary>

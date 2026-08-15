@@ -27,6 +27,7 @@ namespace Jot.Tests.Vocabulary;
 ///   <c>$env:JOT_VOCAB_EVAL="transcribe"</c>  FLEURS wav → Nemotron fp16/DML → TextPipeline.Clean
 ///   <c>$env:JOT_VOCAB_EVAL="spot"</c>        the shipping CTC spotter over the same clips
 ///   <c>$env:JOT_VOCAB_EVAL="report"</c>      corrector vs spotter vs both, through VocabularyGate
+///   <c>$env:JOT_VOCAB_EVAL="concat-scan"</c>  exact/near multi-word-span × term, for the concat-span rule
 /// </summary>
 public class VocabEvalHarness(ITestOutputHelper output)
 {
@@ -49,6 +50,7 @@ public class VocabEvalHarness(ITestOutputHelper output)
             case "spot": Spot(); break;
             case "calibrate": Calibrate(); break;
             case "report": Report(); break;
+            case "concat-scan": ConcatScan(); break;
             default: throw new ArgumentException($"unknown JOT_VOCAB_EVAL stage '{stage}'");
         }
     }
@@ -326,6 +328,115 @@ public class VocabEvalHarness(ITestOutputHelper output)
 
     // MARK: - Stage 3 · head to head
 
+    /// <summary>
+    /// Every width-2..4 window of every cached transcript against every term. Answers whether the
+    /// concat-span rule is exercised on this corpus and what a full-unit (not exact) rewrite of
+    /// <c>IsCommonSpan</c> would newly admit. Deterministic; no audio.
+    /// </summary>
+    private void ConcatScan()
+    {
+        List<Hypothesis> hyps = ReadHypotheses();
+        string[] all = File.ReadAllLines(Path.Combine(Out, "terms.txt"));
+        string[] focused = Focused(hyps, all);
+        var focusedSet = focused.ToHashSet(StringComparer.Ordinal);
+        IReadOnlySet<string> common = EmbeddedCommonWordsProvider.Shared.Words("common-words");
+        var corrector = new VocabularyCorrector();
+
+        int exactWindows = 0, exactTp = 0, exactFpAbsent = 0, exactFpOver = 0;
+        int exactCommon = 0, exactFocused = 0;
+        int nearWindows = 0, nearCommon = 0, nearFpAbsent = 0, nearTp = 0;
+        var exactRows = new StringBuilder("file\tterm\tspan\twidth\tfocused\tclass\tanyCommon\tinCorrector\n");
+        var nearFpRows = new StringBuilder("file\tterm\tspan\twidth\tgap\tclass\n");
+
+        foreach (Hypothesis h in hyps)
+        {
+            string[] refWords = Words(h.Reference);
+            string[] hypWords = Words(h.Text);
+            IReadOnlyList<(int Start, int End)> spans = VocabularyGate.WordSpans(h.Text);
+            var present = all.Where(t => Contains(refWords, t)).ToHashSet(StringComparer.Ordinal);
+            IReadOnlyList<VocabularyGate.Detection> textual =
+                corrector.Spot(h.Text, [.. all.Select(t => new VocabularyTerm { Text = t })], h.Seconds, "en-US");
+            var textualTerms = textual.Select(d => d.Term).ToHashSet(StringComparer.Ordinal);
+
+            for (int w = 2; w <= Math.Min(4, spans.Count); w++)
+            {
+                for (int i = 0; i + w <= spans.Count; i++)
+                {
+                    string spanText = h.Text[spans[i].Start..spans[i + w - 1].End];
+                    bool anyCommon = VocabularyGate.IsCommonSpan(spanText, common);
+                    foreach (string term in all)
+                    {
+                        double gap = VocabularyGate.Gap(spanText, term, []);
+                        if (gap > VocabularyGate.PlausibilityCeiling) continue;
+                        bool said = present.Contains(term);
+                        string klass = !said ? "FP-absent"
+                            : Contains(refWords, spanText) ? "FP-overwrote"
+                            : "TP";
+                        if (gap == 0)
+                        {
+                            exactWindows++;
+                            if (anyCommon) exactCommon++;
+                            if (focusedSet.Contains(term)) exactFocused++;
+                            switch (klass)
+                            {
+                                case "TP": exactTp++; break;
+                                case "FP-absent": exactFpAbsent++; break;
+                                default: exactFpOver++; break;
+                            }
+                            exactRows.AppendLine(string.Join('\t',
+                                h.File, term, spanText.Replace('\t', ' '), w,
+                                focusedSet.Contains(term), klass, anyCommon, textualTerms.Contains(term)));
+                        }
+                        else
+                        {
+                            nearWindows++;
+                            if (anyCommon)
+                            {
+                                nearCommon++;
+                                if (klass == "FP-absent")
+                                {
+                                    nearFpAbsent++;
+                                    if (nearFpAbsent <= 40)
+                                        nearFpRows.AppendLine(string.Join('\t',
+                                            h.File, term, spanText.Replace('\t', ' '), w,
+                                            gap.ToString("F3", CultureInfo.InvariantCulture), klass));
+                                }
+                                else if (klass == "TP") nearTp++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"clips            {hyps.Count}");
+        sb.AppendLine($"terms            {all.Length}  (focused-25 {focused.Length})");
+        sb.AppendLine($"focused-25       {string.Join(", ", focused)}");
+        sb.AppendLine();
+        sb.AppendLine("### exact concat (gap 0.00, width 2-4)");
+        sb.AppendLine($"windows          {exactWindows}");
+        sb.AppendLine($"  any-common     {exactCommon}");
+        sb.AppendLine($"  focused-25     {exactFocused}");
+        sb.AppendLine($"  TP             {exactTp}");
+        sb.AppendLine($"  FP-absent      {exactFpAbsent}");
+        sb.AppendLine($"  FP-overwrote   {exactFpOver}");
+        sb.AppendLine();
+        sb.AppendLine("### near concat (0 < gap ≤ 0.45, width 2-4) — full-unit rewrite population");
+        sb.AppendLine($"windows          {nearWindows}");
+        sb.AppendLine($"  any-common     {nearCommon}");
+        sb.AppendLine($"    of those TP  {nearTp}");
+        sb.AppendLine($"    of those FP-absent (first 40 listed)  {nearFpAbsent}");
+        sb.AppendLine();
+        sb.Append(exactRows);
+        sb.AppendLine();
+        sb.Append(nearFpRows);
+
+        string report = sb.ToString();
+        output.WriteLine(report);
+        File.WriteAllText(Path.Combine(Out, "concat-scan.txt"), report);
+    }
+
     private sealed record Applied(string Original, string Term, string Verdict);
 
     private void Report()
@@ -403,7 +514,9 @@ public class VocabEvalHarness(ITestOutputHelper output)
             baseline.Add(refWords, hypWords, missing, [], spottable);
 
             var sw = Stopwatch.StartNew();
-            IReadOnlyList<VocabularyGate.Detection> textual = corrector.Spot(h.Text, terms, h.Seconds);
+            // en-US, not omitted: Spot(language: null) is Unmeasured 0.15 after E6, and E5 scored
+            // English's uncapped setting. A remasurement that forgets this is not an E5 comparison.
+            IReadOnlyList<VocabularyGate.Detection> textual = corrector.Spot(h.Text, terms, h.Seconds, "en-US");
             sw.Stop();
             correctorMs.Add(sw.Elapsed.TotalMilliseconds);
             IReadOnlyList<VocabularyGate.Detection> acoustic = spotted.GetValueOrDefault(h.File) ?? [];
