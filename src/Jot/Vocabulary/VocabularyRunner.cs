@@ -169,9 +169,11 @@ public sealed class VocabularyRunner
     ///
     /// MEASURED (1041 FLEURS clips, docs/plans/vocabulary-corrector-vs-spotter.md): the textual path
     /// recovers 34–37 % of the terms the engine got wrong at 0.27 false applies per 1000 words on a
-    /// realistic 25-term list. It is deliberately NOT stacked on top of the spotter in English — there
-    /// it bought +5.8 points of recall for +6 false applies (against the spotter's ZERO), and precision
-    /// wins that trade.
+    /// realistic 25-term list. Residual stacking (corrector fills terms the spotter NEVER heard) is
+    /// deliberately NOT English policy — it bought +5.8 points of recall for +6 false applies
+    /// (against the spotter's ZERO), all six "the term was never spoken" near-neighbour names.
+    /// A later arm lets the corrector place only terms the spotter HEARD and the gate then lost;
+    /// that is a merge, not a third Mode, and it is not this table.
     ///
     /// MEASURED AGAIN, per language (9500 more clips, docs/plans/vocabulary-brake-per-language.md),
     /// because all of the above was English and the corrector's only safety net outside its own
@@ -234,14 +236,21 @@ public sealed class VocabularyRunner
 
         List<VocabularyTerm> terms = [.. _terms.Terms];
 
-        // ONE source per dictation, never both. In English the spotter wins outright — it recovered
-        // 43.9 % of missed terms to the corrector's 36.9 %, with FEWER false applies — and stacking the
-        // corrector on top traded roughly one recovery per one corrupted word, which is the wrong side
-        // of D2. Everywhere else the corrector is the only source there is.
+        // ONE detector per dictation. In English the spotter is that detector — it recovered 45.8 %
+        // of missed terms to the corrector's 37.9 %, with FEWER false applies — and residual
+        // stacking (corrector fills terms the spotter NEVER heard) traded +5.8 pp for +6 false
+        // applies on focused-25 (52.9 / 0.27 vs the spotter's 47.1 / 0.00). Those six FPs were
+        // all "the term was never spoken" (Terry→Jerry, Maria→Marie, …). Do not reopen that arm.
         //
-        // The no-model case is the one behaviour change: English with the checkpoint absent used to do
-        // nothing at all, and now falls back to spelling matches through the same gate. Still silent,
-        // still no error — just no longer inert while 132 MB downloads.
+        // The corrector MAY still run in English, but only as a placer: terms the spotter heard
+        // and the gate then lost (spot-unplaced or decision=BLOCK). MEASURED on the same 1041
+        // clips (heard-unplaced, 2026-08-14): one-pass-keep is 49.4 / 0.00 on focused-25
+        // (+2 recoveries, both near-concat names) and does not add a false apply on all-155
+        // either (0.71, same as spotter-alone). Second-pass and one-pass-drop both pick up the
+        // two David→Dravid FPs the keep merge structurally leaves claimed. Residual stays 0.27.
+        //
+        // The no-model case is unchanged: English with the checkpoint absent falls back to
+        // spelling matches through the same gate. Still silent, still no error.
         IReadOnlyList<VocabularyGate.Detection> detections =
             Mode == VocabularyMode.Acoustic && _spotter.IsReady
                 ? _spotter.Spot(samples, sampleRate, terms, ct)
@@ -251,12 +260,32 @@ public sealed class VocabularyRunner
         ct.ThrowIfCancellationRequested();
 
         IReadOnlyList<OverrideEntry> overrides = _corrections.Snapshot();
+        string? resource = EmbeddedCommonWordsProvider.ResourceFor(
+            NemotronLocales.Normalize(_settings.Current.Language));
+        IReadOnlyList<VocabularyGate.Detection> enriched = Enrich(detections, terms);
+
+        // Classification pass: which heard terms did the gate lose? No logs — the publish
+        // pass below is the one the review surface and the user-facing trace see.
+        if (Mode == VocabularyMode.Acoustic && _spotter.IsReady && _corrector is not null)
+        {
+            VocabularyGate.Result probe = VocabularyGate.ApplyFromDetections(
+                text, enriched, duration.TotalSeconds, _commonWords, resource, overrides);
+            IReadOnlyList<VocabularyTerm> prize = UnplacedHeard(enriched, probe, text, terms);
+            if (prize.Count > 0)
+            {
+                IReadOnlyList<VocabularyGate.Detection> textual = _corrector.Spot(
+                    text, prize, duration.TotalSeconds, _settings.Current.Language, ct);
+                if (textual.Count > 0)
+                    enriched = [.. enriched, .. Enrich(textual, terms)];
+            }
+        }
+
         VocabularyGate.Result result = VocabularyGate.ApplyFromDetections(
             text,
-            Enrich(detections, terms),
+            enriched,
             duration.TotalSeconds,
             _commonWords,
-            EmbeddedCommonWordsProvider.ResourceFor(NemotronLocales.Normalize(_settings.Current.Language)),
+            resource,
             overrides,
             _diagnostics);
 
@@ -359,6 +388,61 @@ public sealed class VocabularyRunner
     {
         try { action(); }
         catch (Exception ex) { Services.JotLog.Error("vocabulary provenance failed", ex); }
+    }
+
+    /// <summary>
+    /// Terms the spotter heard and the gate then lost — a kept (BLOCK) proposal, or no proposal
+    /// and the engine did not already write the term. Identity no-ops stay out: there is nothing
+    /// to place. Unheard terms stay out: that is the residual set whose 6 focused-25 false
+    /// applies (0.27 / 1000) sank every previous stack.
+    /// </summary>
+    internal static IReadOnlyList<VocabularyTerm> UnplacedHeard(
+        IReadOnlyList<VocabularyGate.Detection> acoustic,
+        VocabularyGate.Result gated,
+        string originalText,
+        IReadOnlyList<VocabularyTerm> terms)
+    {
+        var heard = new HashSet<string>(StringComparer.Ordinal);
+        foreach (VocabularyGate.Detection d in acoustic)
+            heard.Add(CorrectionKey.Normalize(d.Term));
+
+        var applied = new HashSet<string>(StringComparer.Ordinal);
+        var blocked = new HashSet<string>(StringComparer.Ordinal);
+        foreach (VocabularyGate.Proposal p in gated.Proposals)
+        {
+            string key = CorrectionKey.Normalize(p.Term);
+            if (p.Outcome == "applied") applied.Add(key);
+            else blocked.Add(key);
+        }
+
+        var prize = new List<VocabularyTerm>();
+        foreach (VocabularyTerm t in terms)
+        {
+            string key = CorrectionKey.Normalize(t.Text);
+            if (!heard.Contains(key) || applied.Contains(key)) continue;
+            if (blocked.Contains(key) || !AlreadySpelled(originalText, t.Text))
+                prize.Add(t);
+        }
+        return prize;
+    }
+
+    private static bool AlreadySpelled(string text, string term)
+    {
+        IReadOnlyList<(int Start, int End)> spans = VocabularyGate.WordSpans(text);
+        if (spans.Count == 0) return false;
+        string[] words = new string[spans.Count];
+        for (int i = 0; i < spans.Count; i++)
+            words[i] = CorrectionKey.Normalize(text[spans[i].Start..spans[i].End]);
+        string[] want = term.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Select(CorrectionKey.Normalize).Where(w => w.Length > 0).ToArray();
+        if (want.Length == 0) return false;
+        for (int i = 0; i + want.Length <= words.Length; i++)
+        {
+            bool all = true;
+            for (int k = 0; k < want.Length && all; k++) all = words[i + k] == want[k];
+            if (all) return true;
+        }
+        return false;
     }
 
     // Feed-time alias enrichment (see VocabularyStore.FeedAliases) plus the user's own aliases, which

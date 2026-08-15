@@ -250,15 +250,18 @@ Together these took the corrector from 38 false applies to 21, and **FP-overwrot
 
 | mode | languages | source |
 |---|---|---|
-| **Acoustic** | en-US, en-GB | CTC spotter; corrector deliberately NOT stacked on it |
+| **Acoustic** | en-US, en-GB | CTC spotter; residual corrector NOT stacked. Corrector may place terms the spotter heard and the gate lost (49.4 / 0.00 on focused-25; `vocab-combine.md`) |
 | **Textual** | ~~the other 20 with a common-word list~~ → **18**, per language, since E6 (bg cs da de el es fi fr hu it nl pl pt ro ru sk sv uk; six of them at a tighter acceptance distance) | `VocabularyCorrector` |
 | **Off** | everything else, and Auto detect | nothing |
 
 Three deliberate choices, each with the measurement behind it:
 
-* **English does not stack the two.** Adding the corrector to the spotter bought +5.8 points of recall
-  for +6 false applies — roughly one recovery per one corrupted word. D2 says precision wins that.
-  It is one line to change if the learning loop is later shown to decay those false applies.
+* **English does not residual-stack the two.** Adding the corrector for terms the spotter NEVER
+  heard bought +5.8 points of recall for +6 false applies — roughly one recovery per one corrupted
+  word. D2 says precision wins that. MEASURED AGAIN (2026-08-14, `vocab-combine.md`): the inverted
+  arm — corrector places only terms the spotter HEARD and the gate then lost — is 49.4 / **0.00**
+  on focused-25 (+2 recoveries, both near-concat names) and holds the spotter's 0.71 on all-155.
+  That arm shipped. Residual stacking is still 52.9 / 0.27 and still rejected.
 * **English with the checkpoint absent now falls back to the corrector** instead of doing nothing at
   all. Same gate, same silence, no error — the terms just start working before 132 MB arrives.
 * **Off means off.** A language with no frequency list would run the gate with its over-correction

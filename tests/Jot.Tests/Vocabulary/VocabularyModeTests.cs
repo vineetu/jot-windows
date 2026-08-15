@@ -176,9 +176,70 @@ public class VocabularyModeTests
 
         Assert.Equal("the Nemotron model", outcome.Text);
         Assert.Equal(1, spotter.Calls);
-        // Measured: stacking the corrector on the spotter traded about one recovery per one corrupted
-        // word in English. Precision wins that, so the textual path stays off while the model is there.
+        // Residual stacking stays off. The corrector is only asked for terms this spotter heard
+        // and the gate then lost; this detection places, so the textual path stays idle.
         Assert.Equal(0, corrector.Calls);
+    }
+
+    [Fact]
+    public void EnglishHeardButUnplacedLetsTheCorrectorPlace()
+    {
+        // Near-concat of uncommon pieces: not exact, so width-unlock will not admit the pair,
+        // and at score −2 the shards sit past the 0.45 ceiling (spot-unplaced). The corrector
+        // unlocks the width. MEASURED on focused-25 (heard-unplaced, 2026-08-14): this class
+        // is the +2 at 0.00 (John Drow → Johndroe, Ogar Sinska → Ogarzynska).
+        (VocabularyRunner runner, FakeSpotter spotter, CountingCorrector corrector) =
+            Build("en-US", spotterReady: true, "Zorblatt");
+        spotter.Result = [new VocabularyGate.Detection("Zorblatt", [], -2f, 0.8, 1.2, Acoustic: true)];
+
+        VocabularyRunner.Outcome outcome =
+            runner.Run("we called Zor Blott yesterday", [], 16000, TimeSpan.FromSeconds(2));
+
+        Assert.Equal("we called Zorblatt yesterday", outcome.Text);
+        Assert.Equal(1, spotter.Calls);
+        Assert.Equal(1, corrector.Calls);
+    }
+
+    [Fact]
+    public void EnglishUnheardTermDoesNotAskTheCorrector()
+    {
+        // Lisa is in the list and "list" is in the transcript. Residual stacking would propose
+        // it (the 0.27 arm). The spotter never heard Lisa, so the corrector is not asked.
+        var settings = new FakeSettingsStore();
+        settings.Current.VocabularyEnabled = true;
+        settings.Current.Language = "en-US";
+        var terms = new VocabularyStore(null);
+        terms.Add("Nemotron");
+        terms.Add("Lisa");
+        var spotter = new FakeSpotter(true);
+        spotter.Result = [new VocabularyGate.Detection("Nemotron", [], -1f, 0.3, 0.7, Acoustic: true)];
+        var corrector = new CountingCorrector();
+        var runner = new VocabularyRunner(
+            settings, terms, new CorrectionStore(null), new CorrectionProvenance(null),
+            spotter, EmbeddedCommonWordsProvider.Shared, NoopDiagnosticsSink.Instance, corrector);
+
+        VocabularyRunner.Outcome outcome =
+            runner.Run("the neumotron list is ready", [], 16000, TimeSpan.FromSeconds(2));
+
+        Assert.Equal("the Nemotron list is ready", outcome.Text);
+        Assert.Equal(0, corrector.Calls);
+    }
+
+    [Fact]
+    public void EnglishHeardCommonSpanStaysBlocked()
+    {
+        // The spotter heard Lisa and the host is the everyday word. Decide BLOCKs; the
+        // corrector is asked (it is a heard-unplaced term) and the gate BLOCKs again.
+        (VocabularyRunner runner, FakeSpotter spotter, CountingCorrector corrector) =
+            Build("en-US", spotterReady: true, "Lisa");
+        spotter.Result = [new VocabularyGate.Detection("Lisa", [], -1f, 0.4, 0.8, Acoustic: true)];
+
+        VocabularyRunner.Outcome outcome =
+            runner.Run("the list is ready", [], 16000, TimeSpan.FromSeconds(2));
+
+        Assert.Equal("the list is ready", outcome.Text);
+        Assert.Equal(1, corrector.Calls);
+        Assert.Equal("kept", Assert.Single(outcome.Proposals).Outcome);
     }
 
     [Fact]

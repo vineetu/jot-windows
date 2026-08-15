@@ -28,6 +28,7 @@ namespace Jot.Tests.Vocabulary;
 ///   <c>$env:JOT_VOCAB_EVAL="spot"</c>        the shipping CTC spotter over the same clips
 ///   <c>$env:JOT_VOCAB_EVAL="report"</c>      corrector vs spotter vs both, through VocabularyGate
 ///   <c>$env:JOT_VOCAB_EVAL="concat-scan"</c>  exact/near multi-word-span × term, for the concat-span rule
+///   <c>$env:JOT_VOCAB_EVAL="heard-unplaced"</c>  prize size + corrector-as-placer (heard but gate lost)
 /// </summary>
 public class VocabEvalHarness(ITestOutputHelper output)
 {
@@ -51,6 +52,7 @@ public class VocabEvalHarness(ITestOutputHelper output)
             case "calibrate": Calibrate(); break;
             case "report": Report(); break;
             case "concat-scan": ConcatScan(); break;
+            case "heard-unplaced": HeardUnplaced(); break;
             default: throw new ArgumentException($"unknown JOT_VOCAB_EVAL stage '{stage}'");
         }
     }
@@ -489,6 +491,292 @@ public class VocabEvalHarness(ITestOutputHelper output)
         string report = sb.ToString();
         output.WriteLine(report);
         File.WriteAllText(Path.Combine(Out, "concat-scan.txt"), report);
+    }
+
+    // MARK: - Heard but unplaced (the untested combine arm)
+
+    /// <summary>
+    /// Size the post-fix residual the owner asked to combine: terms the spotter HEARD that the
+    /// gate then lost (<c>spot-unplaced</c> or a logged <c>decision=BLOCK</c>). Then score the
+    /// inverted merge — corrector may place only those terms — against spotter-alone.
+    /// Residual-on-unheard stays rejected (focused-25 0.27). Deterministic; no audio.
+    /// </summary>
+    private void HeardUnplaced()
+    {
+        List<Hypothesis> hyps = ReadHypotheses();
+        string[] all = File.ReadAllLines(Path.Combine(Out, "terms.txt"));
+        string[] focused = Focused(hyps, all);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"clips            {hyps.Count}");
+        sb.AppendLine($"terms            {all.Length}  (focused-25 {focused.Length})");
+        sb.AppendLine($"focused-25       {string.Join(", ", focused)}");
+        var focusedSet = focused.ToHashSet(StringComparer.Ordinal);
+        MeasureHeardUnplaced(hyps, all, "all-155", sb, focusedSet, dumpRows: true);
+        MeasureHeardUnplaced(hyps, focused, "focused-25", sb, focusedSet, dumpRows: false);
+
+        string report = sb.ToString();
+        output.WriteLine(report);
+        File.WriteAllText(Path.Combine(Out, "heard-unplaced.txt"), report);
+    }
+
+    private sealed class GateSink : IDiagnosticsSink
+    {
+        public readonly List<string> Messages = [];
+        public void Record(DiagnosticsCategory category, string message,
+                           IReadOnlyDictionary<string, string> metadata) =>
+            Messages.Add(message);
+    }
+
+    private enum HeardFate { Applied, Block, SpotUnplaced, PartialTerm, Overlap, Identity, Silent }
+
+    private static HeardFate FateOf(
+        string term, VocabularyGate.Result r, IReadOnlyList<string> logs, string[] hypWords)
+    {
+        if (r.Proposals.Any(p => p.Term == term && p.Outcome == "applied")) return HeardFate.Applied;
+        if (r.Proposals.Any(p => p.Term == term && p.Outcome == "kept")) return HeardFate.Block;
+        if (logs.Any(m => m.StartsWith($"spot-unplaced {term}", StringComparison.Ordinal)))
+            return HeardFate.SpotUnplaced;
+        if (logs.Any(m => m.StartsWith("partial-term-skipped", StringComparison.Ordinal) &&
+                          m.Contains($"→ {term}", StringComparison.Ordinal)))
+            return HeardFate.PartialTerm;
+        if (logs.Any(m => m.StartsWith("overlap-dropped", StringComparison.Ordinal) &&
+                          m.Contains($"→ {term}", StringComparison.Ordinal)))
+            return HeardFate.Overlap;
+        return Contains(hypWords, term) ? HeardFate.Identity : HeardFate.Silent;
+    }
+
+    private static bool IsPrize(HeardFate f) => f is HeardFate.Block or HeardFate.SpotUnplaced;
+
+    private void MeasureHeardUnplaced(
+        List<Hypothesis> hyps, string[] termTexts, string label, StringBuilder sb,
+        HashSet<string> focusedSet, bool dumpRows)
+    {
+        var inList = termTexts.ToHashSet(StringComparer.Ordinal);
+        Dictionary<string, List<VocabularyGate.Detection>> spotted = [];
+        foreach (string line in File.ReadAllLines(Path.Combine(Out, "detections.jsonl")))
+        {
+            SpotRow row = JsonSerializer.Deserialize<SpotRow>(line)!;
+            spotted[row.File] = [.. row.Detections.Where(d => inList.Contains(d.Term)).Select(d =>
+                new VocabularyGate.Detection(d.Term, [], d.Score, d.Start, d.End, Acoustic: true))];
+        }
+
+        var spottable = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string line in File.ReadAllLines(Path.Combine(Out, "spottability.tsv")))
+        {
+            string[] p = line.Split('\t');
+            if (p.Length == 2 && p[1] == nameof(TermSpottability.Ok)) spottable.Add(p[0]);
+        }
+
+        var corrector = new VocabularyCorrector();
+        var spotterArm = new Arm("spotter");
+        var placerArm = new Arm("placer");
+        var blockOnlyArm = new Arm("placer-block");
+        var unplacedOnlyArm = new Arm("placer-unplaced");
+        var dropArm = new Arm("one-pass-drop");
+        var keepArm = new Arm("one-pass-keep");
+        var residualArm = new Arm("residual");
+        var baseline = new Arm("baseline");
+
+        var fateCounts = new Dictionary<HeardFate, int>();
+        var prizeTruth = new Dictionary<string, int>(StringComparer.Ordinal);
+        int heardTerms = 0, prizeTerms = 0;
+        int placerProposed = 0, placerApplied = 0, placerTp = 0, placerFpAbs = 0, placerFpOver = 0;
+        int placerStillBlock = 0, placerNoDet = 0;
+
+        var fateRows = new StringBuilder(
+            "file\tterm\tfate\ttruth\tinFocused\tscore\tnearestGap\n");
+        var prizeRows = new StringBuilder(
+            "list\tfile\tterm\tfate\ttruth\tnearestGap\tcorrDet\tcorrSpan\tcorrOutcome\tclass\n");
+
+        foreach (Hypothesis h in hyps)
+        {
+            string[] refWords = Words(h.Reference);
+            string[] hypWords = Words(h.Text);
+            var present = termTexts.Where(t => Contains(refWords, t)).ToHashSet(StringComparer.Ordinal);
+            var missing = present.Where(t => !Contains(hypWords, t)).ToHashSet(StringComparer.Ordinal);
+            IReadOnlyList<VocabularyGate.Detection> acoustic = spotted.GetValueOrDefault(h.File) ?? [];
+            IReadOnlyList<VocabularyGate.Detection> textualAll =
+                corrector.Spot(h.Text, [.. termTexts.Select(t => new VocabularyTerm { Text = t })],
+                    h.Seconds, "en-US");
+
+            var sink = new GateSink();
+            VocabularyGate.Result spottedResult = VocabularyGate.ApplyFromDetections(
+                h.Text, acoustic, h.Seconds, EmbeddedCommonWordsProvider.Shared, "common-words",
+                diagnostics: sink);
+
+            var heard = acoustic.Select(d => d.Term).Distinct(StringComparer.Ordinal).ToList();
+            var prize = new List<string>();
+            var blockOnly = new List<string>();
+            var unplacedOnly = new List<string>();
+            foreach (string term in heard)
+            {
+                heardTerms++;
+                HeardFate fate = FateOf(term, spottedResult, sink.Messages, hypWords);
+                fateCounts[fate] = fateCounts.GetValueOrDefault(fate) + 1;
+                string truth = !present.Contains(term) ? "absent"
+                    : Contains(hypWords, term) ? "already" : "said";
+                if (dumpRows)
+                    fateRows.AppendLine(string.Join('\t', h.File, term, fate, truth,
+                        focusedSet.Contains(term),
+                        acoustic.First(d => d.Term == term).Score.ToString("F3", CultureInfo.InvariantCulture),
+                        NearestGap(hypWords, term).ToString("F3", CultureInfo.InvariantCulture)));
+
+                if (!IsPrize(fate)) continue;
+                prizeTerms++;
+                prize.Add(term);
+                if (fate == HeardFate.Block) blockOnly.Add(term);
+                else unplacedOnly.Add(term);
+                prizeTruth[truth] = prizeTruth.GetValueOrDefault(truth) + 1;
+
+                IReadOnlyList<VocabularyGate.Detection> one =
+                    corrector.Spot(h.Text, [new VocabularyTerm { Text = term }], h.Seconds, "en-US");
+                VocabularyGate.Result oneR = VocabularyGate.ApplyFromDetections(
+                    h.Text, one, h.Seconds, EmbeddedCommonWordsProvider.Shared, "common-words");
+                string corrSpan = "—", corrOutcome = "no-det", klass = "—";
+                if (one.Count == 0) placerNoDet++;
+                else
+                {
+                    placerProposed++;
+                    VocabularyGate.Proposal? applied = oneR.Proposals.FirstOrDefault(p => p.Outcome == "applied");
+                    VocabularyGate.Proposal? kept = oneR.Proposals.FirstOrDefault(p => p.Outcome == "kept");
+                    if (applied is not null)
+                    {
+                        placerApplied++;
+                        corrSpan = applied.OriginalWord;
+                        corrOutcome = "applied";
+                        klass = Classify(refWords, new Applied(applied.OriginalWord, applied.Term, applied.Decision));
+                        switch (klass)
+                        {
+                            case "TP": placerTp++; break;
+                            case "FP-absent": placerFpAbs++; break;
+                            default: placerFpOver++; break;
+                        }
+                    }
+                    else if (kept is not null)
+                    {
+                        placerStillBlock++;
+                        corrSpan = kept.OriginalWord;
+                        corrOutcome = "BLOCK";
+                    }
+                    else corrOutcome = "identity";
+                }
+                prizeRows.AppendLine(string.Join('\t',
+                    label, h.File, term, fate, truth,
+                    NearestGap(hypWords, term).ToString("F3", CultureInfo.InvariantCulture),
+                    one.Count > 0, corrSpan.Replace('\t', ' '), corrOutcome, klass));
+            }
+
+            baseline.Add(refWords, hypWords, missing, [], spottable);
+
+            List<Applied> spotApplied = [.. spottedResult.Proposals
+                .Where(p => p.Outcome == "applied")
+                .Select(p => new Applied(p.OriginalWord, p.Term, p.Decision))];
+            spotterArm.Add(refWords, Words(spottedResult.Text), missing, spotApplied, spottable);
+
+            ScorePlacer(h, refWords, missing, spottable, spottedResult, prize, corrector, placerArm);
+            ScorePlacer(h, refWords, missing, spottable, spottedResult, blockOnly, corrector, blockOnlyArm);
+            ScorePlacer(h, refWords, missing, spottable, spottedResult, unplacedOnly, corrector, unplacedOnlyArm);
+            ScoreOnePass(h, refWords, missing, spottable, acoustic, prize, corrector, dropAcoustic: true, dropArm);
+            ScoreOnePass(h, refWords, missing, spottable, acoustic, prize, corrector, dropAcoustic: false, keepArm);
+
+            VocabularyGate.Result residual = VocabularyGate.ApplyFromDetections(
+                h.Text, Merge(acoustic, textualAll), h.Seconds, EmbeddedCommonWordsProvider.Shared,
+                "common-words");
+            residualArm.Add(refWords, Words(residual.Text), missing,
+                [.. residual.Proposals.Where(p => p.Outcome == "applied")
+                    .Select(p => new Applied(p.OriginalWord, p.Term, p.Decision))],
+                spottable);
+        }
+
+        sb.AppendLine();
+        sb.AppendLine($"### {label}: {termTexts.Length} terms");
+        sb.AppendLine($"heard (distinct file×term)     {heardTerms}");
+        sb.AppendLine("fates:");
+        foreach (HeardFate f in Enum.GetValues<HeardFate>())
+            sb.AppendLine($"  {f,-16} {fateCounts.GetValueOrDefault(f)}");
+        sb.AppendLine($"prize (BLOCK + spot-unplaced)  {prizeTerms}");
+        sb.AppendLine("  of those, truth:");
+        foreach (string k in new[] { "said", "already", "absent" })
+            sb.AppendLine($"    {k,-12} {prizeTruth.GetValueOrDefault(k)}");
+        sb.AppendLine("per-term corrector-as-placer (original text, one term):");
+        sb.AppendLine($"  proposed                 {placerProposed}");
+        sb.AppendLine($"  no detection             {placerNoDet}");
+        sb.AppendLine($"  applied                  {placerApplied}  (TP {placerTp} / FP-absent {placerFpAbs} / FP-overwrote {placerFpOver})");
+        sb.AppendLine($"  still BLOCK              {placerStillBlock}");
+        sb.AppendLine();
+        sb.AppendLine("clip-level arms (second-pass placer on spotter output; residual = rejected E5 both):");
+        sb.AppendLine(Arm.Header);
+        sb.AppendLine(baseline.Line);
+        sb.AppendLine(spotterArm.Line);
+        sb.AppendLine(placerArm.Line);
+        sb.AppendLine(blockOnlyArm.Line);
+        sb.AppendLine(unplacedOnlyArm.Line);
+        sb.AppendLine(dropArm.Line);
+        sb.AppendLine(keepArm.Line);
+        sb.AppendLine(residualArm.Line);
+
+        string prizePath = Path.Combine(Out, dumpRows ? "heard-prize.tsv" : "heard-prize-focused.tsv");
+        File.WriteAllText(prizePath, prizeRows.ToString());
+        if (!dumpRows) return;
+        File.WriteAllText(Path.Combine(Out, "heard-fates.tsv"), fateRows.ToString());
+    }
+
+    private static void ScorePlacer(
+        Hypothesis h, string[] refWords, HashSet<string> missing, HashSet<string> spottable,
+        VocabularyGate.Result spotted, IReadOnlyList<string> prizeTerms,
+        VocabularyCorrector corrector, Arm arm)
+    {
+        IReadOnlyList<VocabularyGate.Detection> textual = prizeTerms.Count == 0
+            ? []
+            : corrector.Spot(spotted.Text,
+                [.. prizeTerms.Select(t => new VocabularyTerm { Text = t })],
+                h.Seconds, "en-US");
+        if (textual.Count == 0)
+        {
+            arm.Add(refWords, Words(spotted.Text), missing,
+                [.. spotted.Proposals.Where(p => p.Outcome == "applied")
+                    .Select(p => new Applied(p.OriginalWord, p.Term, p.Decision))],
+                spottable);
+            return;
+        }
+        VocabularyGate.Result placed = VocabularyGate.ApplyFromDetections(
+            spotted.Text, textual, h.Seconds, EmbeddedCommonWordsProvider.Shared, "common-words");
+        List<Applied> applied =
+        [
+            .. spotted.Proposals.Where(p => p.Outcome == "applied")
+                .Select(p => new Applied(p.OriginalWord, p.Term, p.Decision)),
+            .. placed.Proposals.Where(p => p.Outcome == "applied")
+                .Select(p => new Applied(p.OriginalWord, p.Term, p.Decision)),
+        ];
+        arm.Add(refWords, Words(placed.Text), missing, applied, spottable);
+    }
+
+    /// <summary>
+    /// Shipping-shaped merge: one <see cref="VocabularyGate.ApplyFromDetections"/> on the original
+    /// text. Drop replaces acoustic detections for prize terms with the corrector's (clean
+    /// provenance). Keep concatenates both (acoustic first, so a BLOCK still claims its host).
+    /// </summary>
+    private static void ScoreOnePass(
+        Hypothesis h, string[] refWords, HashSet<string> missing, HashSet<string> spottable,
+        IReadOnlyList<VocabularyGate.Detection> acoustic, IReadOnlyList<string> prizeTerms,
+        VocabularyCorrector corrector, bool dropAcoustic, Arm arm)
+    {
+        var prizeSet = prizeTerms.ToHashSet(StringComparer.Ordinal);
+        IReadOnlyList<VocabularyGate.Detection> textual = prizeTerms.Count == 0
+            ? []
+            : corrector.Spot(h.Text,
+                [.. prizeTerms.Select(t => new VocabularyTerm { Text = t })],
+                h.Seconds, "en-US");
+        IReadOnlyList<VocabularyGate.Detection> kept = dropAcoustic
+            ? [.. acoustic.Where(d => !prizeSet.Contains(d.Term))]
+            : acoustic;
+        VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
+            h.Text, [.. kept, .. textual], h.Seconds, EmbeddedCommonWordsProvider.Shared, "common-words");
+        arm.Add(refWords, Words(r.Text), missing,
+            [.. r.Proposals.Where(p => p.Outcome == "applied")
+                .Select(p => new Applied(p.OriginalWord, p.Term, p.Decision))],
+            spottable);
     }
 
     private sealed record Applied(string Original, string Term, string Verdict);
