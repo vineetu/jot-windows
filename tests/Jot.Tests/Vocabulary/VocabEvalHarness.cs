@@ -325,12 +325,39 @@ public class VocabEvalHarness(ITestOutputHelper output)
             .Take(25).Select(kv => kv.Key)];
     }
 
+    /// <summary>
+    /// Would a bare acoustic detection of <paramref name="term"/> (empty aliases — the English
+    /// spotter shape) apply <em>this</em> multi-word window? Returns the published original span
+    /// when it did, otherwise empty. Times sit on the window so position cannot prefer a shard
+    /// in another sentence half.
+    /// </summary>
+    private static string BareSpotterApplied(
+        Hypothesis h, IReadOnlyList<(int Start, int End)> spans, int index, int width, string term)
+    {
+        double at = h.Seconds > 0
+            ? (index + width / 2.0) / spans.Count * h.Seconds
+            : 0;
+        var det = new VocabularyGate.Detection(term, [], -1.0f, at, at, Acoustic: true);
+        VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
+            h.Text, [det], h.Seconds, EmbeddedCommonWordsProvider.Shared);
+        string spanText = h.Text[spans[index].Start..spans[index + width - 1].End];
+        Rune[] want = VocabularyGate.SkeletonOf(spanText);
+        foreach (VocabularyGate.Proposal p in r.Proposals)
+        {
+            if (p.Outcome != "applied") continue;
+            Rune[] got = VocabularyGate.SkeletonOf(p.OriginalWord);
+            if (got.AsSpan().SequenceEqual(want)) return p.OriginalWord;
+        }
+        return "";
+    }
+
     // MARK: - Stage 3 · head to head
 
     /// <summary>
     /// Every width-2..4 window of every cached transcript against every term. Answers whether the
     /// concat-span rule is exercised on this corpus and what a full-unit (not exact) rewrite of
-    /// <c>IsCommonSpan</c> would newly admit. Deterministic; no audio.
+    /// <c>IsCommonSpan</c> would newly admit. Also: would a bare spotter detection (empty aliases,
+    /// Acoustic) apply that window — the width-unlock hole. Deterministic; no audio.
     /// </summary>
     private void ConcatScan()
     {
@@ -344,8 +371,12 @@ public class VocabEvalHarness(ITestOutputHelper output)
         int exactWindows = 0, exactTp = 0, exactFpAbsent = 0, exactFpOver = 0;
         int exactCommon = 0, exactFocused = 0;
         int nearWindows = 0, nearCommon = 0, nearFpAbsent = 0, nearTp = 0;
-        var exactRows = new StringBuilder("file\tterm\tspan\twidth\tfocused\tclass\tanyCommon\tinCorrector\n");
+        // Bare spotter (empty aliases, Acoustic, strong score): does the gate APPLY this window?
+        // This is the width-unlock hole — the concat-span rule is inert until the pair is a host.
+        int exactBareApplied = 0, exactBareTp = 0, exactBareFp = 0, nearBareApplied = 0;
+        var exactRows = new StringBuilder("file\tterm\tspan\twidth\tfocused\tclass\tanyCommon\tinCorrector\tbareSpotter\n");
         var nearFpRows = new StringBuilder("file\tterm\tspan\twidth\tgap\tclass\n");
+        var nearBareRows = new StringBuilder("file\tterm\tspan\twidth\tgap\tappliedAs\n");
 
         foreach (Hypothesis h in hyps)
         {
@@ -382,9 +413,17 @@ public class VocabEvalHarness(ITestOutputHelper output)
                                 case "FP-absent": exactFpAbsent++; break;
                                 default: exactFpOver++; break;
                             }
+                            string bare = BareSpotterApplied(h, spans, i, w, term);
+                            if (bare.Length > 0)
+                            {
+                                exactBareApplied++;
+                                if (klass == "TP") exactBareTp++;
+                                else exactBareFp++;
+                            }
                             exactRows.AppendLine(string.Join('\t',
                                 h.File, term, spanText.Replace('\t', ' '), w,
-                                focusedSet.Contains(term), klass, anyCommon, textualTerms.Contains(term)));
+                                focusedSet.Contains(term), klass, anyCommon, textualTerms.Contains(term),
+                                bare.Length > 0 ? bare : "—"));
                         }
                         else
                         {
@@ -401,6 +440,15 @@ public class VocabEvalHarness(ITestOutputHelper output)
                                             gap.ToString("F3", CultureInfo.InvariantCulture), klass));
                                 }
                                 else if (klass == "TP") nearTp++;
+                            }
+                            string bare = BareSpotterApplied(h, spans, i, w, term);
+                            if (bare.Length > 0)
+                            {
+                                nearBareApplied++;
+                                if (nearBareApplied <= 20)
+                                    nearBareRows.AppendLine(string.Join('\t',
+                                        h.File, term, spanText.Replace('\t', ' '), w,
+                                        gap.ToString("F3", CultureInfo.InvariantCulture), bare));
                             }
                         }
                     }
@@ -420,16 +468,23 @@ public class VocabEvalHarness(ITestOutputHelper output)
         sb.AppendLine($"  TP             {exactTp}");
         sb.AppendLine($"  FP-absent      {exactFpAbsent}");
         sb.AppendLine($"  FP-overwrote   {exactFpOver}");
+        sb.AppendLine($"  bare-spotter applied     {exactBareApplied}  (TP {exactBareTp} / FP {exactBareFp})");
         sb.AppendLine();
         sb.AppendLine("### near concat (0 < gap ≤ 0.45, width 2-4) — full-unit rewrite population");
         sb.AppendLine($"windows          {nearWindows}");
         sb.AppendLine($"  any-common     {nearCommon}");
         sb.AppendLine($"    of those TP  {nearTp}");
         sb.AppendLine($"    of those FP-absent (first 40 listed)  {nearFpAbsent}");
+        sb.AppendLine($"  bare-spotter applied as this multi-word span  {nearBareApplied}");
         sb.AppendLine();
         sb.Append(exactRows);
         sb.AppendLine();
         sb.Append(nearFpRows);
+        if (nearBareApplied > 0)
+        {
+            sb.AppendLine();
+            sb.Append(nearBareRows);
+        }
 
         string report = sb.ToString();
         output.WriteLine(report);

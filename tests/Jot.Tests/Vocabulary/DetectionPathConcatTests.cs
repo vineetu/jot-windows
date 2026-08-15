@@ -6,7 +6,9 @@ namespace Jot.Tests.Vocabulary;
 /// <summary>
 /// Exact-concat of a single-word term over a multi-word span. The decoder's spaces are not
 /// evidence; the common-word brake does not fire when the concatenated skeleton IS the term.
-/// Near-match concatenations and a span that is only part of the term stay refused.
+/// Search considers a window wider than the term only when that exactness holds — a bare
+/// spotter detection (empty aliases) must reach the pair. Near-match concatenations and a
+/// span that is only part of the term stay refused, including as multi-word candidates.
 /// </summary>
 public class DetectionPathConcatTests
 {
@@ -66,6 +68,49 @@ public class DetectionPathConcatTests
         Assert.Equal("We use nemo here.", r.Text);
         if (r.Proposals.Count > 0)
             Assert.Equal("kept", r.Proposals[0].Outcome);
+    }
+
+    [Fact]
+    public void SpotterAloneAppliesAnExactConcatWithNoAliasToUnlockWidth()
+    {
+        // THE hole: English is spotter-only, detections carry empty aliases, maxWidth from
+        // shapes is 1. Acoustic + E8 admits a shard (nemo vs Nemotron is 0.50, inside 0.65);
+        // times put the mid on that shard so position-first prefers it. The pair must still
+        // win — exact concat of the term, no alias, no corrector.
+        var det = new VocabularyGate.Detection("Nemotron", [], -1.0f, 0.4, 0.6, Acoustic: true);
+        VocabularyGate.Result r = Apply("We use nemo tron here.", det);
+
+        Assert.Equal("We use Nemotron here.", r.Text);
+        VocabularyGate.Proposal p = Assert.Single(r.Proposals);
+        Assert.Equal("applied", p.Outcome);
+        Assert.Equal("nemo tron", p.OriginalWord);
+    }
+
+    [Fact]
+    public void ANearMatchConcatenationWithNoAliasStaysUnreachable()
+    {
+        // Same acoustic / times as the apply case, so a plausibility-only wider search
+        // would admit the pair (0.25) and then either apply or keep it. Exactness against
+        // the term must refuse the window as a candidate — not "place then Decide".
+        var det = new VocabularyGate.Detection("Nemotron", [], -1.0f, 0.4, 0.6, Acoustic: true);
+        VocabularyGate.Result r = Apply("We use nemo trim here.", det);
+
+        Assert.Equal("We use nemo trim here.", r.Text);
+        Assert.Equal(0, r.Applied);
+        Assert.DoesNotContain(r.Proposals, p => p.OriginalWord.Contains(' '));
+    }
+
+    [Fact]
+    public void ASplitThatIsOnlyPartOfTheTermStaysUnreachable()
+    {
+        // Two ordinary words whose concat is a PREFIX of the term, not the term.
+        // "nemo tr" vs "Nemotron" is 2/8 = 0.25 — inside the ceiling, not exact.
+        var det = new VocabularyGate.Detection("Nemotron", [], -1.0f, 0.4, 0.6, Acoustic: true);
+        VocabularyGate.Result r = Apply("We use nemo tr here.", det);
+
+        Assert.Equal("We use nemo tr here.", r.Text);
+        Assert.Equal(0, r.Applied);
+        Assert.DoesNotContain(r.Proposals, p => p.OriginalWord.Contains(' '));
     }
 
     [Fact]
