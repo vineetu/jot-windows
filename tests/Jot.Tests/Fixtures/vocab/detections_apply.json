@@ -25,10 +25,11 @@
   },
   {
     "name": "spot-identity-is-noop",
+    "_why": "Same letters, wrong case: publish the saved form, emit no proposal. WAS the Mac no-op (text left as sriram); that is the daily-use miss FLEURS cannot see.",
     "transcript": "talk to sriram",
     "totalAudioDuration": 1.0,
     "detections": [{"term": "Sriram", "aliases": [], "score": 0.9, "startTime": 0.4, "endTime": 0.6}],
-    "expectText": "talk to sriram",
+    "expectText": "talk to Sriram",
     "expectProposalCount": 0
   },
   {

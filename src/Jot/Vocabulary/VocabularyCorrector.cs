@@ -179,10 +179,17 @@ public sealed class VocabularyCorrector : ITextVocabularySpotter
         // keeps a wider window off it. MEASURED: without this, "George W" won the two-word slot for the
         // term "George" (0.14, because the one-word exact match was merely skipped rather than claimed)
         // and the splice deleted the initial. Same shape for "John F", "25 Dunlap", "A Giza".
+        //
+        // Casing-only is the same claim (same letters) but still has to reach the gate: the gate
+        // now publishes the saved form and emits no proposal. Exact identity stays claimed-and-silent.
         foreach (Match m in best.Values)
         {
-            if (!IsIdentity(windows[m.Width - 1][m.Index].Text, m)) continue;
+            string spanText = windows[m.Width - 1][m.Index].Text;
+            if (!IsIdentity(spanText, m)) continue;
             for (int k = 0; k < m.Width; k++) claimed.Add(m.Index + k);
+            if (!string.Equals(spanText, m.Form.Term.Text, StringComparison.Ordinal)
+                && WidthUnlockAliases(spanText, m) is { } casingAliases)
+                accepted.Add((m, casingAliases));
         }
 
         foreach (Match m in ordered)
@@ -219,9 +226,11 @@ public sealed class VocabularyCorrector : ITextVocabularySpotter
         return detections;
     }
 
-    /// <summary>Nothing to fix. The single-word relation is case-INSENSITIVE because that is what the
-    /// gate's identity no-op does (fixture <c>spot-identity-is-noop</c>); the multi-word one is ordinal
-    /// because there the gate does correct casing.</summary>
+    /// <summary>Same letters as the term — the span is claimed so a wider window cannot steal it.
+    /// Single-word is case-INSENSITIVE (Normalize) because that is still the gate's "same word"
+    /// test; multi-word is ordinal because there the gate already treats casing as the remaining
+    /// fix and must not claim-and-drop a wrong-case span. Casing-only single-word is claimed here
+    /// AND emitted (see Place) so the gate can publish the saved form.</summary>
     private static bool IsIdentity(string spanText, Match m) => m.Width == 1
         ? CorrectionKey.Normalize(spanText) == CorrectionKey.Normalize(m.Form.Term.Text)
         : string.Equals(spanText, m.Form.Term.Text, StringComparison.Ordinal);
