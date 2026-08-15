@@ -157,6 +157,12 @@ internal static class ModelGate
             "installed-nemotron" => new NemotronModel().IsInstalled || new NemotronFp16Model().IsInstalled
                 ? null : "an installed Nemotron model (int4 or fp16)",
 
+            // Official transcribe.cpp 0.1.3 natives (a94e021). Env wins; else this box's Phase 1 extract.
+            "ggml-natives" => GgmlAssets.NativeDir is null
+                ? $"{GgmlAssets.NativeEnv} (or {GgmlAssets.DefaultNativeDir})" : null,
+            "ggml-model" => GgmlAssets.ModelPath is null
+                ? $"{GgmlAssets.ModelEnv} (or {GgmlAssets.DefaultModelPath})" : null,
+
             "feats" => Env(FeatsDir) is not null ? null : FeatsDir,
             "spm" => Env(SpmModel) is { } m && File.Exists(m) ? null : SpmModel,
             "spm-ids" => Env(SpmIds) is { } i && File.Exists(i) ? null : SpmIds,
@@ -185,5 +191,36 @@ public sealed class ModelTheoryAttribute : TheoryAttribute
     {
         string? missing = ModelGate.FirstMissing(requires);
         if (missing is not null) Skip = "needs " + missing;
+    }
+}
+
+/// <summary>Official v0.1.3 natives + Q8_0 GGUF as staged for the Phase 1 spike on this box.</summary>
+internal static class GgmlAssets
+{
+    public const string NativeEnv = "JOT_GGML_NATIVE";
+    public const string ModelEnv = "JOT_GGML_MODEL";
+
+    public const string DefaultNativeDir =
+        @"D:\caches\vulkan-spike\official-0.1.3\extract\transcribe-native-windows-x86_64-cpu-vulkan";
+
+    public const string DefaultModelPath =
+        @"D:\caches\huggingface\hub\models--handy-computer--nemotron-3.5-asr-streaming-0.6b-gguf\snapshots\6d44e540bc31b0de1dbe174a3cea87f53a7f22fb\nemotron-3.5-asr-streaming-0.6b-Q8_0.gguf";
+
+    public static string? NativeDir
+    {
+        get
+        {
+            string? d = ModelGate.Env(NativeEnv) ?? DefaultNativeDir;
+            return Directory.Exists(d) && File.Exists(Path.Combine(d, "transcribe.dll")) ? d : null;
+        }
+    }
+
+    public static string? ModelPath
+    {
+        get
+        {
+            string? p = ModelGate.Env(ModelEnv) ?? DefaultModelPath;
+            return File.Exists(p) ? p : null;
+        }
     }
 }
