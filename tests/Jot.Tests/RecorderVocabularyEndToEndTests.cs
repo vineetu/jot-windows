@@ -37,7 +37,9 @@ namespace Jot.Tests;
 /// asserting a guess.
 ///
 /// Skipped, honestly, on any machine without the models. See <see cref="ModelFactAttribute"/>.
+/// Shares <c>GgmlNative</c> with the binding/soak tests — one Vulkan device per testhost.
 /// </summary>
+[Collection("GgmlNative")]
 public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDisposable
 {
     private const string Clip = "tts-terms.wav";

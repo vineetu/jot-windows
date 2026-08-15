@@ -17,6 +17,7 @@ namespace Jot.Tests;
 /// the spotter to CPU always. This soak measures that pairing over the planted-terms clip
 /// and fails if any pass exceeds VocabularyDeadlineMs.
 /// </summary>
+[Collection("GgmlNative")]
 public class GgmlVocabularySoakTests
 {
     private readonly ITestOutputHelper _out;
