@@ -41,6 +41,10 @@ public class DetectionPathDedupTests
     /// THE regression. Verbatim from the end-to-end run: the engine wrote "Claude code" (already
     /// almost right), and vocabulary turned it into "Claude Code code" — corrupting text that was
     /// fine, in a string that is pasted before anyone can review it.
+    ///
+    /// The pair is now claimed as a window when it is eligible (containing-window promotion). The
+    /// published span is the same one absorb used to construct; absorb remains the fallback for a
+    /// merged token or a partial host with no containing window.
     /// </summary>
     [Fact]
     public void MultiWordTerm_HostedOnOneWord_AbsorbsTheDuplicatedTail()
@@ -374,13 +378,19 @@ public class DetectionPathDedupTests
     }
 
     /// <summary>An overlap dropped because an earlier pick's widening swallowed the word is logged
-    /// too — a silently vanished correction is the same untraceable shape as an unplaced one.</summary>
+    /// too — a silently vanished correction is the same untraceable shape as an unplaced one.
+    ///
+    /// The host is a MERGED token, so it is not only-part-of-term (closer to the whole term than to
+    /// either word). Window placement keeps the one-word pick; absorb then eats the following
+    /// "code"; the second detection's pick is the one that vanishes. A split host ("Claude code")
+    /// is now claimed as the pair up front, and this path cannot fire on it.
+    /// </summary>
     [Fact]
     public void OverlapDrop_IsLogged()
     {
         var sink = new Sink();
         VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
-            "we use Claude code today",
+            "we use claudecode code today",
             [
                 new VocabularyGate.Detection("Claude Code", [], -0.3f, 0.5, 1.0),
                 // Claims "code" on its own; the first pick's widening eats it first.
@@ -390,5 +400,109 @@ public class DetectionPathDedupTests
 
         Assert.Equal("we use Claude Code today", r.Text);
         Assert.Contains(sink.Lines, l => l.StartsWith("overlap-dropped", StringComparison.Ordinal));
+    }
+
+    // MARK: - Strongly-heard tail must not starve the local pair that contains it
+
+    /// <summary>
+    /// Live miss: E8 makes the tail eligible ("code" vs "claudecode" is 0.60, inside the earned 0.65),
+    /// position then prefers that tail over the two-word pair, and the partial-term guard correctly
+    /// refuses to promote a bare "code". Existing tests never hit this — <see cref="Det"/> leaves
+    /// <c>Acoustic</c> false, so the ceiling stays 0.45 and the tail is not a candidate. n=10, pair
+    /// center 0.40, tail center 0.45, detection mid/duration = 0.45 → tail wins on position.
+    /// </summary>
+    [Fact]
+    public void StronglyHeardMultiWord_DoesNotLoseTheLocalPairToItsOwnTail()
+    {
+        var det = new VocabularyGate.Detection(
+            "Claude Code", [], -0.36f, 4.2, 4.8, Acoustic: true);
+        const string text = "yesterday we tried cloud code and it worked well enough";
+        VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
+            text, [det], 10.0, Common);
+
+        Assert.Equal("yesterday we tried Claude Code and it worked well enough", r.Text);
+        Assert.Equal(1, r.Applied);
+        Assert.Equal("cloud code", Assert.Single(r.Proposals).OriginalWord);
+    }
+
+    /// <summary>
+    /// Two same-shape windows; times sit on the later tail. The term must land on the occurrence
+    /// the speaker said, not the earlier "cloud code".
+    /// </summary>
+    [Fact]
+    public void StronglyHeardLaterTail_DoesNotLandOnAnEarlierSameShapePair()
+    {
+        var det = new VocabularyGate.Detection(
+            "Claude Code", [], -0.36f, 8.2, 8.8, Acoustic: true);
+        const string text = "we tried cloud code yesterday then ran cloud code again";
+        VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
+            text, [det], 10.0, Common);
+
+        Assert.Equal("we tried cloud code yesterday then ran Claude Code again", r.Text);
+        Assert.Equal(1, r.Applied);
+        Assert.Equal("cloud code", Assert.Single(r.Proposals).OriginalWord);
+    }
+
+    /// <summary>
+    /// Same Acoustic/−0.36 as the live miss, so the tail is E8-eligible. There is no containing pair
+    /// ("load" fails per-word 0.45). The later partial-term guard must still refuse the insert.
+    /// </summary>
+    [Fact]
+    public void StronglyHeardTail_WithNoContainingPair_DoesNotInsertTheMissingHead()
+    {
+        var sink = new Sink();
+        var det = new VocabularyGate.Detection(
+            "Claude Code", [], -0.36f, 2.2, 2.8, Acoustic: true);
+        VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
+            "the load code runs", [det], 4.0, Common, diagnostics: sink);
+
+        Assert.Equal("the load code runs", r.Text);
+        Assert.Empty(r.Proposals);
+        Assert.Equal(0, r.Applied);
+        Assert.Contains(sink.Lines, l => l.StartsWith("partial-term-skipped", StringComparison.Ordinal));
+        Assert.DoesNotContain(sink.Lines, l => l.StartsWith("spot-unplaced", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Existing <see cref="Window_WhereOnlyTheHeadAligns_DoesNotFallBackToTheSingleWord"/>, now
+    /// under E8 so a 0.60 cousin would be eligible if one existed. "wrote" still fails per-word
+    /// 0.45, so there is no containing pair and the head must not become "Claude Code wrote".
+    /// </summary>
+    [Fact]
+    public void StronglyHeardHead_WithNoContainingPair_DoesNotInsertTheMissingTail()
+    {
+        var sink = new Sink();
+        var det = new VocabularyGate.Detection(
+            "Claude Code", [], -0.36f, 0.2, 0.8, Acoustic: true);
+        VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
+            "Claude wrote the installer", [det], 4.0, Common, diagnostics: sink);
+
+        Assert.Equal("Claude wrote the installer", r.Text);
+        Assert.Empty(r.Proposals);
+        Assert.Equal(0, r.Applied);
+        Assert.Contains(sink.Lines, l => l.StartsWith("partial-term-skipped", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// WindowRange refuses the comma, so there is no containing width-2. The positional winner stays
+    /// the punctuated host (times put the mid on "Claude,", even though E8 also admits "code"). The
+    /// later path must still emit the reviewable kept row — making the partial host ineligible in
+    /// the search loop would turn this into a silent spot-unplaced.
+    /// </summary>
+    [Fact]
+    public void StronglyHeardPunctuatedHost_StillEmitsTheReviewableKeptRow()
+    {
+        var sink = new Sink();
+        var det = new VocabularyGate.Detection(
+            "Claude Code", [], -0.36f, 1.2, 1.8, Acoustic: true);
+        VocabularyGate.Result r = VocabularyGate.ApplyFromDetections(
+            "ask Claude, code review is done", [det], 6.0, Common, diagnostics: sink);
+
+        Assert.Equal("ask Claude, code review is done", r.Text);
+        Assert.Equal(0, r.Applied);
+        VocabularyGate.Proposal p = Assert.Single(r.Proposals);
+        Assert.Equal("kept", p.Outcome);
+        Assert.Contains(sink.Lines, l => l.StartsWith("dedup-ambiguous", StringComparison.Ordinal));
+        Assert.DoesNotContain(sink.Lines, l => l.StartsWith("spot-unplaced", StringComparison.Ordinal));
     }
 }
