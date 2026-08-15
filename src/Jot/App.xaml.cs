@@ -398,6 +398,10 @@ public partial class App : System.Windows.Application
         StartupMigration.MigrateTranscriptionDevice(Services.GetRequiredService<ISettingsStore>());
         // One-time display-name→locale-code language upgrade ("English"→"en-US"), before ApplyLanguage.
         StartupMigration.MigrateLanguageSetting(Services.GetRequiredService<ISettingsStore>());
+        // Q8_0 GGUF rejects 8 AdaptationReady codes — remap saved settings before the engine sees them.
+        StartupMigration.MigrateGgmlUnsupportedLocales(Services.GetRequiredService<ISettingsStore>());
+        // Leftover "GPU (DirectML)" label → "GPU (Vulkan)" so the Settings picker still matches.
+        StartupMigration.MigrateGpuDeviceLabel(Services.GetRequiredService<ISettingsStore>());
         // One-time Alt+Space→Ctrl+Shift+Space toggle rescue, before SetupHotkeys registers chords.
         StartupMigration.MigrateToggleHotkey(Services.GetRequiredService<ISettingsStore>());
         // Route all logging into the user's chosen data folder (D5) via the single activity log (D4).
@@ -433,17 +437,33 @@ public partial class App : System.Windows.Application
             _ = Task.Run(() =>
             {
                 migrator.ResumePending();
+                OrtModelCleanup.ResumePending(JotPaths.ConfigDir);
                 if (transcriber.IsModelInstalled) TimedWarmUp(transcriber);
+                TryCleanupOrtAfterGgml(transcriber);
             });
         }
-        else if (transcriber.IsModelInstalled) _ = Task.Run(() => TimedWarmUp(transcriber));
+        else
+        {
+            _ = Task.Run(() =>
+            {
+                OrtModelCleanup.ResumePending(JotPaths.ConfigDir);
+                if (transcriber.IsModelInstalled) TimedWarmUp(transcriber);
+                TryCleanupOrtAfterGgml(transcriber);
+            });
+        }
 
-        // Zero-touch GPU adoption (Auto only): fetch the fp16 model silently when the GPU looks capable,
-        // benchmark it, cache the verdict — all in the background, never on the boot path. The verdict
-        // applies at the NEXT engine construction; if it says GPU while we're running int4, one
-        // informational balloon says faster dictation is a restart (or click) away.
+        // Zero-touch GGUF adoption: fetch Q8_0 when missing, probe Vulkan, then warm so the first
+        // dictation after the download does not pay the 13.8 s + 4.8 s shader hitch.
         var gpuTier = Services.GetRequiredService<GpuTierCoordinator>();
-        gpuTier.UpgradeReady += NotifyGpuUpgradeReady;
+        gpuTier.UpgradeReady += () =>
+        {
+            NotifyGpuUpgradeReady();
+            _ = Task.Run(() =>
+            {
+                if (transcriber.IsModelInstalled) TimedWarmUp(transcriber);
+                TryCleanupOrtAfterGgml(transcriber);
+            });
+        };
         _ = Task.Run(gpuTier.RunAsync);
 
         // Enforce the retention window (delete old recordings) off the UI thread.
@@ -2577,19 +2597,18 @@ public partial class App : System.Windows.Application
             new Transcription.Nemotron.NemotronFp16Model(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
         services.AddSingleton<Transcription.Ggml.NemotronGgufModel>(sp =>
             new Transcription.Ggml.NemotronGgufModel(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
-        services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>();
+        services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>(); // K3 hold: CPU fallback path stays
         services.AddSingleton<Transcription.Nemotron.NemotronFp16ModelInstaller>();
-        services.AddSingleton<ModelDownload>();   // shared model-download state (wizard + settings)
-        services.AddSingleton<GpuModelDownload>(); // optional fp16 GPU model (background upgrade + settings row)
-        services.AddSingleton<GpuTierCoordinator>(); // zero-touch fetch→probe→verdict owner (Auto mode)
+        services.AddSingleton<Transcription.Ggml.NemotronGgufModelInstaller>();
+        services.AddSingleton<ModelDownload>();   // shared GGUF download state (wizard + settings)
+        services.AddSingleton<GpuModelDownload>(); // leftover fp16 installer (no longer auto-fetched)
+        services.AddSingleton<GpuTierCoordinator>(); // zero-touch GGUF fetch→probe→cleanup owner
         services.AddSingleton<DataFolderMigrator>(); // moves data when the Save location changes; resumes on launch
         services.AddSingleton<RetentionCleaner>();
         services.AddSingleton<UsageStats>();
         services.AddSingleton<HotkeyManager>();
-        // Nemotron 3.5 (streaming RNNT). int4 export is CPU-only (no DirectML kernels); FP16 export runs
-        // on DirectML. Selection is EngineSelector's pure rule: explicit picks honored, "Auto" (default)
-        // takes the GPU tier only with the fp16 model on disk AND a probe verdict earned on the current
-        // adapter+driver. Backend read once at construction; a changed verdict applies next launch.
+        // Nemotron 3.5. Default is ggml (Q8_0 + official natives) when assets are present; ONNX
+        // remains the fallback (int4 / leftover fp16) and the JOT_ENGINE=ort emergency path.
         services.AddSingleton<ITranscriber>(sp => Transcription.TranscriberFactory.Create(
             sp.GetRequiredService<ISettingsStore>().Current,
             sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
@@ -2880,6 +2899,11 @@ public partial class App : System.Windows.Application
         wizard.Closed += (_, _) =>
         {
             var s = Services.GetRequiredService<ISettingsStore>().Current;
+            var t = Services.GetRequiredService<ITranscriber>();
+            // First-run download lands the GGUF after the startup warm-up already ran (and skipped).
+            // Warm now so the first dictation is not a 18 s Vulkan hitch.
+            if (t.IsModelInstalled)
+                _ = Task.Run(() => { TimedWarmUp(t); TryCleanupOrtAfterGgml(t); });
             if (Controls.QuickTourWindow.ShouldShowAfterWizard(s))
                 try { new Controls.QuickTourWindow().Show(); }
                 catch (Exception ex) { JotLog.Error("quick tour failed to show", ex); }
@@ -3039,11 +3063,9 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>Warm-up with timing in the log AND a user-visible pill notice while it drags on. The
-    /// fp16/DML engine's first warm-up compiles its DirectML graphs — many seconds of heavy GPU+CPU
-    /// work on some cards, which can make the whole desktop (and our UI) feel sluggish even though the
-    /// work is off the UI thread. The user asked for exactly this: never look hung, say what's
-    /// happening. The notice only appears if warm-up is still running after 1.5 s, so the quick int4
-    /// path never flashes it.</summary>
+    /// ggml/Vulkan's first warm-up compiles shaders (measured 13.8 s load + 4.8 s first chunk).
+    /// The notice only appears if warm-up is still running after 1.5 s, so a quick ONNX fallback
+    /// never flashes it.</summary>
     private void TimedWarmUp(ITranscriber transcriber)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -3107,9 +3129,28 @@ public partial class App : System.Windows.Application
         void OnClosed(object? sender, EventArgs e) => Detach();
         _tray.BalloonTipClicked += OnClick;
         _tray.BalloonTipClosed += OnClosed;
-        _tray.ShowBalloonTip(5000, "Faster transcription ready",
-            "Jot verified your graphics card and will use it from the next launch. Click to restart now.",
+        _tray.ShowBalloonTip(5000, "Vulkan engine ready",
+            "Jot downloaded the on-device model and will use it for the next dictation.",
             Forms.ToolTipIcon.Info);
+    }
+
+    /// <summary>After ggml has actually loaded, delete leftover int4/fp16 files. Crash-safe
+    /// (marker + resume). No-op when ggml is not the active engine this launch.</summary>
+    private void TryCleanupOrtAfterGgml(ITranscriber transcriber)
+    {
+        if (transcriber is not Transcription.SelectingTranscriber sel || !sel.UsingGgml) return;
+        try
+        {
+            OrtModelCleanup.Request(
+                JotPaths.ConfigDir,
+                Services.GetRequiredService<Transcription.Ggml.NemotronGgufModel>(),
+                Services.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
+                Services.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>());
+        }
+        catch (Exception ex)
+        {
+            JotLog.Info($"ort-cleanup skipped: {ex.Message}");
+        }
     }
 
     private static void LogCrash(Exception? ex)

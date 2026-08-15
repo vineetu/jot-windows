@@ -28,3 +28,6 @@ publish/
 
 # MSIX pack output (uploaded to Partner Center, not tracked)
 /AppxPackages/
+
+# Official transcribe.cpp natives (80.5 MB). Restored at build from the v0.1.3 tarball.
+src/Jot/natives/

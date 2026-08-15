@@ -91,11 +91,10 @@ internal static class CliPaths
             JotSettings s = ReadOnlySettingsStore.Load(root).Current;
             string dataRoot = DataRootOf(root, s);
             string modelsParent = modelDirOverride ?? Path.Combine(dataRoot, "models");
-            bool ggml = GgmlEngineOptions.IsEnabled(s);
             bool installed =
                 new NemotronModel(Path.Combine(modelsParent, NemotronModel.ModelFolder)).IsInstalled ||
                 new NemotronFp16Model(Path.Combine(modelsParent, NemotronFp16Model.ModelFolder)).IsInstalled ||
-                (ggml && new NemotronGgufModel(Path.Combine(modelsParent, NemotronGgufModel.ModelFolder)).IsInstalled);
+                new NemotronGgufModel(Path.Combine(modelsParent, NemotronGgufModel.ModelFolder)).IsInstalled;
             return installed ? new ResolvedPaths(root, dataRoot, modelsParent, s, root) : null;
         }
         catch

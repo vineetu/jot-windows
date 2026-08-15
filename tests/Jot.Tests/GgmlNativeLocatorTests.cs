@@ -32,7 +32,11 @@ public class GgmlNativeLocatorTests
         string handy = GgmlNativeLocator.HandyDir;
         string? resolved = GgmlNativeLocator.TryResolve(name =>
             name == GgmlNativeLocator.EnvVar ? handy : null);
-        Assert.Null(resolved);
+        // Official natives now ship next to the host, so a later candidate may resolve.
+        // The contract is: Handy is never the winner.
+        Assert.False(GgmlNativeLocator.IsForbidden(resolved));
+        if (resolved is not null)
+            Assert.False(resolved.StartsWith(Path.GetFullPath(handy), StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

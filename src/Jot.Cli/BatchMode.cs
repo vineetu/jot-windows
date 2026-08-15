@@ -39,10 +39,10 @@ internal static class BatchMode
         var int4 = new NemotronModel(paths.Int4Dir);
         var fp16 = new NemotronFp16Model(paths.Fp16Dir);
         var gguf = new NemotronGgufModel(paths.GgufDir);
-        bool ggml = GgmlEngineOptions.IsEnabled(paths.Settings);
         // Models before decode: on a fresh install the actionable error should arrive immediately, not
-        // after ffmpeg has chewed through the input.
-        if (!int4.IsInstalled && !fp16.IsInstalled && !(ggml && gguf.IsInstalled))
+        // after ffmpeg has chewed through the input. GGUF is the default engine; int4/fp16 remain
+        // valid while an upgrade is mid-flight or JOT_ENGINE=ort is set.
+        if (!int4.IsInstalled && !fp16.IsInstalled && !gguf.IsInstalled)
         {
             return Cli.Fail(
                 $"No transcription model found under {paths.ModelsParent}. " +
@@ -70,7 +70,8 @@ internal static class BatchMode
         try
         {
             ITranscriber transcriber = TranscriberFactory.Create(
-                settings, int4, fp16, gguf, new OnnxSessionFactory());
+                settings, int4, fp16, gguf, new OnnxSessionFactory(),
+                msg => Console.Error.WriteLine("jot: " + msg));
             if (!transcriber.IsModelInstalled)
             {
                 return Cli.Fail(

@@ -93,4 +93,34 @@
     <Content Include="Assets\**\*" Exclude="Assets\jot.ico;Assets\jot-logo.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Official transcribe.cpp v0.1.3 / a94e021 CPU+Vulkan natives. Restored at build from the GitHub
+       tarball (not Handy). Sit next to Jot.exe so GgmlNativeLocator finds them without JOT_GGML_NATIVE.
+       The folder is gitignored (~80 MB); the restore script is the source of truth.
+       Content items are added INSIDE the target: a static Include="natives\*" is empty on a clean
+       tree (the files do not exist at evaluation time). -->
+  <PropertyGroup>
+    <GgmlNativesDir>$(MSBuildThisFileDirectory)natives</GgmlNativesDir>
+  </PropertyGroup>
+  <Target Name="RestoreGgmlNatives" BeforeTargets="BeforeBuild">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\..\scripts\restore-ggml-natives.ps1&quot; -OutDir &quot;$(GgmlNativesDir)&quot;" />
+  </Target>
+  <!-- Incremental builds: files exist at evaluation time so testhost/publish pick them up too. -->
+  <ItemGroup>
+    <Content Include="natives\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <!-- Dynamic Content Include in a target does not reliably join GetCopyToOutputDirectoryItems
+       on a clean tree. Copy the restored files ourselves so they sit next to Jot.exe. -->
+  <Target Name="CopyGgmlNatives" AfterTargets="Build">
+    <ItemGroup>
+      <_GgmlNativeFiles Include="$(GgmlNativesDir)\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_GgmlNativeFiles)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="PublishGgmlNatives" AfterTargets="Publish">
+    <ItemGroup>
+      <_GgmlNativeFiles Include="$(GgmlNativesDir)\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_GgmlNativeFiles)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

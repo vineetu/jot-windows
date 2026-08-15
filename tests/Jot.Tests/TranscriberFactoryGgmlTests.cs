@@ -8,8 +8,8 @@ using Xunit;
 namespace Jot.Tests;
 
 /// <summary>
-/// Phase 3 bar: the shipping ONNX path is still selected when the flag is off. The ggml engine
-/// is a fourth factory choice, not a change to EngineSelector.
+/// Default path is ggml when GGUF + natives are present, ONNX otherwise. JOT_ENGINE=ort is
+/// the emergency back-out. The hidden UseGgmlEngine flag still force-selects ggml.
 /// </summary>
 public class TranscriberFactoryGgmlTests
 {
@@ -26,19 +26,21 @@ public class TranscriberFactoryGgmlTests
     }
 
     [Fact]
-    public void DefaultSettings_SelectOnnx_NotGgml()
+    public void DefaultSettings_WithoutGguf_IsNotBareGgml()
     {
         ITranscriber t = Create(new JotSettings());
         Assert.IsNotType<GgmlNemotronTranscriber>(t);
-        Assert.True(t is NemotronTranscriber or NemotronFp16Transcriber);
+        Assert.True(t is SelectingTranscriber or NemotronTranscriber or NemotronFp16Transcriber);
+        if (t is SelectingTranscriber sel)
+            Assert.IsNotType<GgmlNemotronTranscriber>(sel.Active);
     }
 
     [Fact]
-    public void AutoDevice_StillUsesEngineSelector_WhenFlagOff()
+    public void AutoDevice_WithoutGguf_UsesOnnxInt4()
     {
-        // No fp16, no verdict → Int4Cpu. Same as before this branch.
         ITranscriber t = Create(new JotSettings { TranscriptionDevice = TranscriptionDevices.Auto });
-        Assert.IsType<NemotronTranscriber>(t);
+        ITranscriber inner = t is SelectingTranscriber sel ? sel.Active : t;
+        Assert.IsType<NemotronTranscriber>(inner);
     }
 
     [Fact]
@@ -62,6 +64,7 @@ public class TranscriberFactoryGgmlTests
             new JotSettings { UseGgmlEngine = true },
             k => k == "JOT_ENGINE" ? "ort" : null);
         Assert.IsNotType<GgmlNemotronTranscriber>(t);
+        Assert.IsNotType<SelectingTranscriber>(t);
     }
 
     [Fact]
@@ -81,11 +84,21 @@ public class TranscriberFactoryGgmlTests
     }
 
     [Fact]
-    public void EngineSelector_IsUnchanged_ByThisFactory()
+    public void ApplyLanguage_OnSelecting_DoesNotThrow()
     {
-        // The factory must not start routing Auto to ggml. That's Phase 4.
+        ITranscriber t = Create(new JotSettings());
+        TranscriberFactory.ApplyLanguage(t, "auto");
+        TranscriberFactory.ApplyLanguage(t, "el-GR");
+        TranscriberFactory.ApplyLanguage(t, "en-US");
+    }
+
+    [Fact]
+    public void EngineSelector_OnnxRule_IsUnchanged()
+    {
+        // ONNX fallback still uses the proven Auto/fp16 matrix. ggml is a factory decision.
         Assert.Equal(EngineChoice.Int4Cpu, EngineSelector.Select("Auto", false, null, false));
         Assert.Equal(EngineChoice.Fp16Dml, EngineSelector.Select("Auto", true, "GPU", true));
         Assert.Equal(EngineChoice.Fp16Dml, EngineSelector.Select("GPU (DirectML)", true, null, false));
+        Assert.Equal(EngineChoice.Fp16Dml, EngineSelector.Select("GPU (Vulkan)", true, null, false));
     }
 }

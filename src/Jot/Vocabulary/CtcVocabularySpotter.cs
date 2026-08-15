@@ -385,27 +385,33 @@ public sealed class CtcVocabularySpotter : IVocabularySpotter, IDisposable
     }
 
     /// <summary>
-    /// D10a: DirectML is allowed HERE and only here. The CPU pin existed to stop the spotter contending
-    /// with live captions; this pass runs strictly after the RNNT has produced text, so there are no live
-    /// captions left to protect. An explicit "CPU" pick is still honoured, and
-    /// <see cref="OnnxSessionFactory"/> degrades to CPU by itself if DML cannot be created.
+    /// D10a: DirectML is allowed HERE when the live RNNT is also ONNX. The CPU pin existed to stop
+    /// the spotter contending with live captions; this pass runs strictly after the RNNT has produced
+    /// text, so there are no live captions left to protect.
     ///
-    /// Note this reads the device SETTING only. It must never consult — or feed — the cached GpuProbe
-    /// verdict: that verdict is measured for the live RNNT and this session is a consumer of the tier,
-    /// never an input to it. Deliberately NOT gated on "Auto + proven verdict" either — an unusable GPU
-    /// costs one failed session creation here and falls back, whereas the RNNT would degrade live
-    /// captions, which is what that gate exists to prevent.
+    /// ggml/Vulkan changes that: the GGUF stays loaded for the next utterance, so Vulkan and DirectML
+    /// would be alive in the same process. That pairing is a named kill (TDR / driver reset /
+    /// VocabularyDeadlineMs = 4000). CPU EP measured 2421 ms at 59 s of speech — under budget — so
+    /// when ggml is the live engine the spotter stays on CPU. JOT_ENGINE=ort restores the DML path.
     ///
-    /// Worth the complexity: DirectML measured 2.3x faster at 59 s of speech and 2.9x at 90 s
-    /// (see <see cref="MaxSpeechSeconds"/>), at the cost of ~0.8 s more session-load time — which
-    /// <see cref="Warm"/> pays outside the stop.
+    /// Note this reads the device SETTING and whether ggml assets are present. It must never consult
+    /// — or feed — the cached GpuProbe verdict: that verdict is measured for the live RNNT and this
+    /// session is a consumer of the tier, never an input to it.
     /// </summary>
     private ComputeBackend Backend()
     {
         string? device = _settings?.Current.TranscriptionDevice;
         bool explicitCpu = string.Equals(device, Transcription.TranscriptionDevices.Cpu,
                                          StringComparison.OrdinalIgnoreCase);
-        return explicitCpu ? ComputeBackend.Cpu : ComputeBackend.DirectML;
+        if (explicitCpu) return ComputeBackend.Cpu;
+
+        // GGUF on disk + natives shipped ⇒ ggml is the default engine. Keep the spotter off DirectML.
+        if (!Transcription.Ggml.GgmlEngineOptions.IsOrtForced() &&
+            Transcription.Ggml.GgmlNativeLocator.IsPresent() &&
+            new Transcription.Ggml.NemotronGgufModel(settings: _settings).IsInstalled)
+            return ComputeBackend.Cpu;
+
+        return ComputeBackend.DirectML;
     }
 
     /// <summary>

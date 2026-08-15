@@ -38,12 +38,18 @@ public class GgmlLanguageTests
     [InlineData("lv-LV")]
     [InlineData("mt-MT")]
     [InlineData("th-TH")]
-    [InlineData("nn-NO")]
     [InlineData("EL-gr")]
     public void AdaptationReady_AreNull_NeverForwarded(string code)
     {
         Assert.Contains(code, GgmlLanguage.AdaptationReady, StringComparer.OrdinalIgnoreCase);
         Assert.Null(GgmlLanguage.Map(code, Gguf32));
+    }
+
+    [Fact]
+    public void NnNo_RemapsToNbNo()
+    {
+        Assert.Equal("nb-NO", GgmlLanguage.Map("nn-NO", Gguf32));
+        Assert.Equal("nb-NO", GgmlLanguage.Map("NN-no", Gguf32));
     }
 
     [Fact]

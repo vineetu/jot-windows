@@ -31,7 +31,7 @@ public static class JotDataPurge
     // Artifacts that always live in the fixed config root (JotPaths.ConfigDir): ffmpeg tools, the pre-init
     // log fallback, and the config/marker files.
     private static readonly string[] ConfigSubdirs = ["tools", "logs"];
-    private static readonly string[] ConfigFiles = ["settings.json", "prompts.json", "migration.json", WipeMarkerFile];
+    private static readonly string[] ConfigFiles = ["settings.json", "prompts.json", "migration.json", WipeMarkerFile, OrtModelCleanup.MarkerFile];
 
     public sealed record WipeMarker(string DataDir);
 

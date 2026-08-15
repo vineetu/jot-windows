@@ -18,6 +18,9 @@ public static class TranscriptionDevices
     public const string Auto = "Auto";
     public const string Cpu = "CPU";
     public const string Gpu = "GPU (DirectML)";
+    /// <summary>Settings label when ggml is the engine. Contains "GPU" so EngineSelector's
+    /// existing wantsGpu check still holds. Leftover "GPU (DirectML)" values keep working.</summary>
+    public const string GpuVulkan = "GPU (Vulkan)";
 }
 
 /// <summary>
