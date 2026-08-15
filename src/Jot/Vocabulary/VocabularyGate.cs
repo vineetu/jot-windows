@@ -532,7 +532,10 @@ public static class VocabularyGate
             // and admit a wider window only when the concatenated skeleton equals the TERM
             // (WindowRange). Inflating shapes instead would make AlignmentWindow return
             // Unique=true for every wider span (termWords.Length < 2) and hand the 0.45/0.65
-            // ceiling the 2003-FP near-concat population concat-scan measured.
+            // ceiling the 2003-FP near-concat population. MEASURED on E5's 1041 clips
+            // (concat-scan, 2026-08-14, this change): 2 exact windows, both TP, both now
+            // applied by a bare acoustic detection; 0 of 2384 near-concats applied as a
+            // multi-word span.
             string[][] shapes = [SplitWords(det.Term), .. det.Aliases.Select(SplitWords)];
             int maxWidth = Math.Clamp(shapes.Max(s => s.Length), 1, words.Count);
             if (shapes[0].Length == 1)
