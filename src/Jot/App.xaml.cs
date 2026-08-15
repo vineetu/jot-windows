@@ -1631,14 +1631,14 @@ public partial class App : System.Windows.Application
                     "NATIVES NOT INSTALLED (set JOT_GGML_NATIVE to official v0.1.3 / a94e021)\n");
                 return;
             }
-            var s = new JotSettings { UseGgmlEngine = true, Language = langCode ?? "en-US" };
+            var s = new JotSettings { Language = langCode ?? "en-US" };
             if (r is int lookahead) s.GgmlAttContextRight = lookahead;
             var env = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(backend)) env["JOT_GGML_BACKEND"] = backend;
             string? native = Environment.GetEnvironmentVariable("JOT_GGML_NATIVE");
             if (!string.IsNullOrWhiteSpace(native)) env["JOT_GGML_NATIVE"] = native;
             Func<string, string?> lookup = k => env.TryGetValue(k, out string? v) ? v : Environment.GetEnvironmentVariable(k);
-            var opts = Transcription.Ggml.GgmlEngineOptions.Resolve(s, Transcription.EngineChoice.Int4Cpu, lookup);
+            var opts = Transcription.Ggml.GgmlEngineOptions.Resolve(s, lookup);
             using var transcriber = new Transcription.Ggml.GgmlNemotronTranscriber(model, opts);
             if (langCode is not null) transcriber.SetLanguage(langCode);
             float[] samples = WavAudio.ReadMono16k(wavPath);
@@ -2607,14 +2607,10 @@ public partial class App : System.Windows.Application
         services.AddSingleton<RetentionCleaner>();
         services.AddSingleton<UsageStats>();
         services.AddSingleton<HotkeyManager>();
-        // Nemotron 3.5. Default is ggml (Q8_0 + official natives) when assets are present; ONNX
-        // remains the fallback (int4 / leftover fp16) and the JOT_ENGINE=ort emergency path.
+        // Nemotron 3.5 via ggml (Q8_0 + official natives). ONNX Nemotron is gone.
         services.AddSingleton<ITranscriber>(sp => Transcription.TranscriberFactory.Create(
             sp.GetRequiredService<ISettingsStore>().Current,
-            sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
-            sp.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>(),
             sp.GetRequiredService<Transcription.Ggml.NemotronGgufModel>(),
-            sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
             JotLog.Info));   // the per-launch `engine: …` line must keep landing in the app log
         // Vocabulary (SHIPS VISIBLE inside Advanced features, master toggle default off). All three
         // stores take the SAME
@@ -3138,7 +3134,7 @@ public partial class App : System.Windows.Application
     /// (marker + resume). No-op when ggml is not the active engine this launch.</summary>
     private void TryCleanupOrtAfterGgml(ITranscriber transcriber)
     {
-        if (transcriber is not Transcription.SelectingTranscriber sel || !sel.UsingGgml) return;
+        if (transcriber is not Transcription.Ggml.GgmlNemotronTranscriber g || !g.IsModelInstalled) return;
         try
         {
             OrtModelCleanup.Request(

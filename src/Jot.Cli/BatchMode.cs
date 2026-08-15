@@ -4,8 +4,6 @@ using Jot.Import;
 using Jot.Services.Abstractions;
 using Jot.Transcription;
 using Jot.Transcription.Ggml;
-using Jot.Transcription.Nemotron;
-using Jot.Transcription.Onnx;
 
 namespace Jot.Cli;
 
@@ -36,13 +34,10 @@ internal static class BatchMode
             Jot.Services.JotPaths.LegacyLocalAppDataDir);
         Console.Error.WriteLine($"jot: data root: {paths.DataRoot} (models: {paths.ModelsParent})");
 
-        var int4 = new NemotronModel(paths.Int4Dir);
-        var fp16 = new NemotronFp16Model(paths.Fp16Dir);
         var gguf = new NemotronGgufModel(paths.GgufDir);
         // Models before decode: on a fresh install the actionable error should arrive immediately, not
-        // after ffmpeg has chewed through the input. GGUF is the default engine; int4/fp16 remain
-        // valid while an upgrade is mid-flight or JOT_ENGINE=ort is set.
-        if (!int4.IsInstalled && !fp16.IsInstalled && !gguf.IsInstalled)
+        // after ffmpeg has chewed through the input. Leftover int4/fp16 folders are not an engine.
+        if (!gguf.IsInstalled)
         {
             return Cli.Fail(
                 $"No transcription model found under {paths.ModelsParent}. " +
@@ -70,8 +65,7 @@ internal static class BatchMode
         try
         {
             ITranscriber transcriber = TranscriberFactory.Create(
-                settings, int4, fp16, gguf, new OnnxSessionFactory(),
-                msg => Console.Error.WriteLine("jot: " + msg));
+                settings, gguf, msg => Console.Error.WriteLine("jot: " + msg));
             if (!transcriber.IsModelInstalled)
             {
                 return Cli.Fail(
@@ -155,7 +149,7 @@ internal static class BatchMode
         s.TranscriptionDevice = device switch
         {
             "cpu" => TranscriptionDevices.Cpu,
-            "gpu" => TranscriptionDevices.Gpu,
+            "gpu" => TranscriptionDevices.GpuVulkan,
             _ => s.TranscriptionDevice,
         };
         return s;

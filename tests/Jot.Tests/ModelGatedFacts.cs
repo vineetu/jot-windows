@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using Jot.Transcription.Ctc;
-using Jot.Transcription.Nemotron;
 using Xunit;
 
 namespace Jot.Tests;
@@ -154,8 +153,9 @@ internal static class ModelGate
             // end-to-end proof must exercise exactly what a user's machine has.
             "installed-ctc" => new CtcModel().IsInstalled
                 ? null : $"the CTC spotter model installed at {new CtcModel().Directory}",
-            "installed-nemotron" => new NemotronModel().IsInstalled || new NemotronFp16Model().IsInstalled
-                ? null : "an installed Nemotron model (int4 or fp16)",
+            // Leftover name: the RNNT is the Q8_0 GGUF now. Kept so older ModelFact lists still resolve.
+            "installed-nemotron" => GgmlAssets.ModelPath is null
+                ? $"{GgmlAssets.ModelEnv} (or {GgmlAssets.DefaultModelPath})" : null,
 
             // Official transcribe.cpp 0.1.3 natives (a94e021). Env wins; else this box's Phase 1 extract.
             "ggml-natives" => GgmlAssets.NativeDir is null

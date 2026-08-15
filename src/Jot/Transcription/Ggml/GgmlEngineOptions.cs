@@ -3,9 +3,9 @@ using Jot.Services.Abstractions;
 namespace Jot.Transcription.Ggml;
 
 /// <summary>
-/// Env / settings knobs for the ggml engine. Default is ON when the Q8_0 GGUF and official
-/// natives are present. <c>JOT_ENGINE=ort</c> is the emergency back-out onto ONNX.
-/// <c>UseGgmlEngine</c> remains a legacy force-on (no Settings toggle).
+/// Env / settings knobs for the ggml engine — the only RNNT. <c>JOT_ENGINE=ort</c> is ignored
+/// (the ONNX Nemotron path was removed). <c>JOT_ENGINE=ggml</c> is a no-op. Backend is Auto/Vulkan
+/// unless the user picked CPU or set <c>JOT_GGML_BACKEND</c>.
 /// </summary>
 internal sealed class GgmlEngineOptions
 {
@@ -18,41 +18,24 @@ internal sealed class GgmlEngineOptions
 
     public const int DefaultLookahead = 3;
 
-    public bool Enabled { get; init; }
     public int AttContextRight { get; init; } = DefaultLookahead;
     public NativeMethods.BackendRequest Backend { get; init; } = NativeMethods.BackendRequest.Cpu;
     public string? NativeDir { get; init; }
 
-    public static bool IsOrtForced(Func<string, string?>? env = null)
+    /// <summary>True when a leftover <c>JOT_ENGINE=ort</c> is set. The factory logs and ignores it.</summary>
+    public static bool IsOrtRequested(Func<string, string?>? env = null)
     {
         env ??= Environment.GetEnvironmentVariable;
         return string.Equals(env(EngineEnvVar), "ort", StringComparison.OrdinalIgnoreCase);
     }
 
-    public static bool IsEnabled(JotSettings? s, Func<string, string?>? env = null, bool assetsPresent = false)
-    {
-        env ??= Environment.GetEnvironmentVariable;
-        string? engine = env(EngineEnvVar);
-        if (string.Equals(engine, "ggml", StringComparison.OrdinalIgnoreCase)) return true;
-        // Explicit ort wins over a leftover settings.json flag — emergency back-out.
-        if (string.Equals(engine, "ort", StringComparison.OrdinalIgnoreCase)) return false;
-        if (s?.UseGgmlEngine == true) return true;
-        // Shipping default: ggml when the GGUF and official natives are both on disk.
-        return assetsPresent;
-    }
-
-    public static GgmlEngineOptions Resolve(
-        JotSettings s,
-        EngineChoice choice,
-        Func<string, string?>? env = null,
-        bool assetsPresent = false)
+    public static GgmlEngineOptions Resolve(JotSettings s, Func<string, string?>? env = null)
     {
         env ??= Environment.GetEnvironmentVariable;
         return new GgmlEngineOptions
         {
-            Enabled = IsEnabled(s, env, assetsPresent),
             AttContextRight = ResolveLookahead(s.GgmlAttContextRight, env),
-            Backend = ResolveBackend(choice, env, s.TranscriptionDevice),
+            Backend = ResolveBackend(env, s.TranscriptionDevice),
             NativeDir = BlankToNull(env(GgmlNativeLocator.EnvVar)),
         };
     }
@@ -65,7 +48,7 @@ internal sealed class GgmlEngineOptions
     }
 
     internal static NativeMethods.BackendRequest ResolveBackend(
-        EngineChoice choice, Func<string, string?> env, string? device = null)
+        Func<string, string?> env, string? device = null)
     {
         string? raw = env(BackendEnvVar);
         if (string.Equals(raw, "cpu", StringComparison.OrdinalIgnoreCase))
@@ -80,11 +63,6 @@ internal sealed class GgmlEngineOptions
         if (string.Equals(device, TranscriptionDevices.Cpu, StringComparison.OrdinalIgnoreCase))
             return NativeMethods.BackendRequest.Cpu;
 
-        if (choice is EngineChoice.Fp16Dml or EngineChoice.Int4DmlEncoder)
-            return NativeMethods.BackendRequest.Vulkan;
-
-        // Auto (EngineSelector still returns Int4Cpu when there is no leftover fp16 verdict)
-        // is the shipping default and must try Vulkan, not inherit the ONNX CPU fallback.
         if (string.Equals(device, TranscriptionDevices.Auto, StringComparison.OrdinalIgnoreCase) ||
             (device is not null && device.Contains("GPU", StringComparison.OrdinalIgnoreCase)))
             return NativeMethods.BackendRequest.Vulkan;

@@ -57,8 +57,8 @@ public sealed class GgmlNemotronTranscriber : ITranscriber, IStreamingTranscribe
     public void WarmUp()
     {
         if (!IsModelInstalled) return;
-        // Rethrow so SelectingTranscriber can fall back to ONNX. A swallowed failure here
-        // would look like a successful warm-up and then hitch (or error) on first dictation.
+        // Rethrow: a swallowed failure here would look like a successful warm-up and then
+        // hitch (or error) on first dictation. There is no ONNX fallback.
         TranscribeAsync(new float[RequiredSampleRate / 2], RequiredSampleRate).GetAwaiter().GetResult();
     }
 

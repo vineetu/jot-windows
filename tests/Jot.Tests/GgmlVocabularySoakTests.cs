@@ -39,7 +39,6 @@ public class GgmlVocabularySoakTests
             new NemotronGgufModel(env: _ => GgmlAssets.ModelPath),
             new GgmlEngineOptions
             {
-                Enabled = true,
                 AttContextRight = 3,
                 Backend = NativeMethods.BackendRequest.Vulkan,
                 NativeDir = GgmlAssets.NativeDir,

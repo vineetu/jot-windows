@@ -32,7 +32,6 @@ public static class GgmlProbe
             float[] samples = WavAudio.ReadMono16k(clipPath);
             var opts = new GgmlEngineOptions
             {
-                Enabled = true,
                 AttContextRight = GgmlEngineOptions.DefaultLookahead,
                 Backend = NativeMethods.BackendRequest.Vulkan,
             };

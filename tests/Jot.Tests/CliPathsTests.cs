@@ -2,7 +2,7 @@ using System.IO;
 using System.Text.Json;
 using Jot.Cli;
 using Jot.Services.Abstractions;
-using Jot.Transcription.Nemotron;
+using Jot.Transcription.Ggml;
 using Xunit;
 
 namespace Jot.Tests;
@@ -32,18 +32,11 @@ public class CliPathsTests : IDisposable
         return path;
     }
 
-    private static void InstallInt4(string modelsParent)
+    private static void InstallGguf(string modelsParent)
     {
-        string dir = Path.Combine(modelsParent, NemotronModel.ModelFolder);
+        string dir = Path.Combine(modelsParent, NemotronGgufModel.ModelFolder);
         Directory.CreateDirectory(dir);
-        foreach (string f in new[]
-        {
-            "encoder.onnx", "encoder.onnx.data", "decoder.onnx", "decoder.onnx.data",
-            "joint.onnx", "joint.onnx.data", "vocab.txt",
-        })
-        {
-            File.WriteAllText(Path.Combine(dir, f), "x");
-        }
+        File.WriteAllText(Path.Combine(dir, NemotronGgufModel.FileName), "x");
     }
 
     private static void WriteSettings(string root, JotSettings s) =>
@@ -53,8 +46,8 @@ public class CliPathsTests : IDisposable
     public void FirstRootWithAModelWins()
     {
         string a = Root("a"), b = Root("b");
-        InstallInt4(Path.Combine(a, "models"));
-        InstallInt4(Path.Combine(b, "models"));
+        InstallGguf(Path.Combine(a, "models"));
+        InstallGguf(Path.Combine(b, "models"));
 
         ResolvedPaths r = CliPaths.Resolve(null, null, [a, b], a);
         Assert.Equal(a, r.Root);
@@ -65,7 +58,7 @@ public class CliPathsTests : IDisposable
     public void RootWithoutAModelIsSkipped()
     {
         string a = Root("a"), b = Root("b");
-        InstallInt4(Path.Combine(b, "models"));
+        InstallGguf(Path.Combine(b, "models"));
 
         Assert.Equal(b, CliPaths.Resolve(null, null, [a, b], a).Root);
     }
@@ -75,7 +68,7 @@ public class CliPathsTests : IDisposable
     {
         string missingDrive = @"Q:\nope\Jot";
         string b = Root("b");
-        InstallInt4(Path.Combine(b, "models"));
+        InstallGguf(Path.Combine(b, "models"));
 
         Assert.Equal(b, CliPaths.Resolve(null, null, [missingDrive, b], b).Root);
     }
@@ -84,7 +77,7 @@ public class CliPathsTests : IDisposable
     public void DataDirectoryRedirectIsHonoured()
     {
         string a = Root("a"), moved = Root("moved");
-        InstallInt4(Path.Combine(moved, "models"));
+        InstallGguf(Path.Combine(moved, "models"));
         WriteSettings(a, new JotSettings { DataDirectory = moved });
 
         ResolvedPaths r = CliPaths.Resolve(null, null, [a], a);
@@ -99,7 +92,7 @@ public class CliPathsTests : IDisposable
     public void DataDirOverrideSkipsTheProbeEntirely()
     {
         string a = Root("a"), explicitRoot = Root("explicit");
-        InstallInt4(Path.Combine(a, "models"));
+        InstallGguf(Path.Combine(a, "models"));
         WriteSettings(explicitRoot, new JotSettings { Language = "de-DE" });
 
         ResolvedPaths r = CliPaths.Resolve(null, explicitRoot, [a], a);
@@ -111,13 +104,11 @@ public class CliPathsTests : IDisposable
     public void ModelDirOverrideIsTheModelsParentNotTheLeaf()
     {
         string a = Root("a"), models = Root("models-elsewhere");
-        InstallInt4(models);
+        InstallGguf(models);
 
         ResolvedPaths r = CliPaths.Resolve(models, null, [a], a);
         Assert.Equal(models, r.ModelsParent);
-        Assert.Equal(Path.Combine(models, NemotronModel.ModelFolder), r.Int4Dir);
-        Assert.Equal(Path.Combine(models, NemotronFp16Model.ModelFolder), r.Fp16Dir);
-        Assert.Equal(Path.Combine(models, Jot.Transcription.Ggml.NemotronGgufModel.ModelFolder), r.GgufDir);
+        Assert.Equal(Path.Combine(models, NemotronGgufModel.ModelFolder), r.GgufDir);
     }
 
     [Fact]
@@ -134,7 +125,7 @@ public class CliPathsTests : IDisposable
     public void CorruptSettingsFallBackToDefaults()
     {
         string a = Root("a");
-        InstallInt4(Path.Combine(a, "models"));
+        InstallGguf(Path.Combine(a, "models"));
         File.WriteAllText(Path.Combine(a, "settings.json"), "{ not json");
 
         ResolvedPaths r = CliPaths.Resolve(null, null, [a], a);
