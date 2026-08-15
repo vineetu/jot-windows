@@ -45,6 +45,7 @@ the repo root and `docs/`.
 | Setup wizard | First-run guided flow (welcome / mic permission / how-it-works), re-runnable. | `Views/SetupWizardWindow.xaml(.cs)`, `ViewModels/WizardViewModel.cs` |
 | Community surfaces | Donations window + summary fetch, feedback composer + POST. | `Controls/DonationsWindow`, `Controls/DonationNudgeWindow`, `Services/DonationsService.cs`, `Controls/FeedbackWindow`, `Services/FeedbackClient.cs` |
 | Packaging & updates | Velopack (Setup.exe) hooks + the MSIX/Store build; packaged-app detection gates the two apart. | `App.xaml.cs` (`VelopackApp.Build`, `IsRunningAsPackagedApp`), `build-msix.ps1`, `src/Jot/Package.appxmanifest`, `app.manifest` |
+| `jot` CLI | Headless console companion (`jot.exe`): batch file→text and stdin-PCM→NDJSON streaming over the app's engine/pipeline/vocabulary via shared on-disk conventions; reads app state, never writes it. Assembly is `Jot.Cli` (the name `jot` collides with `Jot.dll` on case-insensitive NTFS); `jot.exe` is an AfterBuild copy. | `src/Jot.Cli/` (`Program.cs`, `StreamMode.cs`, `FinalEmitter.cs`, `CliPaths.cs`), `Transcription/TranscriberFactory.cs`, `Import/FfmpegDecoder.cs`, design: `docs/plans/jot-cli-windows.md` |
 
 ## Cross-cutting invariants
 

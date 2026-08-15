@@ -87,6 +87,7 @@ bring-your-own-provider. No accounts, no telemetry.
   - [11.4 Send Feedback](#114-send-feedback)
   - [11.5 Check for Updates](#115-check-for-updates)
 - [12. Privacy & Data](#12-privacy--data)
+- [13. The `jot` Command Line](#13-the-jot-command-line)
 
 ---
 
@@ -467,3 +468,25 @@ opt-in cloud, contacted only when configured and enabled. [Custom prompts](#75-p
 [AI keys](#71-bring-your-own-provider) are stored locally (keys encrypted at rest). There is no telemetry,
 no analytics, and no crash pings. There are no accounts — the app is fully usable without signing in
 anywhere.
+
+---
+
+## 13. The `jot` Command Line
+
+A headless companion binary (`src/Jot.Cli`, builds to `jot.exe`) that reuses the app's engine,
+cleanup pipeline, and custom vocabulary through shared on-disk conventions -- the two never talk at
+runtime, the CLI never writes app state, and it never downloads models (open Jot once to complete
+setup; the FFmpeg decoder for non-WAV input downloads on first use, exactly like
+[import](#67-import-an-audio-or-video-file)).
+
+Two modes. `jot transcribe <file>` decodes any audio/video file and prints a cleaned plain-text
+transcript to stdout (`--raw` skips cleanup, `-o` writes a file, `--language` accepts any engine
+locale or a bare code like `es`). `jot --stream` reads raw 16 kHz mono PCM from stdin and emits
+committed transcript segments as NDJSON (`{"type":"final","text":"..."}`), one JSON object per
+line, flushed per line -- built to be another program's ear on a live conversation: text is emitted
+exactly once, nothing during silence, and any engine error exits loudly rather than leaving a
+silently deaf consumer. Custom vocabulary applies in both modes via the model-free textual
+corrector (in English the app itself uses the acoustic spotter -- same terms file, same gate,
+slightly different recall; documented divergence). Model/data discovery probes the unpackaged root
+and MSIX containers, honoring a moved data folder; `--model-dir` / `--data-dir` override. Full
+design and divergence list: `docs/plans/jot-cli-windows.md`.

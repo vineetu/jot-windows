@@ -29,8 +29,8 @@ Highlights of what's real vs. not:
   from Settings pending a hands-on confirmation on real-world apps.
 - ⚠️ **Custom vocabulary** — built and proven end-to-end on real audio (spotter finds the terms,
   the gate applies them, the transcript is delivered corrected). Visible under Advanced features,
-  **default off**, and gated by two real limits: the spotter model has no download path in this
-  build, and a multi-word term currently duplicates its trailing word ("Claude Code code").
+  **default off**; the spotter model downloads from its own row in Settings → Vocabulary. See
+  `docs/features.md` §9.5 for the honest per-language limits.
 - ❌ **Speaker diarization** — present in the UI code but a non-functional stub; hidden rather
   than shown broken.
 
@@ -58,6 +58,28 @@ dotnet run --project src/Jot
 
 Jot lives in the system tray. Press **Ctrl+Shift+Space** to start dictation, and again
 to stop → transcribe → paste. Right-click the tray icon to quit.
+
+## `jot` command line
+
+A headless companion to the app (`src/Jot.Cli`, builds to `jot.exe` next to the app binaries).
+Same engine, same cleanup pipeline, same custom vocabulary, shared on-disk conventions — the two
+never talk at runtime, and the CLI never downloads models (open Jot once to complete setup).
+
+```powershell
+# file → cleaned plain text on stdout (WAV natively; anything else via the app's FFmpeg)
+jot transcribe meeting.mp4
+jot transcribe memo.wav --language de-DE -o memo.txt
+
+# live: raw 16 kHz mono PCM on stdin → NDJSON finals, one JSON object per line
+ffmpeg -i call.webm -f s16le -ar 16000 -ac 1 - | jot --stream
+```
+
+`jot --help` documents the full flag set (`--raw`, `--vocab`/`--no-vocab`, `--device`,
+`--model-dir`, `--encoding s16le|f32le`, …). Stream mode is machine-first: committed text is
+emitted exactly once (`{"type":"final","text":"..."}`), nothing during silence, and any engine
+error kills the process loudly rather than leaving a silently deaf consumer. Note when testing
+by hand: PowerShell pipes re-encode binary data — pipe stdin via `cmd /c type` or ffmpeg.
+Design + divergences from the Mac CLI: `docs/plans/jot-cli-windows.md`.
 
 ## License
 
