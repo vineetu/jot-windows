@@ -13,9 +13,9 @@ using Xunit.Abstractions;
 namespace Jot.Tests;
 
 /// <summary>
-/// Named kill: Vulkan (ggml) and DirectML (CTC spotter) in one process. The product now pins
-/// the spotter to CPU whenever the GGUF is the live engine. This soak measures that pairing
-/// over the planted-terms clip and fails if any pass exceeds VocabularyDeadlineMs.
+/// Named kill: Vulkan (ggml) and DirectML (CTC spotter) in one process. The product pins
+/// the spotter to CPU always. This soak measures that pairing over the planted-terms clip
+/// and fails if any pass exceeds VocabularyDeadlineMs.
 /// </summary>
 public class GgmlVocabularySoakTests
 {

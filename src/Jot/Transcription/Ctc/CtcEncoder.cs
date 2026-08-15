@@ -13,8 +13,8 @@ namespace Jot.Transcription.Ctc;
 ///   in  audio_signal float32 [batch, 80, frames]   — per_feature-normalized log-mel, FEATURE-major
 ///   in  length       int64   [batch]               — UNsubsampled frame count
 ///   out logprobs     float32 [batch, frames/8, 1025] — already log-softmaxed
-/// Backend is the CALLER's choice (D10a amends D1): the CPU pin protected live captions, and this pass
-/// runs post-stop when there are none. <see cref="OnnxSessionFactory"/> falls back to CPU on its own.
+/// Backend is always CPU in the product (Vulkan + DirectML in one process is a named kill).
+/// <see cref="OnnxSessionFactory"/> treats a DirectML request as CPU.
 /// </summary>
 internal sealed class CtcEncoder : IDisposable
 {

@@ -2877,7 +2877,7 @@ public partial class App : System.Windows.Application
     {
         _hotkeys?.Dispose();
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
-        // Disposes DI singletons — the recorder (mic) and the transcriber (native ONNX sessions).
+        // Disposes DI singletons — the recorder (mic) and the transcriber (native ggml + CTC sessions).
         (Services as IDisposable)?.Dispose();
         _instanceMutex?.Dispose();
         base.OnExit(e);
