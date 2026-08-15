@@ -94,14 +94,26 @@ public class VocabGoldenFixtureTests
         Dictionary<string, string>? ExpectOutcomes,
         List<ExpectProposalFixture>? ExpectProposals);
 
+    /// <summary>
+    /// DELIBERATE DIVERGENCE, not a TODO. Upstream classifies the split-word span as <c>merge</c>
+    /// and keeps it (the common-word brake fires on each decoder token). Windows applies when the
+    /// concatenated skeleton is the term — measured 2 TP / 0 FP on E5's 1041 clips. The fixture
+    /// file stays a verbatim jot-shared copy; the new outcome is pinned by
+    /// <c>DetectionPathConcatTests</c>.
+    /// </summary>
+    private static readonly IReadOnlySet<string> DecideExceptions =
+        new HashSet<string>(StringComparer.Ordinal) { "merge-shape-classified" };
+
     [Fact]
     public void VocabularyGateApply_MatchesGolden()
     {
         var cases = Load<List<GateCase>>("vocabulary_gate_decide");
         Assert.NotEmpty(cases);
+        Assert.All(DecideExceptions, name => Assert.Contains(cases, c => c.Name == name));
 
         foreach (GateCase c in cases)
         {
+            if (DecideExceptions.Contains(c.Name)) continue;
             var reps = c.Replacements
                 .Select(p => new RescoreProposal(
                     p.OriginalWord, p.ReplacementWord, p.ShouldReplace, p.ReplacementScore, p.OriginalScore))

@@ -147,14 +147,14 @@ public class VocabularyCorrectorTests
     }
 
     [Fact]
-    public void AMergeWhoseHalvesAreEverydayWordsStaysBlocked()
+    public void AMergeWhoseHalvesAreEverydayWordsAppliesWhenTheConcatIsTheTerm()
     {
-        // "nemo" is in the 24k English list, so the common-word brake blocks "nemo tron" → "Nemotron".
-        // Documented because it looks like a corrector bug and is the gate refusing to rewrite an
-        // everyday word — the same rule that stops "list" → "Lisa".
+        // "nemo" is in the 24k list. The brake used to treat that as "nemo tron" being everyday
+        // language — the same lookup that correctly stops "list" → "Lisa". Those are not the same
+        // relation: this concat IS the term (distance 0). Measured 2 TP / 0 FP on E5's 1041 clips.
         VocabularyGate.Result r = Run("We use nemo tron here.", "Nemotron");
-        Assert.Equal("We use nemo tron here.", r.Text);
-        Assert.All(r.Proposals, p => Assert.Equal("kept", p.Outcome));
+        Assert.Equal("We use Nemotron here.", r.Text);
+        Assert.Equal(1, r.Applied);
     }
 
     // MARK: - Distance
