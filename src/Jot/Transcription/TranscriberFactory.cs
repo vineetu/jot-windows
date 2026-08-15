@@ -39,29 +39,59 @@ public static class TranscriberFactory
         EngineChoice choice = EngineSelector.Select(
             s.TranscriptionDevice, fp16.IsInstalled, s.GpuProbeVerdict, keyMatches);
 
-        var ggml = GgmlEngineOptions.Resolve(s, choice, env);
-        if (ggml.Enabled)
+        env ??= Environment.GetEnvironmentVariable;
+        bool assets = gguf.IsInstalled && GgmlNativeLocator.IsPresent(env);
+        var ggmlOpts = GgmlEngineOptions.Resolve(s, choice, env, assets);
+
+        ITranscriber onnx = CreateOnnx(choice, int4, fp16, factory);
+        ITranscriber ggml = new GgmlNemotronTranscriber(gguf, ggmlOpts);
+
+        // Forced ONNX (emergency back-out): do not wrap, do not probe Vulkan.
+        if (GgmlEngineOptions.IsOrtForced(env))
         {
-            log?.Invoke(
-                $"engine: ggml (device={s.TranscriptionDevice}, backend={ggml.Backend}, " +
-                $"r={ggml.AttContextRight}, gguf={gguf.IsInstalled}, natives={GgmlNativeLocator.IsPresent()})");
-            return new GgmlNemotronTranscriber(gguf, ggml);
+            log?.Invoke($"engine: {choice} (JOT_ENGINE=ort, device={s.TranscriptionDevice}, " +
+                $"verdict={s.GpuProbeVerdict ?? "none"}, keyMatch={keyMatches}, fp16={fp16.IsInstalled})");
+            (ggml as IDisposable)?.Dispose();
+            return onnx;
         }
 
-        log?.Invoke($"engine: {choice} (device={s.TranscriptionDevice}, " +
-            $"verdict={s.GpuProbeVerdict ?? "none"}, keyMatch={keyMatches}, fp16={fp16.IsInstalled})");
-        return choice switch
+        // Forced ggml (legacy flag / JOT_ENGINE=ggml) with no ONNX to fall back to: return it bare
+        // so missing-asset tests still see GgmlNemotronTranscriber.
+        if (ggmlOpts.Enabled && !int4.IsInstalled && !fp16.IsInstalled)
+        {
+            log?.Invoke(
+                $"engine: ggml (device={s.TranscriptionDevice}, backend={ggmlOpts.Backend}, " +
+                $"r={ggmlOpts.AttContextRight}, gguf={gguf.IsInstalled}, natives={GgmlNativeLocator.IsPresent(env)})");
+            (onnx as IDisposable)?.Dispose();
+            return ggml;
+        }
+
+        // Default: pick ggml when assets appear (including mid-launch after a download), ONNX otherwise.
+        // A ggml load failure falls through to ONNX with a log, never a crash.
+        log?.Invoke(
+            $"engine: selecting (ggmlAssets={assets}, device={s.TranscriptionDevice}, " +
+            $"backend={ggmlOpts.Backend}, r={ggmlOpts.AttContextRight}, onnx={choice})");
+        return new SelectingTranscriber(ggml, onnx, () => GgmlEngineOptions.IsOrtForced(env));
+    }
+
+    private static ITranscriber CreateOnnx(
+        EngineChoice choice, NemotronModel int4, NemotronFp16Model fp16, OnnxSessionFactory factory)
+        => choice switch
         {
             EngineChoice.Fp16Dml => new NemotronFp16Transcriber(fp16, factory, ComputeBackend.DirectML),
             EngineChoice.Int4DmlEncoder => new NemotronTranscriber(int4, factory, ComputeBackend.DirectML),
             _ => new NemotronTranscriber(int4, factory, ComputeBackend.Cpu),
         };
-    }
 
     /// <summary>Applies the stored language (locale code, or a legacy display name) to the engine.
     /// Called at startup and on change; takes effect on the NEXT dictation (sessions snapshot it).</summary>
     public static void ApplyLanguage(ITranscriber transcriber, string language)
     {
+        if (transcriber is SelectingTranscriber sel)
+        {
+            sel.SetLanguage(language);
+            return;
+        }
         if (transcriber is GgmlNemotronTranscriber g)
         {
             g.SetLanguage(language); // BCP-47 / "auto"; mapping onto C NULL happens at stream_begin

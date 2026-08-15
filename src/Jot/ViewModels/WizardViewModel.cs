@@ -105,7 +105,7 @@ public sealed partial class WizardViewModel : ObservableObject
     {
         0 => "Free, on-device dictation for Windows. Press a key, speak, and your words are pasted at the cursor.",
         1 => "Jot needs permission to use your microphone. Windows has no separate input-monitoring or accessibility prompt.",
-        2 => "The speech model (~754 MB) and your recordings are stored here. Pick a drive with room — you can change it later in Settings.",
+        2 => "The speech model (~716 MB) and your recordings are stored here. Pick a drive with room — you can change it later in Settings.",
         3 => "One multilingual on-device model handles every language — pick the one you'll speak most. The next step downloads it here.",
         4 => "Pick the input device to record from. The meter below confirms Jot can hear you.",
         5 => $"Press {HotkeyLabel} anywhere to start and stop dictation. You can change this later in Settings.",

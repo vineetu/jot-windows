@@ -163,6 +163,42 @@ public static class StartupMigration
         store.Save();
     }
 
+    /// <summary>The Q8_0 GGUF hard-errors the 8 AdaptationReady locales. Remap a saved setting so
+    /// the picker and the engine agree: nn-NO → nb-NO (same language, present in the GGUF); the
+    /// other seven → auto (C NULL). Idempotent. ONNX-fallback users lose a non-production-ready
+    /// NVIDIA tier — honest, not a silent quality drop.</summary>
+    public static void MigrateGgmlUnsupportedLocales(ISettingsStore store)
+    {
+        string code = Transcription.Nemotron.NemotronLocales.Normalize(store.Current.Language);
+        string? remapped = RemapGgmlUnsupportedLocale(code);
+        if (remapped is null) return;
+        JotLog.Info($"language: remapped unsupported ggml locale {code} → {remapped}");
+        store.Current.Language = remapped;
+        store.Save();
+    }
+
+    /// <returns>The remapped code, or null when no change is needed.</returns>
+    public static string? RemapGgmlUnsupportedLocale(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        if (code.Equals("nn-NO", StringComparison.OrdinalIgnoreCase)) return "nb-NO";
+        foreach (string banned in Transcription.Ggml.GgmlLanguage.AdaptationReady)
+        {
+            if (code.Equals(banned, StringComparison.OrdinalIgnoreCase))
+                return Transcription.Nemotron.NemotronLocales.AutoCode;
+        }
+        return null;
+    }
+
+    /// <summary>Settings copy: leftover "GPU (DirectML)" becomes "GPU (Vulkan)" so the picker
+    /// still has a selected item. Contains "GPU" either way, so EngineSelector is unchanged.</summary>
+    public static void MigrateGpuDeviceLabel(ISettingsStore store)
+    {
+        if (store.Current.TranscriptionDevice != Transcription.TranscriptionDevices.Gpu) return;
+        store.Current.TranscriptionDevice = Transcription.TranscriptionDevices.GpuVulkan;
+        store.Save();
+    }
+
     private static bool HasData(string dir) =>
         Directory.Exists(Path.Combine(dir, "models")) || File.Exists(Path.Combine(dir, "library.json"));
 

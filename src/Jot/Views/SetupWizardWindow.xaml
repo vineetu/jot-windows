@@ -53,6 +53,11 @@
                 <ComboBox Width="260" HorizontalAlignment="Left" ItemsSource="{Binding LanguageOptions}"
                           DisplayMemberPath="Label" SelectedValuePath="Code"
                           SelectedValue="{Binding Language, Mode=TwoWay}">
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="IsEnabled" Value="{Binding IsAvailable}" />
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
                     <ComboBox.GroupStyle>
                         <GroupStyle>
                             <GroupStyle.HeaderTemplate>

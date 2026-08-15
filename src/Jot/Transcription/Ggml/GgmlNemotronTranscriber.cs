@@ -3,10 +3,10 @@ using Jot.Services;
 namespace Jot.Transcription.Ggml;
 
 /// <summary>
-/// Nemotron 3.5 via official transcribe.cpp 0.1.3 (Q8_0 GGUF, Vulkan or CPU). Selected only when
-/// the hidden flag / <c>JOT_ENGINE=ggml</c> is on — the shipping default remains the ONNX engines.
-/// One loaded model at a time is serialized inside the binding; sessions are SafeHandle-owned.
-/// Custom vocabulary stays on the separate Parakeet CTC ONNX spotter (plan §1 option A).
+/// Nemotron 3.5 via official transcribe.cpp 0.1.3 (Q8_0 GGUF, Vulkan or CPU). Default engine
+/// when the GGUF and official natives are present. One loaded model at a time is serialized
+/// inside the binding; sessions are SafeHandle-owned. Custom vocabulary stays on the separate
+/// Parakeet CTC ONNX spotter (plan §1 option A).
 /// </summary>
 public sealed class GgmlNemotronTranscriber : ITranscriber, IStreamingTranscriber, IDisposable
 {
@@ -57,14 +57,9 @@ public sealed class GgmlNemotronTranscriber : ITranscriber, IStreamingTranscribe
     public void WarmUp()
     {
         if (!IsModelInstalled) return;
-        try
-        {
-            TranscribeAsync(new float[RequiredSampleRate / 2], RequiredSampleRate).GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            JotLog.Warn($"ggml warm-up failed: {ex.Message}");
-        }
+        // Rethrow so SelectingTranscriber can fall back to ONNX. A swallowed failure here
+        // would look like a successful warm-up and then hitch (or error) on first dictation.
+        TranscribeAsync(new float[RequiredSampleRate / 2], RequiredSampleRate).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -136,6 +131,23 @@ public sealed class GgmlNemotronTranscriber : ITranscriber, IStreamingTranscribe
         }
     }
 
+    private TranscribeModel LoadPreferringVulkan()
+    {
+        var requested = _options.Backend;
+        try
+        {
+            return TranscribeModel.Load(_model.ModelPath, requested, nativeDir: _options.NativeDir);
+        }
+        catch (TranscribeException ex) when (
+            requested is NativeMethods.BackendRequest.Vulkan or NativeMethods.BackendRequest.Auto &&
+            ex.StatusCode == (int)NativeMethods.Status.Backend)
+        {
+            JotLog.Warn($"ggml {requested} backend unavailable ({ex.Message}) — retrying on CPU");
+            return TranscribeModel.Load(
+                _model.ModelPath, NativeMethods.BackendRequest.Cpu, nativeDir: _options.NativeDir);
+        }
+    }
+
     private void EnsureLoaded()
     {
         if (_loaded is not null) return;
@@ -151,8 +163,7 @@ public sealed class GgmlNemotronTranscriber : ITranscriber, IStreamingTranscribe
                     "transcribe.dll next to Jot.exe, or set JOT_GGML_NATIVE.");
             try
             {
-                _loaded = TranscribeModel.Load(
-                    _model.ModelPath, _options.Backend, nativeDir: _options.NativeDir);
+                _loaded = LoadPreferringVulkan();
                 JotLog.Info(
                     $"ggml loaded arch={_loaded.Arch} variant={_loaded.Variant} backend={_loaded.Backend} " +
                     $"langs={_loaded.Languages.Length} r={_options.AttContextRight}");

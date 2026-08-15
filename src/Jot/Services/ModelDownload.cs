@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Jot.Transcription;
-using Jot.Transcription.Nemotron;
+using Jot.Transcription.Ggml;
 
 namespace Jot.Services;
 
@@ -10,18 +10,19 @@ namespace Jot.Services;
 /// Settings page — so there is a single download path and a single progress/status surface, never two
 /// copies to drift. Backed by an <see cref="IModelInstaller"/> (the actual downloader); registered as
 /// a singleton so a download started in one place is reflected wherever it's bound. The base class is
-/// the required int4 model; <see cref="GpuModelDownload"/> derives for the optional fp16 GPU model.
+/// the required Q8_0 GGUF; <see cref="GpuModelDownload"/> still wraps the leftover fp16 installer
+/// (no longer auto-fetched). The int4 installer stays registered for the K3 CPU fallback.
 /// </summary>
 public partial class ModelDownload : ObservableObject
 {
-    public const string InstalledText = "Nemotron 3.5 · Installed";
-    public const string NotInstalledText = "Not installed (~754 MB)";
+    public const string InstalledText = "Nemotron 3.5 Q8_0 · Installed";
+    public const string NotInstalledText = "Not installed (~716 MB)";
 
     private readonly IModelInstaller _installer;
     private readonly string _installedText;
     private readonly string _notInstalledText;
 
-    public ModelDownload(NemotronModelInstaller installer)
+    public ModelDownload(NemotronGgufModelInstaller installer)
         : this(installer, InstalledText, NotInstalledText) { }
 
     protected ModelDownload(IModelInstaller installer, string installedText, string notInstalledText)

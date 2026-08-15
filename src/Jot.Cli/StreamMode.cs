@@ -60,8 +60,7 @@ internal static class StreamMode
         var int4 = new NemotronModel(paths.Int4Dir);
         var fp16 = new NemotronFp16Model(paths.Fp16Dir);
         var gguf = new NemotronGgufModel(paths.GgufDir);
-        bool ggml = GgmlEngineOptions.IsEnabled(paths.Settings);
-        if (!int4.IsInstalled && !fp16.IsInstalled && !(ggml && gguf.IsInstalled))
+        if (!int4.IsInstalled && !fp16.IsInstalled && !gguf.IsInstalled)
         {
             return Cli.Fail(
                 $"No transcription model found under {paths.ModelsParent}. " +

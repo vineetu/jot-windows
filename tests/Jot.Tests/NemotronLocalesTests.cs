@@ -3,6 +3,7 @@ using System.Linq;
 using Jot.Services;
 using Jot.Services.Abstractions;
 using Jot.Text;
+using Jot.Transcription;
 using Jot.Transcription.Nemotron;
 using Xunit;
 
@@ -144,5 +145,62 @@ public class LanguageSettingMigrationTests
         StartupMigration.MigrateLanguageSetting(store);
         Assert.Equal("en-US", store.Current.Language);
         Assert.Equal(0, store.Saves);
+    }
+}
+
+public class GgmlLocaleMigrationTests
+{
+    private sealed class FakeSettingsStore : ISettingsStore
+    {
+        public JotSettings Current { get; } = new();
+        public int Saves;
+        public void Save() => Saves++;
+        public void Reset() { }
+        public event EventHandler? Changed { add { } remove { } }
+    }
+
+    [Fact]
+    public void NnNo_BecomesNbNo()
+    {
+        var store = new FakeSettingsStore();
+        store.Current.Language = "nn-NO";
+        StartupMigration.MigrateGgmlUnsupportedLocales(store);
+        Assert.Equal("nb-NO", store.Current.Language);
+        Assert.Equal(1, store.Saves);
+    }
+
+    [Theory]
+    [InlineData("el-GR")]
+    [InlineData("he-IL")]
+    [InlineData("lt-LT")]
+    [InlineData("sl-SI")]
+    [InlineData("lv-LV")]
+    [InlineData("mt-MT")]
+    [InlineData("th-TH")]
+    public void OtherAdaptationReady_BecomeAuto(string code)
+    {
+        var store = new FakeSettingsStore();
+        store.Current.Language = code;
+        StartupMigration.MigrateGgmlUnsupportedLocales(store);
+        Assert.Equal("auto", store.Current.Language);
+    }
+
+    [Fact]
+    public void SupportedLocale_IsUntouched()
+    {
+        var store = new FakeSettingsStore();
+        store.Current.Language = "de-DE";
+        StartupMigration.MigrateGgmlUnsupportedLocales(store);
+        Assert.Equal("de-DE", store.Current.Language);
+        Assert.Equal(0, store.Saves);
+    }
+
+    [Fact]
+    public void GpuDirectMl_BecomesGpuVulkan()
+    {
+        var store = new FakeSettingsStore();
+        store.Current.TranscriptionDevice = Transcription.TranscriptionDevices.Gpu;
+        StartupMigration.MigrateGpuDeviceLabel(store);
+        Assert.Equal(Transcription.TranscriptionDevices.GpuVulkan, store.Current.TranscriptionDevice);
     }
 }

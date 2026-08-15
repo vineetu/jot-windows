@@ -61,8 +61,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     [
         Jot.Transcription.TranscriptionDevices.Auto,
         Jot.Transcription.TranscriptionDevices.Cpu,
-        Jot.Transcription.TranscriptionDevices.Gpu,
+        Jot.Transcription.TranscriptionDevices.GpuVulkan,
     ];
+
+    /// <summary>The leftover fp16 ONNX row stays as a manual escape hatch only while that model is
+    /// still on disk (or a download is running). Hidden once the GGUF is the engine.</summary>
+    public bool ShowLegacyGpuModel =>
+        _gpuDownload.IsInstalled || _gpuDownload.IsDownloading || _gpuDownload.Failed;
 
     /// <summary>Paste-method choices for the Settings dropdown (value persisted, label shown). Mirrors Handy.</summary>
     public sealed record PasteMethodOption(string Value, string Label);
@@ -297,6 +302,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public void RefreshDownloads()
     {
         foreach (ModelDownload d in _downloads) d.Refresh();
+        OnPropertyChanged(nameof(ShowLegacyGpuModel));
         RaiseVocabularyComputed();
     }
 

@@ -66,6 +66,7 @@ public class JotDataPurgeTests : IDisposable
         Assert.Contains(Path.Combine(_config, "settings.json"), paths);
         Assert.Contains(Path.Combine(_config, "prompts.json"), paths);
         Assert.Contains(Path.Combine(_config, "migration.json"), paths);
+        Assert.Contains(Path.Combine(_config, OrtModelCleanup.MarkerFile), paths);
     }
 
     [Fact]

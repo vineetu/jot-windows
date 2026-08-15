@@ -47,7 +47,13 @@ public static class GgmlLanguage
         if (Contains(supported, code))
             return code;
 
-        // Known to Jot but not in this GGUF (the 8 AdaptationReady): NULL, not a silent en-US.
+        // nn-NO is the one AdaptationReady code with a real sibling in the GGUF (nb-NO).
+        if (code.Equals("nn-NO", StringComparison.OrdinalIgnoreCase) &&
+            Contains(supported, "nb-NO"))
+            return "nb-NO";
+
+        // The other 7 AdaptationReady codes: C NULL (autodetect), not a silent en-US and
+        // never a tag the runtime will hard-error.
         if (known) return null;
 
         return Contains(supported, NemotronLocales.DefaultCode) ? NemotronLocales.DefaultCode : null;

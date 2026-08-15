@@ -58,6 +58,13 @@ dotnet publish $proj -c Release -r win-x64 --self-contained true `
     -p:GenerateAppxPackageOnBuild=false @flavorArgs --verbosity quiet
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
 
+# Official transcribe.cpp natives must actually be in the payload. A script that *intends*
+# to copy them is not evidence — unpack/launch is the bar, but fail the pack if they're absent.
+foreach ($need in @("transcribe.dll", "ggml-vulkan.dll", "ggml.dll", "contract.json")) {
+    $p = Join-Path $pub $need
+    if (-not (Test-Path $p)) { throw "publish missing ggml native: $need (under $pub)" }
+}
+
 # Read the version out of the manifest so the .msix filename matches.
 [xml]$mx = Get-Content $manifestSrc
 $ver = $mx.Package.Identity.Version

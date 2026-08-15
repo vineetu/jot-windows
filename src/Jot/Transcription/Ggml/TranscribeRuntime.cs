@@ -131,6 +131,23 @@ internal static class TranscribeRuntime
         return NativeMethods.transcribe_backend_available(kind);
     }
 
+    /// <summary>Vulkan ICD + module present. False on missing natives, ABI refuse, or no ICD —
+    /// never a crash. Used to pick ggml-CPU vs ggml-Vulkan before the first load.</summary>
+    internal static bool TryVulkanAvailable(string? nativeDir = null)
+    {
+        try
+        {
+            if (nativeDir is null && !GgmlNativeLocator.IsPresent()) return false;
+            Startup(nativeDir);
+            return NativeMethods.transcribe_backend_available(NativeMethods.BackendRequest.Vulkan);
+        }
+        catch (Exception ex)
+        {
+            JotLog.Info($"ggml vulkan probe skipped: {ex.Message}");
+            return false;
+        }
+    }
+
     private static Exception Wrap(Exception ex) =>
         ex is TranscribeException or TranscribeAbiException
             ? ex

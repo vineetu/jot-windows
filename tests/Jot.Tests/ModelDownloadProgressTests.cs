@@ -1,3 +1,4 @@
+using Jot.Transcription.Ggml;
 using Jot.Transcription.Nemotron;
 using Xunit;
 
@@ -19,6 +20,13 @@ public class ModelDownloadProgressTests
     public void DescribeProgress_ShowsMbOfMbAndPercent(double fraction, string expected)
     {
         Assert.Equal(expected, NemotronModelInstaller.DescribeProgress(fraction));
+    }
+
+    [Fact]
+    public void GgufTotalBytes_IsAboutSevenHundredSixteenMb()
+    {
+        double mb = NemotronGgufModelInstaller.TotalBytes / (1024.0 * 1024.0);
+        Assert.InRange(mb, 700, 730);
     }
 
     [Fact]

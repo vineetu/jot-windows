@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Jot.Services;
 using Jot.Services.Download;
+using Jot.Transcription.Ggml;
 using Jot.Transcription.Nemotron;
 using Xunit;
 
@@ -17,6 +18,9 @@ public class AssetManifestTests
 
     private static AssetManifest Fp16() =>
         new NemotronFp16ModelInstaller(new NemotronFp16Model(directory: @"C:\x")).Manifest;
+
+    private static AssetManifest Gguf() =>
+        new NemotronGgufModelInstaller(new NemotronGgufModel(directory: @"C:\x", env: _ => null)).Manifest;
 
     [Fact]
     public void Fp16Manifest_CoversEveryFileTheLocatorRequires()
@@ -49,12 +53,32 @@ public class AssetManifestTests
         Assert.Equal(7, names.Count);
     }
 
+    [Fact]
+    public void GgufManifest_IsTheOneQ8_0File()
+    {
+        var m = Gguf();
+        Assert.Single(m.Assets);
+        Assert.Equal(NemotronGgufModel.FileName, m.Assets[0].Name);
+        Assert.Equal(751_094_240, m.Assets[0].Bytes);
+        Assert.Equal(64, m.Assets[0].Sha256!.Length);
+        double mb = m.TotalBytes / (1024.0 * 1024.0);
+        Assert.InRange(mb, 700, 730);
+        Assert.StartsWith("https://github.com/vineetu/jot-windows/releases/download/", m.BaseUrl);
+        Assert.Contains(NemotronGgufModelInstaller.ReleaseTag, m.BaseUrl);
+    }
+
     [Theory]
     [InlineData("int4")]
     [InlineData("fp16")]
+    [InlineData("gguf")]
     public void EveryAsset_HasWellFormedSha256AndPositiveSize(string which)
     {
-        var manifest = which == "int4" ? Int4() : Fp16();
+        var manifest = which switch
+        {
+            "int4" => Int4(),
+            "fp16" => Fp16(),
+            _ => Gguf(),
+        };
         Assert.All(manifest.Assets, a =>
         {
             Assert.True(a.Bytes > 0, $"{a.Name}: size must be exact, not zero");

@@ -8,11 +8,26 @@ namespace Jot.Tests;
 public class GgmlEngineOptionsTests
 {
     [Fact]
-    public void DefaultSettings_AreOff()
+    public void DefaultSettings_AreOff_WithoutAssets()
     {
         Assert.False(GgmlEngineOptions.IsEnabled(new JotSettings(), _ => null));
         Assert.False(new JotSettings().UseGgmlEngine);
         Assert.Equal(3, new JotSettings().GgmlAttContextRight);
+    }
+
+    [Fact]
+    public void AssetsPresent_EnablesByDefault()
+    {
+        Assert.True(GgmlEngineOptions.IsEnabled(new JotSettings(), _ => null, assetsPresent: true));
+    }
+
+    [Fact]
+    public void OrtEnv_WinsOverAssets()
+    {
+        Assert.False(GgmlEngineOptions.IsEnabled(
+            new JotSettings(),
+            k => k == "JOT_ENGINE" ? "ort" : null,
+            assetsPresent: true));
     }
 
     [Fact]
@@ -50,7 +65,7 @@ public class GgmlEngineOptionsTests
     }
 
     [Fact]
-    public void Backend_FollowsEngineSelectorChoice()
+    public void Backend_FollowsDevice_NotJustOnnxChoice()
     {
         Assert.Equal(
             NativeMethods.BackendRequest.Vulkan,
@@ -60,7 +75,13 @@ public class GgmlEngineOptionsTests
             GgmlEngineOptions.ResolveBackend(EngineChoice.Int4DmlEncoder, _ => null));
         Assert.Equal(
             NativeMethods.BackendRequest.Cpu,
-            GgmlEngineOptions.ResolveBackend(EngineChoice.Int4Cpu, _ => null));
+            GgmlEngineOptions.ResolveBackend(EngineChoice.Int4Cpu, _ => null, TranscriptionDevices.Cpu));
+        Assert.Equal(
+            NativeMethods.BackendRequest.Vulkan,
+            GgmlEngineOptions.ResolveBackend(EngineChoice.Int4Cpu, _ => null, TranscriptionDevices.Auto));
+        Assert.Equal(
+            NativeMethods.BackendRequest.Vulkan,
+            GgmlEngineOptions.ResolveBackend(EngineChoice.Int4Cpu, _ => null, TranscriptionDevices.GpuVulkan));
     }
 
     [Theory]
