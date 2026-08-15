@@ -165,16 +165,17 @@ per-language download. Switching languages is instant and needs no extra downloa
 best-validated language; several others are confirmed working, with a lower-confidence tier beyond that.
 
 ### 3.4 In-App Model Download
-On first use the speech model is fetched from within Settings, with a progress bar and an install-state
-row. The model is stored under the user's data folder (kept off the system drive by default), not the
-system drive. Three models use the same downloader and the same row shape: the required speech model, the
-optional faster GPU model, and the optional [vocabulary](#95-custom-vocabulary) model. Transfers resume
+On first use the speech model (one Q8_0 GGUF, ~716 MB) is fetched from within Settings, with a
+progress bar and an install-state row. The model is stored under the user's data folder (kept off
+the system drive by default). Two models use the same downloader and the same row shape: the
+required speech model and the optional [vocabulary](#95-custom-vocabulary) model. Transfers resume
 after an interruption, retry transient failures, check free space up front, and verify a SHA-256 per file
 before anything is treated as installed; a failed attempt keeps its reason on screen and offers a retry.
 
 ### 3.5 CPU / GPU Processing
-By default the engine runs on the CPU. A Settings toggle switches it to a GPU (DirectML) backend, which
-falls back to CPU automatically if the GPU path is unavailable. The change applies after a restart.
+Auto uses Vulkan when the graphics driver supports it, otherwise the same GGUF on CPU. An explicit
+GPU (Vulkan) pick forces the graphics card; CPU stays on CPU. The change applies on the next
+dictation after the model is ready. There is no DirectML transcription path.
 
 ### 3.6 Deterministic On-Device Cleanup
 Every dictation passes through an always-on, on-device tidy before it is saved and pasted: it scrubs

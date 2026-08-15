@@ -17,10 +17,11 @@ namespace Jot.Transcription.Ctc;
 /// runtime, so the transcript comparison against sherpa is a smoke test and the tensor comparison
 /// against the NeMo reference is the real contract.
 ///
-/// Structurally this is <see cref="Nemotron.MelFrontend"/> with three constants moved (128->80 mels,
-/// 1e-10 -> 2^-24 guard, periodic -> symmetric Hann) and a normalization pass added. It stays a
-/// separate class anyway: MelFrontend.NMels is a public const read from the shipping RNNT engines,
-/// and their byte-exactness is not worth risking to save a duplicated FFT (design doc D2).
+/// Structurally this started as a copy of the (now deleted) Nemotron RNNT MelFrontend with three
+/// constants moved (128->80 mels, 1e-10 -> 2^-24 guard, periodic -> symmetric Hann) and a
+/// normalization pass added. It stays a separate class: sharing the RNNT front-end would have
+/// put that engine's byte-exactness on the line to save a duplicated FFT (design doc D2). The
+/// RNNT now lives in ggml and does its own frontend; this class is the CTC spotter's only mel.
 /// </summary>
 internal sealed class CtcMelFrontend
 {

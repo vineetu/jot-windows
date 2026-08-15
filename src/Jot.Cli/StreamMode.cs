@@ -3,8 +3,6 @@ using System.IO;
 using Jot.Services;
 using Jot.Transcription;
 using Jot.Transcription.Ggml;
-using Jot.Transcription.Nemotron;
-using Jot.Transcription.Onnx;
 
 namespace Jot.Cli;
 
@@ -33,8 +31,8 @@ internal static class StreamMode
 
     // Accept runs incremental inference but O(total-session) bookkeeping per call, so a sub-chunk Accept
     // does zero decoding and still pays the full tax: a 4 KiB read loop would Accept ~28 000x an hour.
-    private const int Int4ChunkSamples = 8_960;  // 56 mel frames
-    private const int Fp16ChunkSamples = 5_120;  // 32 mel frames
+    // ggml R=3 is 320 ms = 5120 samples — same feed the GPU probe uses.
+    private const int ChunkSamples = 5_120;
 
     private const int ReadBufferBytes = 32 * 1024;
 
@@ -57,10 +55,8 @@ internal static class StreamMode
             JotPaths.LegacyLocalAppDataDir);
         Console.Error.WriteLine($"jot: data root: {paths.DataRoot} (models: {paths.ModelsParent})");
 
-        var int4 = new NemotronModel(paths.Int4Dir);
-        var fp16 = new NemotronFp16Model(paths.Fp16Dir);
         var gguf = new NemotronGgufModel(paths.GgufDir);
-        if (!int4.IsInstalled && !fp16.IsInstalled && !gguf.IsInstalled)
+        if (!gguf.IsInstalled)
         {
             return Cli.Fail(
                 $"No transcription model found under {paths.ModelsParent}. " +
@@ -74,22 +70,11 @@ internal static class StreamMode
         var vocab = CliVocabulary.Create(paths, locale, o.NoVocab, o.VocabFile, out string? vocabError);
         if (vocabError is not null) return Cli.Fail(vocabError);
 
-        var factory = new OnnxSessionFactory();
-        bool notedFallback = false;
-        // A DirectML→CPU degrade is app behavior, not an error, but a consumer's logs need it to explain
-        // the latency shift.
-        factory.BackendFallback += m =>
-        {
-            if (notedFallback) return;
-            notedFallback = true;
-            Console.Error.WriteLine($"jot: note: {m}");
-        };
-
         ITranscriber transcriber;
         try
         {
             transcriber = TranscriberFactory.Create(
-                BatchMode.ApplyDevice(paths.Settings, o.Device), int4, fp16, gguf, factory,
+                BatchMode.ApplyDevice(paths.Settings, o.Device), gguf,
                 msg => Console.Error.WriteLine("jot: " + msg));
         }
         catch (Exception ex)
@@ -112,9 +97,7 @@ internal static class StreamMode
             Ndjson.EmitFinal,
             SpacelessScripts.Contains(locale.Split('-')[0]));
 
-        int chunkSamples = transcriber is NemotronFp16Transcriber or GgmlNemotronTranscriber
-            ? Fp16ChunkSamples : Int4ChunkSamples;
-        return new Pump(streaming, emitter, chunkSamples).Run(o.Encoding);
+        return new Pump(streaming, emitter, ChunkSamples).Run(o.Encoding);
     }
 
     /// <summary>

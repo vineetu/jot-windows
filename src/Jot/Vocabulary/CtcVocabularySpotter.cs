@@ -385,34 +385,15 @@ public sealed class CtcVocabularySpotter : IVocabularySpotter, IDisposable
     }
 
     /// <summary>
-    /// D10a: DirectML is allowed HERE when the live RNNT is also ONNX. The CPU pin existed to stop
-    /// the spotter contending with live captions; this pass runs strictly after the RNNT has produced
-    /// text, so there are no live captions left to protect.
+    /// Always CPU. Measured decision, not a default:
     ///
-    /// ggml/Vulkan changes that: the GGUF stays loaded for the next utterance, so Vulkan and DirectML
-    /// would be alive in the same process. That pairing is a named kill (TDR / driver reset /
-    /// VocabularyDeadlineMs = 4000). CPU EP measured 2421 ms at 59 s of speech — under budget — so
-    /// when ggml is the live engine the spotter stays on CPU. JOT_ENGINE=ort restores the DML path.
-    ///
-    /// Note this reads the device SETTING and whether ggml assets are present. It must never consult
-    /// — or feed — the cached GpuProbe verdict: that verdict is measured for the live RNNT and this
-    /// session is a consumer of the tier, never an input to it.
+    /// DirectML next to a live Vulkan ggml engine delivered 15.7 s against
+    /// <c>VocabularyDeadlineMs = 4000</c> and silently dropped corrections (named kill).
+    /// CPU EP measured 2421 ms at 59 s of speech — under budget. The ONNX Nemotron path
+    /// that used to restore DirectML via <c>JOT_ENGINE=ort</c> is gone, so the other
+    /// branch can never be taken.
     /// </summary>
-    private ComputeBackend Backend()
-    {
-        string? device = _settings?.Current.TranscriptionDevice;
-        bool explicitCpu = string.Equals(device, Transcription.TranscriptionDevices.Cpu,
-                                         StringComparison.OrdinalIgnoreCase);
-        if (explicitCpu) return ComputeBackend.Cpu;
-
-        // GGUF on disk + natives shipped ⇒ ggml is the default engine. Keep the spotter off DirectML.
-        if (!Transcription.Ggml.GgmlEngineOptions.IsOrtForced() &&
-            Transcription.Ggml.GgmlNativeLocator.IsPresent() &&
-            new Transcription.Ggml.NemotronGgufModel(settings: _settings).IsInstalled)
-            return ComputeBackend.Cpu;
-
-        return ComputeBackend.DirectML;
-    }
+    private static ComputeBackend Backend() => ComputeBackend.Cpu;
 
     /// <summary>
     /// Build the session ahead of the first dictation. Call when vocabulary is switched on and at

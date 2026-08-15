@@ -3,8 +3,8 @@ using System.Runtime.InteropServices;
 namespace Jot.Platform;
 
 /// <summary>
-/// Identifies DXGI adapter 0 — the SAME adapter <c>AppendExecutionProvider_DML(0)</c> uses — so the GPU
-/// probe verdict can be cached against the exact hardware+driver it was measured on. LUID is deliberately
+/// Identifies DXGI adapter 0 so the ggml Vulkan probe verdict can be cached against the exact
+/// hardware+driver it was measured on. LUID is deliberately
 /// NOT part of the identity: Windows assigns adapter LUIDs per boot, so a LUID key would force a
 /// re-probe every restart. VendorId+DeviceId+Description+UMD driver version only changes when the GPU or
 /// its driver actually changes — exactly when a cached verdict must be re-earned.

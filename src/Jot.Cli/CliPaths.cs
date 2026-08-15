@@ -3,7 +3,6 @@ using System.Text.Json;
 using Jot.Services;
 using Jot.Services.Abstractions;
 using Jot.Transcription.Ggml;
-using Jot.Transcription.Nemotron;
 
 namespace Jot.Cli;
 
@@ -16,8 +15,6 @@ namespace Jot.Cli;
 internal sealed record ResolvedPaths(
     string Root, string DataRoot, string ModelsParent, JotSettings Settings, string Origin)
 {
-    public string Int4Dir => Path.Combine(ModelsParent, NemotronModel.ModelFolder);
-    public string Fp16Dir => Path.Combine(ModelsParent, NemotronFp16Model.ModelFolder);
     public string GgufDir => Path.Combine(ModelsParent, NemotronGgufModel.ModelFolder);
     public string VocabularyDir => Path.Combine(DataRoot, JotPaths.VocabularyFolderName);
     public string ToolsDir => Path.Combine(Root, "tools");
@@ -92,8 +89,6 @@ internal static class CliPaths
             string dataRoot = DataRootOf(root, s);
             string modelsParent = modelDirOverride ?? Path.Combine(dataRoot, "models");
             bool installed =
-                new NemotronModel(Path.Combine(modelsParent, NemotronModel.ModelFolder)).IsInstalled ||
-                new NemotronFp16Model(Path.Combine(modelsParent, NemotronFp16Model.ModelFolder)).IsInstalled ||
                 new NemotronGgufModel(Path.Combine(modelsParent, NemotronGgufModel.ModelFolder)).IsInstalled;
             return installed ? new ResolvedPaths(root, dataRoot, modelsParent, s, root) : null;
         }

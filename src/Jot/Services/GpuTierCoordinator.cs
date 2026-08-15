@@ -34,12 +34,6 @@ public sealed class GpuTierCoordinator
     /// <summary>Call once per launch from a background task.</summary>
     public async Task RunAsync()
     {
-        if (GgmlEngineOptions.IsOrtForced())
-        {
-            JotLog.Info("ggml adopt: skipped (JOT_ENGINE=ort)");
-            return;
-        }
-
         bool fetchedThisLaunch = false;
         if (!_gguf.IsInstalled)
         {

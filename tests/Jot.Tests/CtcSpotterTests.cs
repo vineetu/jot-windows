@@ -162,9 +162,8 @@ public class CtcSpotterTests(ITestOutputHelper output)
     // MARK: - Latency
 
     /// <summary>
-    /// End-to-end wall time of the whole shipping pass (trim + mel + graph + DP) on both backends, on the
-    /// same clips, so the D10a "DirectML is the lever" claim is a measurement and not a hope. Prints the
-    /// table; asserts only the thing the ladder depends on — that 60 s stays inside the deadline.
+    /// End-to-end wall time of the whole shipping pass (trim + mel + graph + DP) on the CPU EP
+    /// (the only backend the product uses). Prints the table; asserts that 60 s stays inside the deadline.
     /// </summary>
     [ModelFact("spotter-model", "spike-audio")]
     public void M2_LatencyCpuVersusDirectMl()
@@ -172,7 +171,7 @@ public class CtcSpotterTests(ITestOutputHelper output)
         string[] clips = ["real-10s.wav", "real-40s.wav", "real-60s.wav", "real-90s.wav"];
         VocabularyTerm[] terms = PlantedTerms();
 
-        foreach (ComputeBackend backend in new[] { ComputeBackend.Cpu, ComputeBackend.DirectML })
+        foreach (ComputeBackend backend in new[] { ComputeBackend.Cpu })
         {
             var tokens = CtcTokens.Load(Path.Combine(ModelDir!, CtcModel.TokensFile));
             var tokenizer = CtcTokenizer.Load(Path.Combine(ModelDir!, CtcModel.TokenizerFile));

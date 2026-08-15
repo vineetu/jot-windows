@@ -13,7 +13,7 @@ using Jot.Services;
 using Jot.Services.Abstractions;
 using Jot.Transcription;
 using Jot.Transcription.Ctc;
-using Jot.Transcription.Nemotron;
+using Jot.Transcription.Ggml;
 using Jot.Transcription.Onnx;
 using Jot.Vocabulary;
 using Xunit;
@@ -37,7 +37,9 @@ namespace Jot.Tests;
 /// asserting a guess.
 ///
 /// Skipped, honestly, on any machine without the models. See <see cref="ModelFactAttribute"/>.
+/// Shares <c>GgmlNative</c> with the binding/soak tests — one Vulkan device per testhost.
 /// </summary>
+[Collection("GgmlNative")]
 public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDisposable
 {
     private const string Clip = "tts-terms.wav";
@@ -146,26 +148,14 @@ public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDispos
         CapturingSink Diagnostics,
         VocabularyStore Terms);
 
-    /// <summary>Exactly the engine the shipping app would construct on THIS machine: the same
-    /// <see cref="EngineSelector"/> rule over the same settings. Anything else and the transcript under
-    /// test is not the transcript the owner will see.</summary>
+    /// <summary>Exactly the engine the shipping app constructs: ggml via
+    /// <see cref="TranscriberFactory"/>. Anything else and the transcript under test is not the
+    /// transcript the owner will see.</summary>
     private ITranscriber BuildAppEngine(JotSettings s)
     {
-        var factory = new OnnxSessionFactory();
-        var fp16 = new NemotronFp16Model();
-        var adapter = Platform.GpuInfo.TryGetPrimaryAdapter();
-        bool keyMatches = adapter is not null && s.GpuProbeKey == adapter.CacheKey;
-        EngineChoice choice = EngineSelector.Select(
-            s.TranscriptionDevice, fp16.IsInstalled, s.GpuProbeVerdict, keyMatches);
-        output.WriteLine($"engine: {choice} (device={s.TranscriptionDevice}, fp16={fp16.IsInstalled}, " +
-                         $"verdict={s.GpuProbeVerdict}, keyMatch={keyMatches})");
-        return choice switch
-        {
-            EngineChoice.Fp16Dml => new NemotronFp16Transcriber(fp16, factory, ComputeBackend.DirectML),
-            EngineChoice.Int4DmlEncoder =>
-                new NemotronTranscriber(new NemotronModel(), factory, ComputeBackend.DirectML),
-            _ => new NemotronTranscriber(new NemotronModel(), factory, ComputeBackend.Cpu),
-        };
+        ITranscriber t = TranscriberFactory.Create(s, new NemotronGgufModel(), msg => output.WriteLine(msg));
+        output.WriteLine($"engine: ggml installed={t.IsModelInstalled} device={s.TranscriptionDevice}");
+        return t;
     }
 
     private Harness Build(bool vocabularyOn, Func<CtcVocabularySpotter, IVocabularySpotter>? wrap = null,
@@ -257,7 +247,7 @@ public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDispos
     ///
     /// A term that fails to correct is a FINDING, not a threshold to tune. The assertion names it.
     /// </summary>
-    [ModelFact("installed-ctc", "installed-nemotron", "audio:tts-terms.wav")]
+    [ModelFact("installed-ctc", "ggml-natives", "ggml-model", "audio:tts-terms.wav")]
     public async Task E2E_VocabularyOffThenOn_CorrectsThePlantedTerms()
     {
         float[] samples = LoadClip();
@@ -381,6 +371,19 @@ public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDispos
                 continue;
             }
 
+            // Gate BLOCK is attribution, not a silent drop. ggml writes "Sri Ram"; the spotter
+            // hears Sriram; the brake refuses Ram→Sriram and says so. Same contract as
+            // spot-unplaced: the log names the term so "I added it and nothing happened" is
+            // answerable. ONNX used to miss this path (this test skipped after int4/fp16 left).
+            string? blocked = on.Diagnostics.Lines.FirstOrDefault(
+                l => l.Contains("decision=BLOCK", StringComparison.Ordinal)
+                     && l.Contains($"→ {term}", StringComparison.Ordinal));
+            if (blocked is not null)
+            {
+                output.WriteLine($"  {term,-12} heard, gate refused — logged: {blocked}");
+                continue;
+            }
+
             string? log = on.Diagnostics.Lines.FirstOrDefault(
                 l => l.Contains($"spot-unplaced {term}", StringComparison.Ordinal));
             if (log is null)
@@ -421,7 +424,7 @@ public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDispos
     /// called: the 132 MB session load lands INSIDE the stop. Prints the wall time; asserts only the
     /// invariant, that a transcript is delivered either way.
     /// </summary>
-    [ModelFact("installed-ctc", "installed-nemotron", "audio:tts-terms.wav")]
+    [ModelFact("installed-ctc", "ggml-natives", "ggml-model", "audio:tts-terms.wav")]
     public async Task E2E_ColdSpotter_StillDeliversWithinTheDeadlineOrDegrades()
     {
         Harness h = Build(vocabularyOn: true);
@@ -445,7 +448,7 @@ public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDispos
 
     /// <summary>D6: a spotter that throws after doing the real work still delivers the real transcript,
     /// byte-for-byte identical to the vocabulary-off run.</summary>
-    [ModelFact("installed-ctc", "installed-nemotron", "audio:tts-terms.wav")]
+    [ModelFact("installed-ctc", "ggml-natives", "ggml-model", "audio:tts-terms.wav")]
     public async Task E2E_FailingSpotter_StillDeliversTheRawTranscript()
     {
         float[] samples = LoadClip();
@@ -473,7 +476,7 @@ public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDispos
 
     /// <summary>D6: a spotter slower than the deadline throws nothing, so only the deadline saves the
     /// dictation -- and the state machine must still come home to Idle.</summary>
-    [ModelFact("installed-ctc", "installed-nemotron", "audio:tts-terms.wav")]
+    [ModelFact("installed-ctc", "ggml-natives", "ggml-model", "audio:tts-terms.wav")]
     public async Task E2E_SlowSpotter_HitsTheDeadlineAndStillDelivers()
     {
         float[] samples = LoadClip();

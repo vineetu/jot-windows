@@ -27,12 +27,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettingsStore _store;
     private readonly IThemeService _theme;
     private readonly ModelDownload _download;
-    private readonly GpuModelDownload _gpuDownload;
     private readonly CtcModelDownload _vocabularyDownload;
     /// <summary>Every model-download surface this page owns, so anything that invalidates "is it on
     /// disk?" refreshes ALL of them. Replaces the individually-named `Refresh()` calls, which were
-    /// already one short: a data-folder move refreshed only <see cref="_download"/>, leaving the GPU
-    /// row claiming "Installed" against a folder the model no longer lived in.</summary>
+    /// already one short: a data-folder move refreshed only <see cref="_download"/>.</summary>
     private readonly ModelDownload[] _downloads;
     private readonly DataFolderMigrator _migrator;
     private readonly ITranscriber _transcriber;
@@ -63,11 +61,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         Jot.Transcription.TranscriptionDevices.Cpu,
         Jot.Transcription.TranscriptionDevices.GpuVulkan,
     ];
-
-    /// <summary>The leftover fp16 ONNX row stays as a manual escape hatch only while that model is
-    /// still on disk (or a download is running). Hidden once the GGUF is the engine.</summary>
-    public bool ShowLegacyGpuModel =>
-        _gpuDownload.IsInstalled || _gpuDownload.IsDownloading || _gpuDownload.Failed;
 
     /// <summary>Paste-method choices for the Settings dropdown (value persisted, label shown). Mirrors Handy.</summary>
     public sealed record PasteMethodOption(string Value, string Label);
@@ -114,11 +107,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Shared on-device model download — the SAME instance the setup wizard uses (one downloader,
     /// one progress/status surface). The Model row binds its status, progress bar and Download button here.</summary>
     public ModelDownload Download => _download;
-
-    /// <summary>The optional fp16 GPU model's download state — the SAME instance GpuTierCoordinator's
-    /// silent background fetch drives, so the "GPU model" row shows live progress either way. The manual
-    /// Download button exists for the cases the automatic path skips (metered connection, weak-looking GPU).</summary>
-    public GpuModelDownload GpuDownload => _gpuDownload;
 
     /// <summary>The optional vocabulary keyword-spotter model's download state — the "Vocabulary model"
     /// row's status, progress bar and Download/Retry button. Started ONLY by the user (the toggle-on
@@ -232,7 +220,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
-        ModelDownload download, GpuModelDownload gpuDownload, CtcModelDownload vocabularyDownload,
+        ModelDownload download, CtcModelDownload vocabularyDownload,
         DataFolderMigrator migrator,
         ITranscriber transcriber, IAiClient ai, AiCredentials credentials, PfbAuth pfb, ISoundService sound,
         VocabularyStore vocabulary, IVocabularySpotter spotter)
@@ -240,9 +228,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         _store = store;
         _theme = theme;
         _download = download;
-        _gpuDownload = gpuDownload;
         _vocabularyDownload = vocabularyDownload;
-        _downloads = [download, gpuDownload, vocabularyDownload];
+        _downloads = [download, vocabularyDownload];
         _migrator = migrator;
         _transcriber = transcriber;
         _ai = ai;
@@ -302,7 +289,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     public void RefreshDownloads()
     {
         foreach (ModelDownload d in _downloads) d.Refresh();
-        OnPropertyChanged(nameof(ShowLegacyGpuModel));
         RaiseVocabularyComputed();
     }
 

@@ -1,31 +1,36 @@
 using System.IO;
 using System.Text.Json;
 using Jot.Transcription.Ggml;
-using Jot.Transcription.Nemotron;
 
 namespace Jot.Services;
 
 /// <summary>
 /// Deletes leftover int4 / fp16 ONNX model folders AFTER the Q8_0 GGUF is on disk and ggml has
 /// actually loaded. Crash-safe: a marker in the config root records the in-flight cleanup so a
-/// kill mid-delete resumes on the next launch. The GGUF is never touched. The int4
-/// <em>installer</em> stays — this only removes files, so a floor-CPU machine can still fetch
-/// int4 later (K3 hold).
+/// kill mid-delete resumes on the next launch. The GGUF is never touched.
 ///
-/// At every instant the user has a working engine: before the marker, ONNX files are intact;
-/// after GGUF is verified present at the recorded size, ggml is the engine even if a leftover
-/// ONNX file survives a sharing lock (the marker retries next launch).
+/// The ONNX engine is gone (K3 accepted: Q8_0 beats int4 at 4+ threads; the 1–2 thread tail is
+/// recoverable from git). This only removes files. A user whose GGUF is not yet verified keeps
+/// the leftover folders — they are not an engine, but they must not be deleted first.
+///
+/// Folder names are constants here so this does not depend on the deleted locators.
 /// </summary>
 public static class OrtModelCleanup
 {
     public const string MarkerFile = "ort-cleanup.json";
+
+    /// <summary>Historical int4 ONNX folder. Kept so leftover installs are found after the locator is gone.</summary>
+    public const string LeftoverInt4Folder = "nemotron-3.5-asr-streaming-0.6b-onnx-int4";
+
+    /// <summary>Historical fp16 ONNX folder. Same reason as <see cref="LeftoverInt4Folder"/>.</summary>
+    public const string LeftoverFp16Folder = "nemotron-3.5-asr-streaming-0.6b-onnx-fp16";
 
     internal sealed record Marker(string GgufPath, long GgufBytes, string Int4Dir, string Fp16Dir);
 
     public static bool HasPending(string configDir) => File.Exists(Path.Combine(configDir, MarkerFile));
 
     /// <summary>Arm cleanup. Idempotent. No-op when the GGUF is missing — never delete the only engine.</summary>
-    public static void Request(string configDir, NemotronGgufModel gguf, NemotronModel int4, NemotronFp16Model fp16)
+    public static void Request(string configDir, NemotronGgufModel gguf, string modelsParent)
     {
         if (!gguf.IsInstalled) return;
         long size;
@@ -34,7 +39,10 @@ public static class OrtModelCleanup
         if (size <= 0) return;
 
         Directory.CreateDirectory(configDir);
-        var marker = new Marker(gguf.ModelPath, size, int4.Directory, fp16.Directory);
+        var marker = new Marker(
+            gguf.ModelPath, size,
+            Path.Combine(modelsParent, LeftoverInt4Folder),
+            Path.Combine(modelsParent, LeftoverFp16Folder));
         File.WriteAllText(Path.Combine(configDir, MarkerFile), JsonSerializer.Serialize(marker));
         Run(configDir, marker);
     }
@@ -102,7 +110,7 @@ public static class OrtModelCleanup
         }
         catch (Exception ex)
         {
-            // Sharing violation while the previous engine still has files mapped — leave the marker.
+            // Sharing violation while something still has files mapped — leave the marker.
             JotLog.Info($"ort-cleanup: could not remove {label} at {dir}: {ex.Message}");
             return false;
         }

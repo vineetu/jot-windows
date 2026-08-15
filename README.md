@@ -11,9 +11,9 @@ or hidden pending more work — see `docs/features.md` (canonical status per fea
 `docs/plans/fixit-worklist.md` (the prioritized todo) for the honest, up-to-date picture.
 Highlights of what's real vs. not:
 
-- ✅ **Transcription is real, not stubbed.** On-device STT via NVIDIA Nemotron 3.5 (int4
-  ONNX), streaming, multilingual (~33 languages via one model), CPU by default with an
-  optional DirectML GPU backend.
+- ✅ **Transcription is real, not stubbed.** On-device STT via NVIDIA Nemotron 3.5 (Q8_0
+  GGUF / ggml), streaming, multilingual (32 locales on this engine), Vulkan when the
+  driver supports it, otherwise the same model on CPU.
 - ✅ **Core dictation loop works end-to-end:** global hotkey → mic capture (WASAPI) → local
   transcription → clipboard-sandwich paste at your cursor.
 - ✅ **Recents library** (date-grouped, virtualized, searchable, tag filters), recording
@@ -44,7 +44,7 @@ source of truth and is kept current as things change.
 | App shell | WPF + [WPF-UI](https://github.com/lepoco/wpfui) Fluent theme, .NET 10 (`net10.0-windows`) |
 | Global hotkey | Win32 `RegisterHotKey` on a message-only window (`Recording/GlobalHotkey.cs`) |
 | Microphone | WASAPI via NAudio → 16 kHz mono Float32 (`Recording/AudioRecorder.cs`) |
-| Transcription | On-device NVIDIA Nemotron 3.5 streaming (int4 ONNX) via ONNX Runtime, CPU or DirectML (`Transcription/Nemotron`) |
+| Transcription | On-device NVIDIA Nemotron 3.5 streaming (Q8_0 GGUF) via ggml, Vulkan or CPU (`Transcription/Ggml`). ONNX Runtime is the CTC vocabulary spotter only. |
 | AI (optional) | Bring-your-own-provider (OpenAI / Anthropic / Gemini / local Ollama) for cleanup, rewrite, Ask Jot (`Services/Ai`) |
 | Delivery | Clipboard sandwich + synthetic `Ctrl+V` (`Delivery/TextInjector.cs`) |
 | Updates | [Velopack](https://velopack.io) self-updater (unpackaged/Setup.exe installs only — skipped automatically in an MSIX/Store package) |

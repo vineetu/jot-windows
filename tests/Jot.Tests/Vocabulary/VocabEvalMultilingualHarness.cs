@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Jot.Transcription;
+using Jot.Transcription.Ggml;
 using Jot.Transcription.Nemotron;
 using Jot.Transcription.Onnx;
 using Jot.Vocabulary;
@@ -179,10 +180,9 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
             ? m : 400;
         string only = Environment.GetEnvironmentVariable("JOT_VOCAB_EVAL_LANG") ?? "";
 
-        var model = new NemotronFp16Model();
-        Assert.True(model.IsInstalled, "fp16 Nemotron not installed");
-        var factory = new OnnxSessionFactory();
-        using var engine = new NemotronFp16Transcriber(model, factory, ComputeBackend.DirectML);
+        var model = new NemotronGgufModel();
+        Assert.True(model.IsInstalled, "Q8_0 GGUF not installed");
+        using var engine = new GgmlNemotronTranscriber(model, GgmlEngineOptions.Resolve(new Jot.Services.Abstractions.JotSettings()));
 
         foreach (Lang lang in Languages)
         {
@@ -194,8 +194,7 @@ public class VocabEvalMultilingualHarness(ITestOutputHelper output)
             HashSet<string> done = [.. Resume<Hypothesis>(path).Select(h => h.File)];
             if (done.Count >= clips.Count) { output.WriteLine($"{lang.Iso}: done ({done.Count})"); continue; }
 
-            Assert.True(NemotronLocales.TryGetSlot(lang.Locale, out long slot), $"no slot for {lang.Locale}");
-            engine.SetLanguageSlot(slot);
+            engine.SetLanguage(lang.Locale);
             engine.WarmUp();
 
             // Same crash-resumability as E5: the DirectML session takes the test host down every few

@@ -165,8 +165,7 @@ public static class StartupMigration
 
     /// <summary>The Q8_0 GGUF hard-errors the 8 AdaptationReady locales. Remap a saved setting so
     /// the picker and the engine agree: nn-NO → nb-NO (same language, present in the GGUF); the
-    /// other seven → auto (C NULL). Idempotent. ONNX-fallback users lose a non-production-ready
-    /// NVIDIA tier — honest, not a silent quality drop.</summary>
+    /// other seven → auto (C NULL). Idempotent. The ONNX path that accepted these 8 is gone.</summary>
     public static void MigrateGgmlUnsupportedLocales(ISettingsStore store)
     {
         string code = Transcription.Nemotron.NemotronLocales.Normalize(store.Current.Language);
@@ -191,7 +190,7 @@ public static class StartupMigration
     }
 
     /// <summary>Settings copy: leftover "GPU (DirectML)" becomes "GPU (Vulkan)" so the picker
-    /// still has a selected item. Contains "GPU" either way, so EngineSelector is unchanged.</summary>
+    /// still has a selected item. Contains "GPU" either way, so ggml backend routing is unchanged.</summary>
     public static void MigrateGpuDeviceLabel(ISettingsStore store)
     {
         if (store.Current.TranscriptionDevice != Transcription.TranscriptionDevices.Gpu) return;

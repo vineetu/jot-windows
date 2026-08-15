@@ -8,46 +8,22 @@ namespace Jot.Tests;
 public class GgmlEngineOptionsTests
 {
     [Fact]
-    public void DefaultSettings_AreOff_WithoutAssets()
+    public void DefaultLookahead_IsThree()
     {
-        Assert.False(GgmlEngineOptions.IsEnabled(new JotSettings(), _ => null));
-        Assert.False(new JotSettings().UseGgmlEngine);
         Assert.Equal(3, new JotSettings().GgmlAttContextRight);
+        Assert.Equal(3, GgmlEngineOptions.DefaultLookahead);
     }
 
     [Fact]
-    public void AssetsPresent_EnablesByDefault()
+    public void OrtEnv_IsDetectedButDoesNotChangeBackend()
     {
-        Assert.True(GgmlEngineOptions.IsEnabled(new JotSettings(), _ => null, assetsPresent: true));
-    }
-
-    [Fact]
-    public void OrtEnv_WinsOverAssets()
-    {
-        Assert.False(GgmlEngineOptions.IsEnabled(
-            new JotSettings(),
-            k => k == "JOT_ENGINE" ? "ort" : null,
-            assetsPresent: true));
-    }
-
-    [Fact]
-    public void HiddenSetting_Enables()
-    {
-        Assert.True(GgmlEngineOptions.IsEnabled(new JotSettings { UseGgmlEngine = true }, _ => null));
-    }
-
-    [Fact]
-    public void EnvGgml_EnablesEvenWhenSettingIsOff()
-    {
-        Assert.True(GgmlEngineOptions.IsEnabled(new JotSettings(), k => k == "JOT_ENGINE" ? "ggml" : null));
-    }
-
-    [Fact]
-    public void EnvOrt_ForcesOffEvenWhenSettingIsOn()
-    {
-        Assert.False(GgmlEngineOptions.IsEnabled(
-            new JotSettings { UseGgmlEngine = true },
-            k => k == "JOT_ENGINE" ? "ort" : null));
+        Assert.True(GgmlEngineOptions.IsOrtRequested(k => k == "JOT_ENGINE" ? "ort" : null));
+        Assert.False(GgmlEngineOptions.IsOrtRequested(_ => null));
+        // Detection is for the factory log line only — backend still follows the device.
+        Assert.Equal(
+            NativeMethods.BackendRequest.Vulkan,
+            GgmlEngineOptions.ResolveBackend(
+                k => k == "JOT_ENGINE" ? "ort" : null, TranscriptionDevices.Auto));
     }
 
     [Theory]
@@ -65,32 +41,29 @@ public class GgmlEngineOptionsTests
     }
 
     [Fact]
-    public void Backend_FollowsDevice_NotJustOnnxChoice()
+    public void Backend_FollowsDevice()
     {
         Assert.Equal(
-            NativeMethods.BackendRequest.Vulkan,
-            GgmlEngineOptions.ResolveBackend(EngineChoice.Fp16Dml, _ => null));
-        Assert.Equal(
-            NativeMethods.BackendRequest.Vulkan,
-            GgmlEngineOptions.ResolveBackend(EngineChoice.Int4DmlEncoder, _ => null));
-        Assert.Equal(
             NativeMethods.BackendRequest.Cpu,
-            GgmlEngineOptions.ResolveBackend(EngineChoice.Int4Cpu, _ => null, TranscriptionDevices.Cpu));
+            GgmlEngineOptions.ResolveBackend(_ => null, TranscriptionDevices.Cpu));
         Assert.Equal(
             NativeMethods.BackendRequest.Vulkan,
-            GgmlEngineOptions.ResolveBackend(EngineChoice.Int4Cpu, _ => null, TranscriptionDevices.Auto));
+            GgmlEngineOptions.ResolveBackend(_ => null, TranscriptionDevices.Auto));
         Assert.Equal(
             NativeMethods.BackendRequest.Vulkan,
-            GgmlEngineOptions.ResolveBackend(EngineChoice.Int4Cpu, _ => null, TranscriptionDevices.GpuVulkan));
+            GgmlEngineOptions.ResolveBackend(_ => null, TranscriptionDevices.GpuVulkan));
+        Assert.Equal(
+            NativeMethods.BackendRequest.Vulkan,
+            GgmlEngineOptions.ResolveBackend(_ => null, TranscriptionDevices.Gpu));
     }
 
     [Theory]
     [InlineData("cpu", "Cpu")]
     [InlineData("vulkan", "Vulkan")]
     [InlineData("auto", "Auto")]
-    public void Backend_EnvOverridesChoice(string env, string expected)
+    public void Backend_EnvOverridesDevice(string env, string expected)
     {
         Assert.Equal(expected, GgmlEngineOptions.ResolveBackend(
-            EngineChoice.Fp16Dml, k => k == "JOT_GGML_BACKEND" ? env : null).ToString());
+            k => k == "JOT_GGML_BACKEND" ? env : null, TranscriptionDevices.Cpu).ToString());
     }
 }

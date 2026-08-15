@@ -130,17 +130,6 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // `--installfp16 [dir]` downloads the optional fp16 GPU model headless → %TEMP%\jot-installfp16.txt.
-        int installFp16Arg = Array.IndexOf(e.Args, "--installfp16");
-        if (installFp16Arg >= 0)
-        {
-            string? fp16Dir = installFp16Arg + 1 < e.Args.Length && !e.Args[installFp16Arg + 1].StartsWith("--")
-                ? e.Args[installFp16Arg + 1] : null;
-            RunHeadlessInstallFp16(fp16Dir);
-            Shutdown();
-            return;
-        }
-
         // `--ffmpegtest <wav>` proves FfmpegInstaller's lazy download fetches a working ffmpeg.exe and
         // decodes a non-wav format end-to-end → %TEMP%\jot-ffmpegtest.txt.
         int ffmpegTestArg = Array.IndexOf(e.Args, "--ffmpegtest");
@@ -168,38 +157,6 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // `--nemotest <wav> [--dml] [--lang <code>]` runs the real Nemotron engine on CPU or DirectML,
-        // optionally conditioned on a locale code ("es-ES", "auto") or legacy name ("Spanish").
-        int nemoArg = Array.IndexOf(e.Args, "--nemotest");
-        if (nemoArg >= 0 && nemoArg + 1 < e.Args.Length)
-        {
-            int langArg = Array.IndexOf(e.Args, "--lang");
-            string? lang = langArg >= 0 && langArg + 1 < e.Args.Length ? e.Args[langArg + 1] : null;
-            RunNemoTest(e.Args[nemoArg + 1], e.Args.Contains("--dml"), lang);
-            Shutdown();
-            return;
-        }
-
-        // `--langprobe <wav>` transcribes the clip once per supported locale slot on the int4 engine and
-        // logs the raw <xx-YY> tag the model emits → %TEMP%\jot-langprobe.txt (slot-map ground truth).
-        int langProbeArg = Array.IndexOf(e.Args, "--langprobe");
-        if (langProbeArg >= 0 && langProbeArg + 1 < e.Args.Length)
-        {
-            RunLangProbe(e.Args[langProbeArg + 1]);
-            Shutdown();
-            return;
-        }
-
-        // `--fp16test <wav> [--dml] [--hybrid]` runs the real Nemotron FP16 engine → %TEMP%\jot-fp16test.txt.
-        // --hybrid pins decoder+joint to CPU (encoder stays on the chosen backend) for the placement A/B.
-        int fp16Arg = Array.IndexOf(e.Args, "--fp16test");
-        if (fp16Arg >= 0 && fp16Arg + 1 < e.Args.Length)
-        {
-            RunFp16Test(e.Args[fp16Arg + 1], e.Args.Contains("--dml"), e.Args.Contains("--hybrid"));
-            Shutdown();
-            return;
-        }
-
         // `--ggmltest <wav> [--backend cpu|vulkan] [--r 3|6|13] [--lang <code>]` runs the ggml engine
         // → %TEMP%\jot-ggmltest.txt. Dev-only; natives via JOT_GGML_NATIVE, GGUF via JOT_GGML_MODEL.
         int ggmlArg = Array.IndexOf(e.Args, "--ggmltest");
@@ -218,7 +175,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // `--probetest` runs the GPU identity + fp16/DML benchmark probe → %TEMP%\jot-probetest.txt.
+        // `--probetest` runs the GPU identity + ggml/Vulkan benchmark probe → %TEMP%\jot-probetest.txt.
         if (e.Args.Contains("--probetest"))
         {
             RunProbeTest();
@@ -354,25 +311,6 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--pillscrolltest"))
         {
             RunPillScrollTest();
-            return;
-        }
-
-        // `--dmldiag` builds the Nemotron encoder on DirectML with verbose ORT logging to find the
-        // operator DirectML rejects.
-        if (e.Args.Contains("--dmldiag"))
-        {
-            RunDmlDiag();
-            Shutdown();
-            return;
-        }
-
-        // `--streamtest <wav> [--dml]` feeds a wav through the live streaming path (OpenStream +
-        // incremental Accept + Finish) — the exact path live dictation uses.
-        int streamArg = Array.IndexOf(e.Args, "--streamtest");
-        if (streamArg >= 0 && streamArg + 1 < e.Args.Length)
-        {
-            RunStreamTest(e.Args[streamArg + 1], e.Args.Contains("--dml"));
-            Shutdown();
             return;
         }
 
@@ -1537,83 +1475,6 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private static void RunNemoTest(string wavPath, bool useDml, string? langCode = null)
-    {
-        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-nemotest.txt");
-        try
-        {
-            var backend = useDml ? Transcription.Onnx.ComputeBackend.DirectML : Transcription.Onnx.ComputeBackend.Cpu;
-            var model = new Transcription.Nemotron.NemotronModel();
-            if (!model.IsInstalled)
-            {
-                System.IO.File.WriteAllText(outPath, $"MODEL NOT INSTALLED at {model.Directory}\n");
-                return;
-            }
-            var factory = new Transcription.Onnx.OnnxSessionFactory();
-            string fallback = "";
-            factory.BackendFallback += m => fallback += m + " | ";
-            using var transcriber = new Transcription.Nemotron.NemotronTranscriber(model, factory, backend);
-            if (langCode is not null)
-            {
-                Transcription.Nemotron.NemotronLocales.TryGetSlot(langCode, out long slot);
-                transcriber.SetLanguageId(slot);
-            }
-            float[] samples = WavAudio.ReadMono16k(wavPath);
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            string text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
-            sw.Stop();
-            double seconds = samples.Length / (double)WavAudio.SampleRate;
-            System.IO.File.WriteAllText(outPath,
-                $"OK\nbackend={backend}\nDML_FELL_BACK_TO_CPU={(fallback.Length > 0)}\nfallbackMsg={fallback}\n" +
-                $"audio_s={seconds:0.0}\nms={sw.ElapsedMilliseconds}\nTEXT={text}\n");
-        }
-        catch (Exception ex)
-        {
-            System.IO.File.WriteAllText(outPath, $"ERROR backend={(useDml ? "DirectML" : "CPU")}\n{ex}\n");
-        }
-    }
-
-    private static void RunFp16Test(string wavPath, bool useDml, bool hybrid = false)
-    {
-        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-fp16test.txt");
-        try
-        {
-            var backend = useDml ? Transcription.Onnx.ComputeBackend.DirectML : Transcription.Onnx.ComputeBackend.Cpu;
-            var model = new Transcription.Nemotron.NemotronFp16Model();
-            if (!model.IsInstalled)
-            {
-                System.IO.File.WriteAllText(outPath, $"MODEL NOT INSTALLED at {model.Directory}\n");
-                return;
-            }
-            var factory = new Transcription.Onnx.OnnxSessionFactory();
-            string fallback = "";
-            factory.BackendFallback += m => fallback += m + " | ";
-            using var transcriber = new Transcription.Nemotron.NemotronFp16Transcriber(model, factory, backend,
-                hybrid ? Transcription.Onnx.ComputeBackend.Cpu : null);
-            float[] samples = WavAudio.ReadMono16k(wavPath);
-
-            // First pass warms the model (session load + graph optimisation + kernel priming).
-            var loadTimer = System.Diagnostics.Stopwatch.StartNew();
-            string text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
-            loadTimer.Stop();
-
-            // Second pass is the true warm-inference cost.
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            text = transcriber.TranscribeAsync(samples, WavAudio.SampleRate).GetAwaiter().GetResult();
-            sw.Stop();
-
-            double seconds = samples.Length / (double)WavAudio.SampleRate;
-            System.IO.File.WriteAllText(outPath,
-                $"OK\nbackend={backend}\nhybrid={hybrid}\nDML_FELL_BACK_TO_CPU={(fallback.Length > 0)}\nfallbackMsg={fallback}\n" +
-                $"audio_s={seconds:0.00}\ncold_ms={loadTimer.ElapsedMilliseconds}\nwarm_ms={sw.ElapsedMilliseconds}\n" +
-                $"TEXT={text}\n");
-        }
-        catch (Exception ex)
-        {
-            System.IO.File.WriteAllText(outPath, $"ERROR backend={(useDml ? "DirectML" : "CPU")}\n{ex}\n");
-        }
-    }
-
     private static void RunGgmlTest(string wavPath, string? backend, int? r, string? langCode)
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-ggmltest.txt");
@@ -1631,14 +1492,14 @@ public partial class App : System.Windows.Application
                     "NATIVES NOT INSTALLED (set JOT_GGML_NATIVE to official v0.1.3 / a94e021)\n");
                 return;
             }
-            var s = new JotSettings { UseGgmlEngine = true, Language = langCode ?? "en-US" };
+            var s = new JotSettings { Language = langCode ?? "en-US" };
             if (r is int lookahead) s.GgmlAttContextRight = lookahead;
             var env = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrWhiteSpace(backend)) env["JOT_GGML_BACKEND"] = backend;
             string? native = Environment.GetEnvironmentVariable("JOT_GGML_NATIVE");
             if (!string.IsNullOrWhiteSpace(native)) env["JOT_GGML_NATIVE"] = native;
             Func<string, string?> lookup = k => env.TryGetValue(k, out string? v) ? v : Environment.GetEnvironmentVariable(k);
-            var opts = Transcription.Ggml.GgmlEngineOptions.Resolve(s, Transcription.EngineChoice.Int4Cpu, lookup);
+            var opts = Transcription.Ggml.GgmlEngineOptions.Resolve(s, lookup);
             using var transcriber = new Transcription.Ggml.GgmlNemotronTranscriber(model, opts);
             if (langCode is not null) transcriber.SetLanguage(langCode);
             float[] samples = WavAudio.ReadMono16k(wavPath);
@@ -1685,9 +1546,9 @@ public partial class App : System.Windows.Application
                 sb.AppendLine($"cacheKey={id.CacheKey}");
             }
 
-            var model = new Transcription.Nemotron.NemotronFp16Model();
+            var model = new Transcription.Ggml.NemotronGgufModel();
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            var r = Transcription.GpuProbe.Run(model);
+            var r = Transcription.Ggml.GgmlProbe.Run(model);
             sw.Stop();
             sb.AppendLine($"probe_total_ms={sw.ElapsedMilliseconds}");
             sb.AppendLine($"gpuViable={r.GpuViable}");
@@ -1704,159 +1565,15 @@ public partial class App : System.Windows.Application
         System.IO.File.WriteAllText(outPath, sb.ToString());
     }
 
-    private static void RunDmlDiag()
-    {
-        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-dmldiag.txt");
-        var log = new System.Text.StringBuilder();
-        try
-        {
-            var model = new Transcription.Nemotron.NemotronModel();
-            log.AppendLine("encoder=" + model.Encoder + " exists=" + System.IO.File.Exists(model.Encoder));
-
-            // Verbose ORT logging → the DML EP prints each node it assigns; the last one before the
-            // failure is the culprit. Logs go to stderr; run with stderr redirected to capture them.
-            var opts = new Microsoft.ML.OnnxRuntime.SessionOptions
-            {
-                GraphOptimizationLevel = Microsoft.ML.OnnxRuntime.GraphOptimizationLevel.ORT_ENABLE_ALL,
-                ExecutionMode = Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL,
-                EnableMemoryPattern = false,
-                LogSeverityLevel = Microsoft.ML.OnnxRuntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE,
-                LogVerbosityLevel = 1,
-            };
-            opts.AppendExecutionProvider_DML(0);
-            try
-            {
-                using var s = new Microsoft.ML.OnnxRuntime.InferenceSession(model.Encoder, opts);
-                log.AppendLine("ENCODER DML SESSION CREATED OK (no failure!)");
-            }
-            catch (Exception ex)
-            {
-                log.AppendLine("ENCODER DML FAILED:");
-                log.AppendLine(ex.ToString());
-            }
-        }
-        catch (Exception ex) { log.AppendLine("OUTER ERROR: " + ex); }
-        System.IO.File.WriteAllText(outPath, log.ToString());
-    }
-
-    private static void RunStreamTest(string wavPath, bool useDml)
-    {
-        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-streamtest.txt");
-        try
-        {
-            var backend = useDml ? Transcription.Onnx.ComputeBackend.DirectML : Transcription.Onnx.ComputeBackend.Cpu;
-            var model = new Transcription.Nemotron.NemotronModel();
-            if (!model.IsInstalled) { System.IO.File.WriteAllText(outPath, "MODEL NOT INSTALLED\n"); return; }
-            using var transcriber = new Transcription.Nemotron.NemotronTranscriber(
-                model, new Transcription.Onnx.OnnxSessionFactory(), backend);
-            float[] samples = WavAudio.ReadMono16k(wavPath);
-
-            // Simulate live dictation: open a session and feed ~300ms chunks incrementally.
-            var session = transcriber.OpenStream();
-            int chunk = WavAudio.SampleRate * 300 / 1000;
-            string lastPartial = "";
-            int partials = 0;
-            var acceptSw = new System.Diagnostics.Stopwatch();
-            double acceptTotalMs = 0, acceptMaxMs = 0, lastTenthAvgMs = 0;
-            int calls = 0, lastTenthCalls = 0;
-            int tenthStart = (samples.Length / chunk) * 9 / 10; // the LAST 10% of calls — where O(n) mel recompute hurt
-            for (int i = 0; i < samples.Length; i += chunk)
-            {
-                int n = Math.Min(chunk, samples.Length - i);
-                var slice = new float[n];
-                Array.Copy(samples, i, slice, 0, n);
-                acceptSw.Restart();
-                string p = session.Accept(slice);
-                acceptSw.Stop();
-                acceptTotalMs += acceptSw.Elapsed.TotalMilliseconds;
-                acceptMaxMs = Math.Max(acceptMaxMs, acceptSw.Elapsed.TotalMilliseconds);
-                if (calls >= tenthStart) { lastTenthAvgMs += acceptSw.Elapsed.TotalMilliseconds; lastTenthCalls++; }
-                calls++;
-                if (p.Length > 0 && p != lastPartial) { lastPartial = p; partials++; }
-            }
-            var finishSw = System.Diagnostics.Stopwatch.StartNew();
-            string final = session.Finish().Trim();
-            finishSw.Stop();
-            if (lastTenthCalls > 0) lastTenthAvgMs /= lastTenthCalls;
-            System.IO.File.WriteAllText(outPath,
-                $"OK\nbackend={backend}\npartialsSeen={partials}\nlastPartialLen={lastPartial.Length}\n" +
-                $"accept_total_ms={acceptTotalMs:0} accept_max_ms={acceptMaxMs:0} accept_lastTenth_avg_ms={lastTenthAvgMs:0}\n" +
-                $"finish_ms={finishSw.ElapsedMilliseconds}\n" +
-                $"finalLen={final.Length}\nFINAL={final}\n");
-        }
-        catch (Exception ex)
-        {
-            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
-        }
-    }
-
     private static void RunHeadlessInstall(string dir)
     {
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-install-result.txt");
         try
         {
-            var model = new Transcription.Nemotron.NemotronModel(dir);
-            var installer = new Transcription.Nemotron.NemotronModelInstaller(model);
+            var model = new Transcription.Ggml.NemotronGgufModel(dir);
+            var installer = new Transcription.Ggml.NemotronGgufModelInstaller(model);
             Task.Run(() => installer.EnsureInstalledAsync()).GetAwaiter().GetResult();
             System.IO.File.WriteAllText(outPath, $"OK installed={model.IsInstalled}\n");
-        }
-        catch (Exception ex)
-        {
-            System.IO.File.WriteAllText(outPath, $"ERROR\n{ex}\n");
-        }
-    }
-
-    private static void RunLangProbe(string wavPath)
-    {
-        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-langprobe.txt");
-        var sb = new System.Text.StringBuilder();
-        try
-        {
-            var model = new Transcription.Nemotron.NemotronModel();
-            if (!model.IsInstalled)
-            {
-                System.IO.File.WriteAllText(outPath, $"MODEL NOT INSTALLED at {model.Directory}\n");
-                return;
-            }
-            var factory = new Transcription.Onnx.OnnxSessionFactory();
-            using var t = new Transcription.Nemotron.NemotronTranscriber(
-                model, factory, Transcription.Onnx.ComputeBackend.Cpu);
-            // First ~3 s is plenty: the language tag is emitted at the start of the token stream.
-            float[] all = WavAudio.ReadMono16k(wavPath);
-            float[] samples = all.Length > 3 * WavAudio.SampleRate ? all[..(3 * WavAudio.SampleRate)] : all;
-
-            foreach (var locale in Transcription.Nemotron.NemotronLocales.All)
-            {
-                t.SetLanguageId(locale.Slot);         // sessions snapshot at open — one per locale
-                var session = t.OpenStream();
-                session.Accept(samples);
-                string text = session.Finish();
-                // The raw pieces include the <xx-YY> tag Detokenize strips — that's the ground truth.
-                string rawHead = string.Join(" ",
-                    session.Tokens.Take(4).Select(id => t.Piece(id)));
-                sb.AppendLine($"{locale.Code,-6} slot={locale.Slot,3}  raw=[{rawHead}]  text={text}");
-            }
-        }
-        catch (Exception ex)
-        {
-            sb.AppendLine("ERROR");
-            sb.AppendLine(ex.ToString());
-        }
-        System.IO.File.WriteAllText(outPath, sb.ToString());
-    }
-
-    private static void RunHeadlessInstallFp16(string? dir)
-    {
-        string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-installfp16.txt");
-        try
-        {
-            var model = new Transcription.Nemotron.NemotronFp16Model(dir);
-            var installer = new Transcription.Nemotron.NemotronFp16ModelInstaller(model);
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            Task.Run(() => installer.EnsureInstalledAsync()).GetAwaiter().GetResult();
-            sw.Stop();
-            System.IO.File.WriteAllText(outPath,
-                $"OK installed={model.IsInstalled} dir={model.Directory} ms={sw.ElapsedMilliseconds}\n");
         }
         catch (Exception ex)
         {
@@ -2591,30 +2308,19 @@ public partial class App : System.Windows.Application
         services.AddSingleton<Transcription.Onnx.OnnxSessionFactory>();
         services.AddSingleton<ParakeetModel>();
         services.AddSingleton<ParakeetModelInstaller>();
-        services.AddSingleton<Transcription.Nemotron.NemotronModel>(sp =>
-            new Transcription.Nemotron.NemotronModel(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
-        services.AddSingleton<Transcription.Nemotron.NemotronFp16Model>(sp =>
-            new Transcription.Nemotron.NemotronFp16Model(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
         services.AddSingleton<Transcription.Ggml.NemotronGgufModel>(sp =>
             new Transcription.Ggml.NemotronGgufModel(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
-        services.AddSingleton<Transcription.Nemotron.NemotronModelInstaller>(); // K3 hold: CPU fallback path stays
-        services.AddSingleton<Transcription.Nemotron.NemotronFp16ModelInstaller>();
         services.AddSingleton<Transcription.Ggml.NemotronGgufModelInstaller>();
         services.AddSingleton<ModelDownload>();   // shared GGUF download state (wizard + settings)
-        services.AddSingleton<GpuModelDownload>(); // leftover fp16 installer (no longer auto-fetched)
         services.AddSingleton<GpuTierCoordinator>(); // zero-touch GGUF fetch→probe→cleanup owner
         services.AddSingleton<DataFolderMigrator>(); // moves data when the Save location changes; resumes on launch
         services.AddSingleton<RetentionCleaner>();
         services.AddSingleton<UsageStats>();
         services.AddSingleton<HotkeyManager>();
-        // Nemotron 3.5. Default is ggml (Q8_0 + official natives) when assets are present; ONNX
-        // remains the fallback (int4 / leftover fp16) and the JOT_ENGINE=ort emergency path.
+        // Nemotron 3.5 via ggml (Q8_0 + official natives). ONNX Nemotron is gone.
         services.AddSingleton<ITranscriber>(sp => Transcription.TranscriberFactory.Create(
             sp.GetRequiredService<ISettingsStore>().Current,
-            sp.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
-            sp.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>(),
             sp.GetRequiredService<Transcription.Ggml.NemotronGgufModel>(),
-            sp.GetRequiredService<Transcription.Onnx.OnnxSessionFactory>(),
             JotLog.Info));   // the per-launch `engine: …` line must keep landing in the app log
         // Vocabulary (SHIPS VISIBLE inside Advanced features, master toggle default off). All three
         // stores take the SAME
@@ -3138,14 +2844,14 @@ public partial class App : System.Windows.Application
     /// (marker + resume). No-op when ggml is not the active engine this launch.</summary>
     private void TryCleanupOrtAfterGgml(ITranscriber transcriber)
     {
-        if (transcriber is not Transcription.SelectingTranscriber sel || !sel.UsingGgml) return;
+        if (transcriber is not Transcription.Ggml.GgmlNemotronTranscriber g || !g.IsModelInstalled) return;
         try
         {
+            var settings = Services.GetRequiredService<ISettingsStore>();
             OrtModelCleanup.Request(
                 JotPaths.ConfigDir,
                 Services.GetRequiredService<Transcription.Ggml.NemotronGgufModel>(),
-                Services.GetRequiredService<Transcription.Nemotron.NemotronModel>(),
-                Services.GetRequiredService<Transcription.Nemotron.NemotronFp16Model>());
+                JotPaths.ModelsDir(settings.Current));
         }
         catch (Exception ex)
         {
@@ -3171,7 +2877,7 @@ public partial class App : System.Windows.Application
     {
         _hotkeys?.Dispose();
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
-        // Disposes DI singletons — the recorder (mic) and the transcriber (native ONNX sessions).
+        // Disposes DI singletons — the recorder (mic) and the transcriber (native ggml + CTC sessions).
         (Services as IDisposable)?.Dispose();
         _instanceMutex?.Dispose();
         base.OnExit(e);

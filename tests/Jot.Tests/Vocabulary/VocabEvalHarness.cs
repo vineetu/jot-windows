@@ -8,7 +8,7 @@ using System.Text;
 using System.Text.Json;
 using Jot.Transcription;
 using Jot.Transcription.Ctc;
-using Jot.Transcription.Nemotron;
+using Jot.Transcription.Ggml;
 using Jot.Transcription.Onnx;
 using Jot.Vocabulary;
 using Xunit;
@@ -24,7 +24,7 @@ namespace Jot.Tests.Vocabulary;
 /// Staged and cached on purpose — transcription is the expensive half and the scoring rules were
 /// rewritten several times against the same decoded text.
 ///
-///   <c>$env:JOT_VOCAB_EVAL="transcribe"</c>  FLEURS wav → Nemotron fp16/DML → TextPipeline.Clean
+///   <c>$env:JOT_VOCAB_EVAL="transcribe"</c>  FLEURS wav → Nemotron Q8_0 ggml → TextPipeline.Clean
 ///   <c>$env:JOT_VOCAB_EVAL="spot"</c>        the shipping CTC spotter over the same clips
 ///   <c>$env:JOT_VOCAB_EVAL="report"</c>      corrector vs spotter vs both, through VocabularyGate
 ///   <c>$env:JOT_VOCAB_EVAL="concat-scan"</c>  exact/near multi-word-span × term, for the concat-span rule
@@ -118,11 +118,10 @@ public class VocabEvalHarness(ITestOutputHelper output)
         File.WriteAllLines(Path.Combine(Out, "terms.txt"), terms);
         output.WriteLine($"corpus: {clips.Count} clips, {clips.Sum(c => c.Seconds) / 3600:F2} h, {terms.Count} terms");
 
-        var model = new NemotronFp16Model();
-        Assert.True(model.IsInstalled, "fp16 Nemotron not installed");
-        var factory = new OnnxSessionFactory();
-        using var engine = new NemotronFp16Transcriber(model, factory, ComputeBackend.DirectML);
-        engine.SetLanguageSlot(0);
+        var model = new NemotronGgufModel();
+        Assert.True(model.IsInstalled, "Q8_0 GGUF not installed");
+        using var engine = new GgmlNemotronTranscriber(model, GgmlEngineOptions.Resolve(new Jot.Services.Abstractions.JotSettings()));
+        engine.SetLanguage("en-US");
         engine.WarmUp();
 
         // Resumable and append-only: the ONNX/DirectML session takes the whole test host down every few

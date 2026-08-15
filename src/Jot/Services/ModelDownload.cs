@@ -10,8 +10,7 @@ namespace Jot.Services;
 /// Settings page — so there is a single download path and a single progress/status surface, never two
 /// copies to drift. Backed by an <see cref="IModelInstaller"/> (the actual downloader); registered as
 /// a singleton so a download started in one place is reflected wherever it's bound. The base class is
-/// the required Q8_0 GGUF; <see cref="GpuModelDownload"/> still wraps the leftover fp16 installer
-/// (no longer auto-fetched). The int4 installer stays registered for the K3 CPU fallback.
+/// the required Q8_0 GGUF. The CTC vocabulary model uses <see cref="CtcModelDownload"/>.
 /// </summary>
 public partial class ModelDownload : ObservableObject
 {

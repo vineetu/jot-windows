@@ -5,7 +5,7 @@ namespace Jot.Transcription.Ggml;
 /// <summary>
 /// Download recipe for the Nemotron 3.5 Q8_0 GGUF — the one model that replaces the int4+fp16 pair
 /// when ggml is the engine. Transfer (retry, Range-resume, stall, checksum) is the shared
-/// <see cref="AssetDownloader"/>; this class only pins WHAT and WHERE, same as the ONNX installers.
+/// <see cref="AssetDownloader"/>; this class only pins WHAT and WHERE.
 ///
 /// Self-hosted on our GitHub release for the same Store-cert reason as int4: a lab that blocks
 /// huggingface.co failed the first-run download. Do not point this at HF.

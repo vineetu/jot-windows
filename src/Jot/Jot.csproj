@@ -26,7 +26,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Tests exercise internal engine pieces (MelFrontend/StreamingMel byte-exactness). -->
+    <!-- Tests exercise internal engine pieces (ggml binding, CTC spotter). -->
     <InternalsVisibleTo Include="Jot.Tests" />
     <!-- The CLI reuses app internals rather than forking them (VocabularyRunner.Enrich, the
          corrections.json serializer options). -->
@@ -55,7 +55,7 @@
     <!-- WinApp CLI integration: enables 'dotnet run' support for packaged apps and MSIX packaging.
          NOT Microsoft.WindowsAppSDK — Jot is plain WPF (no WinUI3/app-lifecycle APIs used), and that
          package transitively ships its own onnxruntime.dll that collides with the one already used for
-         STT (Microsoft.ML.OnnxRuntime.DirectML) — APPX1101 duplicate-payload-path build error. -->
+         the CTC spotter (Microsoft.ML.OnnxRuntime) — APPX1101 duplicate-payload-path build error. -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.4.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
@@ -64,12 +64,9 @@
     <PackageReference Include="QRCoder" Version="1.6.0" />
     <!-- Auto-updating installer (Setup.exe) + delta updates from GitHub Releases -->
     <PackageReference Include="Velopack" Version="1.2.0" />
-    <!-- On-device speech-to-text: Parakeet-TDT ONNX. DirectML package = CPU + DirectML EPs.
-         Native runtime pinned to 1.20.1 (newer builds fail DLL init on this box). -->
-    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.20.1" />
-    <!-- Newer DirectML runtime than the 1.15.2 that ORT.DirectML bundles: 1.15.2 rejects Nemotron's
-         int4 (4-bit) ops on this GPU ("parameter is incorrect"); 1.15.4 supports them. -->
-    <PackageReference Include="Microsoft.AI.DirectML" Version="1.15.4" />
+    <!-- CTC vocabulary spotter only (Parakeet CTC 110M int8). CPU EP — DirectML next to
+         Vulkan ggml is a named kill. Pinned to 1.20.1 (newer builds fail DLL init on this box). -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
     <!-- SentencePiece BPE encoder for the CTC word spotter (term → token ids). Fully managed; its
          only transitive dep is Google.Protobuf, also managed — so unlike WindowsAppSDK it brings no
          second native runtime and cannot recreate the APPX1101 duplicate-payload collision above. -->
