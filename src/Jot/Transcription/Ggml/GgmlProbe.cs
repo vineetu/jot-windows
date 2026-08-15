@@ -4,7 +4,7 @@ using System.IO;
 namespace Jot.Transcription.Ggml;
 
 /// <summary>
-/// "Is Q8_0-on-Vulkan actually good on THIS machine" — the ggml twin of <see cref="GpuProbe"/>.
+/// "Is Q8_0-on-Vulkan actually good on THIS machine".
 /// Same clip, same KnownWords, same 150 ms/chunk bar. Cold pass is untimed (shader compile).
 /// Never run on the boot path.
 /// </summary>

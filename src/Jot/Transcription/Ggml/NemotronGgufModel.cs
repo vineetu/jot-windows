@@ -5,7 +5,7 @@ using Jot.Services.Abstractions;
 namespace Jot.Transcription.Ggml;
 
 /// <summary>
-/// Locates the on-device Nemotron 3.5 Q8_0 GGUF. Same resolution rule as the ONNX locators:
+/// Locates the on-device Nemotron 3.5 Q8_0 GGUF. Same resolution rule as the CTC locator:
 /// an explicit directory (dev hooks) wins, otherwise <c>&lt;data&gt;\models\nemotron-3.5-asr-streaming-0.6b-Q8_0</c>.
 /// <c>JOT_GGML_MODEL</c> overrides both (file or folder). The installer is
 /// <see cref="NemotronGgufModelInstaller"/>; a missing file is "not installed", never a crash.

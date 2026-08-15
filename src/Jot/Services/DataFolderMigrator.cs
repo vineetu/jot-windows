@@ -270,7 +270,7 @@ public sealed partial class DataFolderMigrator : ObservableObject
 
     private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 
-    // Mirror of NemotronModelInstaller's guard: the destination must hold a full copy while the source
+    // Mirror of the model installer's guard: the destination must hold a full copy while the source
     // still exists, so check the real target drive up front and say how much is short.
     private static void EnsureEnoughFreeSpace(string dir, long needBytes)
     {

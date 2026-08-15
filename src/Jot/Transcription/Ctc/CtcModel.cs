@@ -7,7 +7,7 @@ namespace Jot.Transcription.Ctc;
 /// <summary>
 /// Locates the OPTIONAL Parakeet CTC 110M keyword-spotter assets — the second, small model the
 /// vocabulary feature runs post-stop purely to find where a term was spoken. Same layout convention as
-/// <see cref="Nemotron.NemotronModel"/>: a folder under the user's <c>models</c> directory, downloaded
+/// the GGUF speech model: a folder under the user's <c>models</c> directory, downloaded
 /// only when vocabulary is switched on, so nobody pays ~132 MB for a feature they never enable.
 ///
 /// THREE files, and all three are load-bearing:

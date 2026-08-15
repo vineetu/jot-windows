@@ -4,11 +4,11 @@ namespace Jot.Services;
 
 /// <summary>
 /// Observable download state for the OPTIONAL vocabulary keyword-spotter model. A third singleton
-/// alongside <see cref="ModelDownload"/> (required int4) and <see cref="GpuModelDownload"/> (optional
-/// fp16), because each needs its own progress/status surface while sharing one transfer engine.
+/// alongside <see cref="ModelDownload"/> (required Q8_0 GGUF), because each needs its own
+/// progress/status surface while sharing one transfer engine.
 ///
-/// Unlike the other two this one is NEVER started by the app: the required model is a prerequisite for
-/// dictating at all and the fp16 upgrade is silent-and-optional, but this is a nine-figure byte fetch
+/// Unlike the speech model this one is NEVER started by the app: the required model is a prerequisite for
+/// dictating at all, but this is a nine-figure byte fetch
 /// for a feature the user has to opt into. Settings asks first (<see cref="ShouldOffer"/> +
 /// <see cref="ConsentMessage"/>) and only then calls <c>EnsureAsync</c>.
 /// </summary>

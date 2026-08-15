@@ -26,7 +26,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Tests exercise internal engine pieces (MelFrontend/StreamingMel byte-exactness). -->
+    <!-- Tests exercise internal engine pieces (ggml binding, CTC spotter). -->
     <InternalsVisibleTo Include="Jot.Tests" />
     <!-- The CLI reuses app internals rather than forking them (VocabularyRunner.Enrich, the
          corrections.json serializer options). -->
