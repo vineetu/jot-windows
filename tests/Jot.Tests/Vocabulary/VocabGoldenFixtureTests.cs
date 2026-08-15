@@ -221,6 +221,10 @@ public class VocabGoldenFixtureTests
             // gives one transcript two answers. Pinned the other way by our own
             // `spot-multiword-wrong-case-still-corrects`. See the identity note in ApplyFromDetections.
             "spot-multiword-already-correct-is-noop",
+            // Single-word casing-only. Upstream (and this file, previously) leave "sriram" alone
+            // when the term is "Sriram". Windows now publishes the saved casing and still emits
+            // no proposal — a casing change is not a correction. See DetectionPathCasingTests.
+            "spot-identity-is-noop",
         };
 
     private static void RunDetectionCases(string file, int expectedCount, IReadOnlySet<string> exceptions)

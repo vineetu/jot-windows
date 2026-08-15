@@ -812,15 +812,22 @@ public static class VocabularyGate
                     new Dictionary<string, string> { ["reason"] = "span is an inflected form of an everyday word" });
             }
 
-            // Identity no-op: the spotter fires on the audio whether or not the decoder already wrote
-            // the term correctly. Skip so we never emit a spurious "Vikram → Vikram".
+            // Identity: the spotter fires on the audio whether or not the decoder already wrote
+            // the term correctly. TWO relations, and the difference is deliberate:
             //
-            // TWO relations, and the difference is deliberate:
+            //  * SINGLE-WORD span — NORMALIZED, i.e. case-insensitive. Same letters means the
+            //    engine already wrote this word. If the CASE also matches, skip — no chip, no
+            //    review row, no "Vikram → Vikram". If only the case differs, publish the saved
+            //    form and still emit no proposal. A casing-only change is not a correction the
+            //    ask-deck, the pill, or the learning net should track; VocabEvalScoring.Classify
+            //    would also call it FP-overwrote (same letters after the fold). FLEURS cannot
+            //    see this class; the owner's eyes can. Locked by DetectionPathCasingTests.
             //
-            //  * SINGLE-WORD span — NORMALIZED, i.e. case-insensitive. Locked by the golden fixture
-            //    `spot-identity-is-noop` ("talk to sriram" + term "Sriram" leaves the text alone):
-            //    Mac does not churn a word the engine already wrote just to re-case it. Do not
-            //    tighten this to ordinal; the fixture is the contract.
+            //    WAS: skip even the case mismatch. Locked by `spot-identity-is-noop` ("talk to
+            //    sriram" + term "Sriram" left the text alone) to match Mac. That is the failure
+            //    mode this change exists to close. The fixture now expects the saved casing and
+            //    still 0 proposals. Do not tighten the LETTERS compare to ordinal — that compare
+            //    is still the "same word" test, reused rather than a second notion of identity.
             //
             //  * MULTI-WORD span (window-placed or dedup-widened) — ORDINAL. Either route only
             //    reaches here through a word-for-word skeleton match against the term, so the
@@ -836,10 +843,24 @@ public static class VocabularyGate
             //    case-insensitive), so a window-placed "Claude code" is left alone there. One
             //    transcript must not get two answers depending on which mechanism found it.
             string[] spanWords = SplitWords(originalWord);
-            if (spanWords.Length >= 2
+            bool sameLetters = spanWords.Length >= 2
                 ? string.Equals(originalWord, det.Term, StringComparison.Ordinal)
-                : Normalize(originalWord) == Normalize(det.Term))
+                : Normalize(originalWord) == Normalize(det.Term);
+            if (sameLetters)
+            {
+                if (string.Equals(originalWord, det.Term, StringComparison.Ordinal))
+                    continue;
+
+                // Casing-only. Letters already agree; the saved form is the user's intent.
+                // No proposal: not a correction, and Classify would score it FP-overwrote.
+                result.Append(originalTranscript, cursor, range.Start - cursor);
+                result.Append(PreservingEdgePunctuation(det.Term, originalWord));
+                diagnostics.Record(DiagnosticsCategory.VocabularyGate,
+                    $"casing {originalWord} → {det.Term}",
+                    new Dictionary<string, string> { ["reason"] = "same letters, saved casing" });
+                cursor = range.End;
                 continue;
+            }
 
             // WINDOWS DIVERGENCE, part 2 — the WIDER-span case. Reachable two ways now: a widened span
             // that reached EQUAL width, and a window sized by an ALIAS with more words than the term.

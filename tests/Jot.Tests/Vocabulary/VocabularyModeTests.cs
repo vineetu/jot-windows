@@ -243,6 +243,27 @@ public class VocabularyModeTests
     }
 
     [Fact]
+    public void EnglishCasingOnlyDoesNotAskTheCorrectorOrFillThePill()
+    {
+        // Same letters, wrong case: the gate publishes the saved form with no proposal.
+        // UnplacedHeard treats it as already spelled, so the corrector stays idle, and
+        // the pill / ask-deck see nothing — a recase is not a correction.
+        (VocabularyRunner runner, FakeSpotter spotter, CountingCorrector corrector) =
+            Build("en-US", spotterReady: true, "XaBcD");
+        spotter.Result = [new VocabularyGate.Detection("XaBcD", [], -1f, 0.5, 1.0, Acoustic: true)];
+
+        VocabularyRunner.Outcome outcome =
+            runner.Run("talk to xabcd", [], 16000, TimeSpan.FromSeconds(2));
+
+        Assert.Equal("talk to XaBcD", outcome.Text);
+        Assert.Empty(outcome.Proposals);
+        Assert.Empty(outcome.Corrections);
+        Assert.Empty(outcome.Deck);
+        Assert.Equal(1, spotter.Calls);
+        Assert.Equal(0, corrector.Calls);
+    }
+
+    [Fact]
     public void EnglishWithNoModelFallsBackToSpellingInsteadOfDoingNothing()
     {
         (VocabularyRunner runner, FakeSpotter spotter, CountingCorrector corrector) =
