@@ -65,7 +65,9 @@ internal static class BatchMode
         try
         {
             ITranscriber transcriber = TranscriberFactory.Create(
-                settings, gguf, msg => Console.Error.WriteLine("jot: " + msg));
+                settings, gguf, new Jot.Transcription.Granite.GraniteModel(paths.GraniteDir),
+                new Jot.Text.PunctCapSegModel(paths.PunctDir),
+                msg => Console.Error.WriteLine("jot: " + msg));
             if (!transcriber.IsModelInstalled)
             {
                 return Cli.Fail(

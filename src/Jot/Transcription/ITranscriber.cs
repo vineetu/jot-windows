@@ -30,6 +30,22 @@ public interface IStreamingSession
 
     /// <summary>Processes the tail and returns the final transcript.</summary>
     string Finish();
+
+    /// <summary>
+    /// Whether the transcript this session returns may CHANGE rather than only grow — i.e. whether a
+    /// later partial (or <see cref="Finish"/>) can contradict an earlier one instead of extending it.
+    ///
+    /// This exists because it is not a detail a consumer can discover safely. Anything that commits
+    /// partial text as it arrives — the CLI's finals-only NDJSON protocol above all — is only correct
+    /// on an append-only engine, and on a revising one it emits duplicated or dropped words with no
+    /// error. False (the default) is the ggml engine's structural guarantee: tokens append, fed chunks
+    /// are monotone, detokenize is a pure prefix function.
+    ///
+    /// The Granite English path sets this true for two independent reasons: its encoder's attention
+    /// blocks are non-causal, so the trailing block's words revise until it completes; and punctuation
+    /// is restored in one pass at the end, which re-cases and re-punctuates text already seen.
+    /// </summary>
+    bool RevisesText => false;
 }
 
 /// <summary>Milestone-1 placeholder: exercises the record→transcribe→paste loop without a real model.</summary>

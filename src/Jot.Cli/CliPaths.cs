@@ -16,6 +16,12 @@ internal sealed record ResolvedPaths(
     string Root, string DataRoot, string ModelsParent, JotSettings Settings, string Origin)
 {
     public string GgufDir => Path.Combine(ModelsParent, NemotronGgufModel.ModelFolder);
+    /// <summary>The English engine and its punctuation model. Same join as <see cref="GgufDir"/>:
+    /// resolving these from JotPaths instead would send the CLI to %LOCALAPPDATA% while the rest of
+    /// the run reads a data folder the user moved.</summary>
+    public string GraniteDir =>
+        Path.Combine(ModelsParent, Jot.Transcription.Granite.GraniteModel.ModelFolder);
+    public string PunctDir => Path.Combine(ModelsParent, Jot.Text.PunctCapSegModel.ModelFolder);
     public string VocabularyDir => Path.Combine(DataRoot, JotPaths.VocabularyFolderName);
     public string ToolsDir => Path.Combine(Root, "tools");
 }

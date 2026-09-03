@@ -153,7 +153,14 @@ public class RecorderVocabularyEndToEndTests(ITestOutputHelper output) : IDispos
     /// transcript the owner will see.</summary>
     private ITranscriber BuildAppEngine(JotSettings s)
     {
-        ITranscriber t = TranscriberFactory.Create(s, new NemotronGgufModel(), msg => output.WriteLine(msg));
+        // Granite/punct pointed at nothing on purpose: this suite is about the VOCABULARY gate on
+        // the ggml transcript, so it must keep exercising ggml regardless of whether the English
+        // engine happens to be installed on the machine running it.
+        ITranscriber t = TranscriberFactory.Create(
+            s, new NemotronGgufModel(),
+            new Jot.Transcription.Granite.GraniteModel(directory: @"C:\nope\granite"),
+            new Jot.Text.PunctCapSegModel(directory: @"C:\nope\punct"),
+            msg => output.WriteLine(msg));
         output.WriteLine($"engine: ggml installed={t.IsModelInstalled} device={s.TranscriptionDevice}");
         return t;
     }

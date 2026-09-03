@@ -1,0 +1,209 @@
+[
+ {
+  "text": "the quick brown fox jumps over the lazy dog nemotron streaming on the gpu",
+  "ids": [
+   5,
+   1682,
+   1176,
+   1417,
+   13546,
+   78,
+   5,
+   11947,
+   1187,
+   2592,
+   2660,
+   17503,
+   2810,
+   18,
+   5,
+   23128
+  ],
+  "pieces": [
+   "▁the",
+   "▁quick",
+   "▁brown",
+   "▁fox",
+   "▁jumps",
+   "▁over",
+   "▁the",
+   "▁lazy",
+   "▁dog",
+   "▁ne",
+   "mo",
+   "tron",
+   "▁streaming",
+   "▁on",
+   "▁the",
+   "▁gpu"
+  ],
+  "sentences": [
+   "The quick brown Fox jumps over the lazy dog Nemotron, streaming on the GPU."
+  ]
+ },
+ {
+  "text": "hey can you send me the report by friday i need it for the board meeting did you already talk to sarah about it",
+  "ids": [
+   5517,
+   50,
+   35,
+   1709,
+   94,
+   5,
+   327,
+   39,
+   325,
+   19,
+   154,
+   14,
+   17,
+   5,
+   760,
+   702,
+   137,
+   35,
+   264,
+   684,
+   7,
+   2747,
+   56,
+   14
+  ],
+  "pieces": [
+   "▁hey",
+   "▁can",
+   "▁you",
+   "▁send",
+   "▁me",
+   "▁the",
+   "▁report",
+   "▁by",
+   "▁friday",
+   "▁i",
+   "▁need",
+   "▁it",
+   "▁for",
+   "▁the",
+   "▁board",
+   "▁meeting",
+   "▁did",
+   "▁you",
+   "▁already",
+   "▁talk",
+   "▁to",
+   "▁sarah",
+   "▁about",
+   "▁it"
+  ],
+  "sentences": [
+   "Hey, can you send me the report by Friday?",
+   "I need it for the board meeting.",
+   "Did you already talk to Sarah about it?"
+  ]
+ },
+ {
+  "text": "i live at 42 baker street london and my number is 555 0134 call me after 6 pm",
+  "ids": [
+   19,
+   379,
+   29,
+   2254,
+   4548,
+   631,
+   438,
+   10,
+   67,
+   240,
+   15,
+   15407,
+   7031,
+   6176,
+   429,
+   94,
+   62,
+   408,
+   1737
+  ],
+  "pieces": [
+   "▁i",
+   "▁live",
+   "▁at",
+   "▁42",
+   "▁baker",
+   "▁street",
+   "▁london",
+   "▁and",
+   "▁my",
+   "▁number",
+   "▁is",
+   "▁555",
+   "▁01",
+   "34",
+   "▁call",
+   "▁me",
+   "▁after",
+   "▁6",
+   "▁pm"
+  ],
+  "sentences": [
+   "I live at 42 Baker Street, London, and my number is 555.",
+   "0134 Call me after 6 p.m."
+  ]
+ },
+ {
+  "text": "hello world",
+  "ids": [
+   8015,
+   140
+  ],
+  "pieces": [
+   "▁hello",
+   "▁world"
+  ],
+  "sentences": [
+   "Hello, world."
+  ]
+ },
+ {
+  "text": "what time is it",
+  "ids": [
+   63,
+   73,
+   15,
+   14
+  ],
+  "pieces": [
+   "▁what",
+   "▁time",
+   "▁is",
+   "▁it"
+  ],
+  "sentences": [
+   "What time is it?"
+  ]
+ },
+ {
+  "text": "meet me at the nasa hq tomorrow",
+  "ids": [
+   919,
+   94,
+   29,
+   5,
+   3746,
+   20209,
+   1813
+  ],
+  "pieces": [
+   "▁meet",
+   "▁me",
+   "▁at",
+   "▁the",
+   "▁nasa",
+   "▁hq",
+   "▁tomorrow"
+  ],
+  "sentences": [
+   "Meet me at the NASA HQ tomorrow."
+  ]
+ }
+]

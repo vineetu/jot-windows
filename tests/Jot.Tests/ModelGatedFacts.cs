@@ -153,6 +153,17 @@ internal static class ModelGate
             // end-to-end proof must exercise exactly what a user's machine has.
             "installed-ctc" => new CtcModel().IsInstalled
                 ? null : $"the CTC spotter model installed at {new CtcModel().Directory}",
+
+            // Granite Speech 5.0 int8 ONNX (the English engine). Env wins; else this box's staged
+            // copy. 536 MB, so CI never has it and every Granite engine fact skips honestly there.
+            "granite" => GraniteAssets.Model is null
+                ? $"{GraniteAssets.DirEnv} (or a complete Granite model in {GraniteAssets.DefaultDir})"
+                : null,
+
+            // punct_cap_seg_en, the casing/punctuation stage that pairs with Granite (209 MB).
+            "punct" => PunctAssets.Model is null
+                ? $"{PunctAssets.DirEnv} (or a complete punctuation model in {PunctAssets.DefaultDir})"
+                : null,
             // Leftover name: the RNNT is the Q8_0 GGUF now. Kept so older ModelFact lists still resolve.
             "installed-nemotron" => GgmlAssets.ModelPath is null
                 ? $"{GgmlAssets.ModelEnv} (or {GgmlAssets.DefaultModelPath})" : null,
@@ -191,6 +202,44 @@ public sealed class ModelTheoryAttribute : TheoryAttribute
     {
         string? missing = ModelGate.FirstMissing(requires);
         if (missing is not null) Skip = "needs " + missing;
+    }
+}
+
+/// <summary>The Granite Speech 5.0 int8 ONNX export as staged on this box.</summary>
+internal static class GraniteAssets
+{
+    public const string DirEnv = "JOT_GRANITE_MODEL_DIR";
+
+    public const string DefaultDir = @"D:\caches\jot-granite";
+
+    /// <summary>A COMPLETE model (graph + vocab) or null — a half-staged folder must skip, not
+    /// half-run, for the same reason the shipping locator requires both files.</summary>
+    public static Jot.Transcription.Granite.GraniteModel? Model
+    {
+        get
+        {
+            string dir = ModelGate.Env(DirEnv) ?? DefaultDir;
+            var m = new Jot.Transcription.Granite.GraniteModel(directory: dir);
+            return m.IsInstalled ? m : null;
+        }
+    }
+}
+
+/// <summary>The punct_cap_seg_en ONNX + SentencePiece model as staged on this box.</summary>
+internal static class PunctAssets
+{
+    public const string DirEnv = "JOT_PUNCT_MODEL_DIR";
+
+    public const string DefaultDir = @"D:\caches\jot-punct";
+
+    public static Jot.Text.PunctCapSegModel? Model
+    {
+        get
+        {
+            string dir = ModelGate.Env(DirEnv) ?? DefaultDir;
+            var m = new Jot.Text.PunctCapSegModel(directory: dir);
+            return m.IsInstalled ? m : null;
+        }
     }
 }
 

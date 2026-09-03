@@ -35,6 +35,11 @@
              CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures\text\*.json" Link="Fixtures\text\%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />
+    <!-- Golden torchaudio feature tensor for Assets/probe.wav, dumped from
+         GraniteSpeech5FeatureExtractor. Small enough (404 KB) to live in the repo so the front-end
+         parity fact runs in CI instead of skipping on any machine without the checkpoint. -->
+    <Content Include="Fixtures\granite\*" Link="Fixtures\granite\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

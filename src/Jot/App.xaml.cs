@@ -112,7 +112,11 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        // `--transcribe <wav> [--dml]` runs the real engine headless → %TEMP%\jot-transcribe-result.txt.
+        // `--transcribe <wav> [--dml]` runs the GGML engine headless → %TEMP%\jot-transcribe-result.txt.
+        // Deliberately NOT through TranscriberFactory: it constructs GgmlNemotronTranscriber directly so
+        // it can report backend/lookahead, which only that engine has. It is a ggml benchmark, so it
+        // never exercises the Granite English path however the language is set — use `jot transcribe`
+        // (the CLI) for an end-to-end check of what a user actually gets.
         int transcribeArg = Array.IndexOf(e.Args, "--transcribe");
         if (transcribeArg >= 0 && transcribeArg + 1 < e.Args.Length)
         {
@@ -2318,9 +2322,21 @@ public partial class App : System.Windows.Application
         services.AddSingleton<UsageStats>();
         services.AddSingleton<HotkeyManager>();
         // Nemotron 3.5 via ggml (Q8_0 + official natives). ONNX Nemotron is gone.
+        services.AddSingleton<Transcription.Granite.GraniteModel>(sp =>
+            new Transcription.Granite.GraniteModel(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
+        services.AddSingleton<Text.PunctCapSegModel>(sp =>
+            new Text.PunctCapSegModel(settings: sp.GetRequiredService<Services.Abstractions.ISettingsStore>()));
+        // English engine (Granite + punctuation) as ONE optional download — see EnglishEngineInstaller
+        // for why the two models must never be installed independently.
+        services.AddSingleton<Transcription.Granite.GraniteModelInstaller>();
+        services.AddSingleton<Text.PunctCapSegModelInstaller>();
+        services.AddSingleton<Transcription.Granite.EnglishEngineInstaller>();
+        services.AddSingleton<EnglishModelDownload>();
         services.AddSingleton<ITranscriber>(sp => Transcription.TranscriberFactory.Create(
             sp.GetRequiredService<ISettingsStore>().Current,
             sp.GetRequiredService<Transcription.Ggml.NemotronGgufModel>(),
+            sp.GetRequiredService<Transcription.Granite.GraniteModel>(),
+            sp.GetRequiredService<Text.PunctCapSegModel>(),
             JotLog.Info));   // the per-launch `engine: …` line must keep landing in the app log
         // Vocabulary (SHIPS VISIBLE inside Advanced features, master toggle default off). All three
         // stores take the SAME
@@ -2844,7 +2860,10 @@ public partial class App : System.Windows.Application
     /// (marker + resume). No-op when ggml is not the active engine this launch.</summary>
     private void TryCleanupOrtAfterGgml(ITranscriber transcriber)
     {
-        if (transcriber is not Transcription.Ggml.GgmlNemotronTranscriber g || !g.IsModelInstalled) return;
+        // Unwrap: a direct type test misses the engine once routing wraps it, and the leftover folders
+        // then survive forever. Never reintroduce `transcriber is GgmlNemotronTranscriber` here.
+        var g = Transcription.TranscriberFactory.GgmlEngineOf(transcriber);
+        if (g is null || !g.IsModelInstalled) return;
         try
         {
             var settings = Services.GetRequiredService<ISettingsStore>();

@@ -75,6 +75,8 @@ internal static class StreamMode
         {
             transcriber = TranscriberFactory.Create(
                 BatchMode.ApplyDevice(paths.Settings, o.Device), gguf,
+                new Jot.Transcription.Granite.GraniteModel(paths.GraniteDir),
+                new Jot.Text.PunctCapSegModel(paths.PunctDir),
                 msg => Console.Error.WriteLine("jot: " + msg));
         }
         catch (Exception ex)
@@ -240,7 +242,11 @@ internal static class StreamMode
                 return FeedResult.Failed;
             }
 
-            bool committed = emitter.AcceptPartial(partial);
+            // A revising engine (the Granite English path) must NOT have its partials committed:
+            // this protocol cannot retract a printed final, so committing them duplicates or drops
+            // words at every revision. Its text is emitted once, by FinishSession below. The partial
+            // is still used for endpointing — it is a fine activity signal, just not a commitment.
+            bool committed = !_session.RevisesText && emitter.AcceptPartial(partial);
 
             if (!string.Equals(partial, lastPartial, StringComparison.Ordinal))
             {

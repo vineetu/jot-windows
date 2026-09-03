@@ -28,6 +28,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IThemeService _theme;
     private readonly ModelDownload _download;
     private readonly CtcModelDownload _vocabularyDownload;
+    private readonly EnglishModelDownload _englishDownload;
     /// <summary>Every model-download surface this page owns, so anything that invalidates "is it on
     /// disk?" refreshes ALL of them. Replaces the individually-named `Refresh()` calls, which were
     /// already one short: a data-folder move refreshed only <see cref="_download"/>.</summary>
@@ -112,6 +113,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// row's status, progress bar and Download/Retry button. Started ONLY by the user (the toggle-on
     /// prompt or that button); nothing in the app fetches it in the background.</summary>
     public CtcModelDownload VocabularyDownload => _vocabularyDownload;
+
+    /// <summary>The optional English engine (Granite + punctuation). Bound by its own Settings row;
+    /// nothing starts it automatically, exactly like the vocabulary model.</summary>
+    public EnglishModelDownload EnglishDownload => _englishDownload;
 
     /// <summary>Moves the model + recordings + library when the Save location changes — the Save-location
     /// row binds its progress bar and status here. Shared singleton (also finishes interrupted moves on launch).</summary>
@@ -221,6 +226,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
         ModelDownload download, CtcModelDownload vocabularyDownload,
+        EnglishModelDownload englishDownload,
         DataFolderMigrator migrator,
         ITranscriber transcriber, IAiClient ai, AiCredentials credentials, PfbAuth pfb, ISoundService sound,
         VocabularyStore vocabulary, IVocabularySpotter spotter)
@@ -229,7 +235,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         _theme = theme;
         _download = download;
         _vocabularyDownload = vocabularyDownload;
-        _downloads = [download, vocabularyDownload];
+        _englishDownload = englishDownload;
+        _downloads = [download, vocabularyDownload, englishDownload];
         _migrator = migrator;
         _transcriber = transcriber;
         _ai = ai;
@@ -622,6 +629,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// it never throws: a failure leaves the message in the row and the feature in its designed
     /// no-model state.
     /// </summary>
+    /// <summary>
+    /// The one path that fetches the English engine. Idempotent and resumable (<c>EnsureAsync</c>),
+    /// and it never throws: a failure leaves the message in the row and English keeps working on the
+    /// multilingual engine, which is the designed no-model state rather than a broken one.
+    ///
+    /// The engine is chosen per utterance from what is installed, so a finished download takes effect
+    /// on the NEXT dictation with no restart — but the first one pays the model load, since nothing
+    /// warmed an engine that did not exist at startup.
+    /// </summary>
+    [RelayCommand]
+    private async Task DownloadEnglishModel() => await _englishDownload.EnsureAsync();
+
     [RelayCommand]
     private async Task DownloadVocabularyModel()
     {

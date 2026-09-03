@@ -232,6 +232,28 @@
                                      Visibility="{Binding Download.IsDownloading, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </ctl:SettingRow>
+                <!-- Optional English engine. Shaped like the Nemotron row above (same ModelDownload
+                     state, same shared transfer engine); the difference is that nothing starts it on
+                     its own and English keeps working without it. Button becomes "Retry" after a
+                     failure. -->
+                <ctl:SettingRow Title="English engine"
+                                Description="A faster, more accurate English-only model (Granite Speech 5.0) that also restores punctuation and capitalization. Optional — English works without it on the model above. Downloaded once, kept on this PC.">
+                    <StackPanel MinWidth="280">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:SymbolIcon Symbol="CheckmarkCircle24" Foreground="{DynamicResource JotSuccessBrush}"
+                                           Visibility="{Binding EnglishDownload.IsInstalled, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Text="{Binding EnglishDownload.StatusText}" Margin="8,0,0,0"
+                                       VerticalAlignment="Center" TextWrapping="Wrap" />
+                            <ui:Button Content="{Binding EnglishDownload.ButtonText}" Margin="12,0,0,0"
+                                       Command="{Binding DownloadEnglishModelCommand}"
+                                       AutomationProperties.Name="Download the English engine"
+                                       Visibility="{Binding EnglishDownload.ShowButton, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+                        <ProgressBar Margin="0,8,0,0" Minimum="0" Maximum="100"
+                                     Value="{Binding EnglishDownload.Progress}"
+                                     Visibility="{Binding EnglishDownload.IsDownloading, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </ctl:SettingRow>
                 <ctl:SettingRow Title="Processing"
                                 Description="Auto uses Vulkan when the graphics driver supports it, otherwise the same model on CPU. GPU (Vulkan) forces the graphics card. Applies on the next dictation after the model is ready.">
                     <ComboBox MinWidth="180" ItemsSource="{Binding TranscriptionDevices}"
