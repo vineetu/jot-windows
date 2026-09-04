@@ -96,6 +96,22 @@ public class PunctCapSegTests(ITestOutputHelper output)
         Assert.Equal("What time is it?", stage.Apply("what time is it"));
     }
 
+    [Fact]
+    public void StripForModel_removes_sentence_marks_but_keeps_what_cannot_be_rebuilt()
+    {
+        // The model adds its own marks on top of any it is given -- iOS measured 6.8 -> 27.1 marks
+        // per 100 words without this. Granite punctuates ~4% of clips, so it is a live case.
+        Assert.Equal("hello world how are you", PunctCapSeg.StripForModel("Hello, world. How are you?"));
+
+        // Apostrophes stay: the label set has none, so a contraction stripped here is gone forever.
+        Assert.Equal("it's what i'd do", PunctCapSeg.StripForModel("It's what I'd do."));
+
+        // Dots and commas INSIDE a token are not sentence marks. iOS guards digits only and
+        // measured 17/420 transcripts corrupted without it; this also saves domains and versions.
+        Assert.Equal("pi is 3.14 and 5,000 more", PunctCapSeg.StripForModel("Pi is 3.14 and 5,000 more."));
+        Assert.Equal("see example.com or 1.0.3", PunctCapSeg.StripForModel("See example.com or 1.0.3."));
+    }
+
     [ModelFact("punct")]
     public void Characters_the_vocabulary_cannot_spell_survive_verbatim()
     {

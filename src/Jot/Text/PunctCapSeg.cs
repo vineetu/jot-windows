@@ -84,17 +84,15 @@ public sealed class PunctCapSeg : IDisposable
         if (string.IsNullOrWhiteSpace(text)) return [];
         EnsureLoaded();
 
-        // LOWERCASED because the vocabulary is lowercase-only (spe_32k_lc_en): every uppercase
-        // character encodes to <unk>, so "Zürich" reaches the model as an unknown token and comes
-        // back mangled. Casing is the model's job to PREDICT, not ours to supply. Today's English
-        // engine emits lowercase anyway, so this costs nothing and stops a caller that does not
-        // from silently destroying words.
+        string prepared = StripForModel(text);
+        if (prepared.Length == 0) return [];
+
         IReadOnlyList<EncodedToken> tokens = _tokenizer!.EncodeToTokens(
-            text.ToLowerInvariant(), out string? normalized,
+            prepared, out string? normalized,
             addBeginningOfSentence: false, addEndOfSentence: false);
         if (tokens.Count == 0) return [];
 
-        string source = normalized ?? text.ToLowerInvariant();
+        string source = normalized ?? prepared;
         var ids = new int[tokens.Count];
         var surfaces = new string[tokens.Count];
         var unknown = new bool[tokens.Count];
@@ -123,6 +121,48 @@ public sealed class PunctCapSeg : IDisposable
             Predict(ids, surfaces, unknown, w, pieces, pre, post, caps, sbd, raw);
         }
         return Reconstruct(pieces, pre, post, caps, sbd, raw);
+    }
+
+    /// <summary>
+    /// Lowercases and removes sentence punctuation, so the model sees the shape it was trained on.
+    ///
+    /// LOWERCASE because the vocabulary is lowercase-only (spe_32k_lc_en) — every uppercase
+    /// character otherwise encodes to &lt;unk&gt; and "Zürich" comes back mangled. Casing is what
+    /// this model PREDICTS; supplying it is what breaks it.
+    ///
+    /// STRIPPED because the model adds its own marks on top of any it is given. Jot for iOS
+    /// measured the result of not doing this at 6.8 → 27.1 marks per 100 words ("there??",
+    /// "Yeah,,", "log. File.."). Granite emits punctuation on ~4% of clips — mostly ITN artifacts —
+    /// so this is a live case, not a hypothetical one.
+    ///
+    /// Two things are deliberately kept:
+    ///   * APOSTROPHES. The label set is <c>. , ?</c> plus <c>&lt;ACRONYM&gt;</c> with no
+    ///     apostrophe, so a contraction removed here can never be rebuilt.
+    ///   * DOTS AND COMMAS BETWEEN NON-SPACES — "3.1", "5,000", "1.0.3", "example.com". These are
+    ///     inside a token, not ending a sentence; stripping them yields "3 1" and "example com",
+    ///     which the model then re-punctuates as prose. iOS guards this with a digits-only rule and
+    ///     measured 17/420 real transcripts corrupted without it; the wider "not whitespace either
+    ///     side" test used here is a deliberate superset that also saves domains and version
+    ///     strings, and still strips every sentence-final mark, which is followed by a space.
+    /// </summary>
+    internal static string StripForModel(string text)
+    {
+        string lower = text.ToLowerInvariant();
+        var sb = new StringBuilder(lower.Length);
+        for (int i = 0; i < lower.Length; i++)
+        {
+            char ch = lower[i];
+            if (ch is '.' or ',')
+            {
+                bool inside = i > 0 && !char.IsWhiteSpace(lower[i - 1])
+                              && i + 1 < lower.Length && !char.IsWhiteSpace(lower[i + 1]);
+                sb.Append(inside ? ch : ' ');
+                continue;
+            }
+            sb.Append("?!;:\"()[]".Contains(ch) ? ' ' : ch);
+        }
+        return string.Join(' ', sb.ToString()
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 
     /// <summary>The token's own characters, taken back out of the text the tokenizer normalized.</summary>
