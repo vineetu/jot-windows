@@ -34,6 +34,10 @@ public sealed class PunctCapSeg : IDisposable
     private const int BosId = 1;
     private const int EosId = 2;
 
+    /// <summary>SentencePiece's unknown id. Anything the lowercase-English vocabulary cannot spell
+    /// lands here — see <see cref="Segment"/> for why that must not reach the user as text.</summary>
+    private const int UnkId = 0;
+
     /// <summary>Widest per-character capitalization mask the graph emits.</summary>
     private const int CapSlots = 16;
 
@@ -80,20 +84,52 @@ public sealed class PunctCapSeg : IDisposable
         if (string.IsNullOrWhiteSpace(text)) return [];
         EnsureLoaded();
 
-        IReadOnlyList<int> ids = _tokenizer!.EncodeToIds(text);
-        if (ids.Count == 0) return [];
+        // LOWERCASED because the vocabulary is lowercase-only (spe_32k_lc_en): every uppercase
+        // character encodes to <unk>, so "Zürich" reaches the model as an unknown token and comes
+        // back mangled. Casing is the model's job to PREDICT, not ours to supply. Today's English
+        // engine emits lowercase anyway, so this costs nothing and stops a caller that does not
+        // from silently destroying words.
+        IReadOnlyList<EncodedToken> tokens = _tokenizer!.EncodeToTokens(
+            text.ToLowerInvariant(), out string? normalized,
+            addBeginningOfSentence: false, addEndOfSentence: false);
+        if (tokens.Count == 0) return [];
 
-        var pieces = new List<string>(ids.Count);
-        var pre = new List<string?>(ids.Count);
-        var post = new List<string?>(ids.Count);
-        var caps = new List<bool[]>(ids.Count);
-        var sbd = new List<bool>(ids.Count);
-
-        foreach (Window w in Windows(ids.Count))
+        string source = normalized ?? text.ToLowerInvariant();
+        var ids = new int[tokens.Count];
+        var surfaces = new string[tokens.Count];
+        var unknown = new bool[tokens.Count];
+        for (int i = 0; i < tokens.Count; i++)
         {
-            Predict(ids, w, pieces, pre, post, caps, sbd);
+            ids[i] = tokens[i].Id;
+            unknown[i] = tokens[i].Id == UnkId;
+            // An unknown token keeps the ORIGINAL characters. Reconstruct emits the vocabulary's
+            // piece for every id, so without this an id the vocabulary cannot spell prints as the
+            // literal text "<unk>" — measured on real dictation: "a spike of 75%" was delivered to
+            // the user as "a spike of 75<unk>". The vocabulary has no '%', and no ' ", curly quote,
+            // en dash, ellipsis, degree sign, '@', '#', '=', '/', '~' or emoji either. Punctuating
+            // text must never be able to DELETE any of it.
+            surfaces[i] = unknown[i] ? Slice(source, tokens[i].Offset) : _vocab!.Piece(tokens[i].Id);
         }
-        return Reconstruct(pieces, pre, post, caps, sbd);
+
+        var pieces = new List<string>(tokens.Count);
+        var pre = new List<string?>(tokens.Count);
+        var post = new List<string?>(tokens.Count);
+        var caps = new List<bool[]>(tokens.Count);
+        var sbd = new List<bool>(tokens.Count);
+        var raw = new List<bool>(tokens.Count);
+
+        foreach (Window w in Windows(tokens.Count))
+        {
+            Predict(ids, surfaces, unknown, w, pieces, pre, post, caps, sbd, raw);
+        }
+        return Reconstruct(pieces, pre, post, caps, sbd, raw);
+    }
+
+    /// <summary>The token's own characters, taken back out of the text the tokenizer normalized.</summary>
+    private static string Slice(string source, Range offset)
+    {
+        (int start, int length) = offset.GetOffsetAndLength(source.Length);
+        return source.Substring(start, length);
     }
 
     /// <summary>A slice of the id stream plus the sub-slice of it that survives overlap trimming.</summary>
@@ -123,8 +159,10 @@ public sealed class PunctCapSeg : IDisposable
         }
     }
 
-    private void Predict(IReadOnlyList<int> ids, Window w, List<string> pieces, List<string?> pre,
-                         List<string?> post, List<bool[]> caps, List<bool> sbd)
+    private void Predict(IReadOnlyList<int> ids, IReadOnlyList<string> surfaces,
+                         IReadOnlyList<bool> unknown, Window w, List<string> pieces,
+                         List<string?> pre, List<string?> post, List<bool[]> caps,
+                         List<bool> sbd, List<bool> raw)
     {
         int span = w.Stop - w.Start;
         var input = new DenseTensor<long>([1, span + 2]);
@@ -154,7 +192,8 @@ public sealed class PunctCapSeg : IDisposable
         for (int i = w.KeepFrom; i < w.KeepTo; i++)
         {
             int at = i - w.Start + 1;
-            pieces.Add(_vocab!.Piece(ids[i]));
+            pieces.Add(surfaces[i]);
+            raw.Add(unknown[i]);
             pre.Add(Label(PreLabels, preOut[0, at]));
             post.Add(Label(PostLabels, postOut[0, at]));
 
@@ -179,7 +218,7 @@ public sealed class PunctCapSeg : IDisposable
     /// same offset the mask is indexed by.
     /// </summary>
     private static List<string> Reconstruct(List<string> pieces, List<string?> pre, List<string?> post,
-                                            List<bool[]> caps, List<bool> sbd)
+                                            List<bool[]> caps, List<bool> sbd, List<bool> raw)
     {
         var sentences = new List<string>();
         var current = new StringBuilder();
@@ -197,7 +236,10 @@ public sealed class PunctCapSeg : IDisposable
             {
                 char ch = piece[c];
                 if (c == charStart && pre[t] is { } preMark) current.Append(preMark);
-                if (c < CapSlots && caps[t][c]) ch = char.ToUpperInvariant(ch);
+                // Casing is NOT applied to a token the model could not read: its per-character mask
+                // describes an <unk>, not these characters. Surrounding punctuation still is — the
+                // neighbouring context was read normally.
+                if (!raw[t] && c < CapSlots && caps[t][c]) ch = char.ToUpperInvariant(ch);
                 current.Append(ch);
 
                 bool lastChar = c == piece.Length - 1;

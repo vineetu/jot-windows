@@ -97,6 +97,40 @@ public class PunctCapSegTests(ITestOutputHelper output)
     }
 
     [ModelFact("punct")]
+    public void Characters_the_vocabulary_cannot_spell_survive_verbatim()
+    {
+        // Reconstruction emits the vocabulary's piece for every id, so an id the vocabulary cannot
+        // spell used to print as the literal text "<unk>". MEASURED on real dictation before the
+        // fix: Granite heard "a spike of 75%" and the user was handed "a spike of 75<unk>".
+        //
+        // spe_32k_lc_en has no '%', no curly quote or apostrophe, no en dash, ellipsis, degree
+        // sign, '@', '#', '=', '/', '~' and no emoji -- and, being LOWERCASE-only, no capital
+        // letter either. Restoring punctuation must never be able to delete the text it punctuates.
+        using var stage = new PunctCapSeg(PunctAssets.Model!, new OnnxSessionFactory());
+        foreach (string fragment in new[]
+                 { "75%", "25°", "a–b", "x=y", "50/50", "user@example.com", "#tag", "½" })
+        {
+            string got = stage.Apply("i saw " + fragment + " today");
+            Assert.DoesNotContain("<unk>", got);
+            // Case-insensitive: capitalising a character the model CAN read is its job, and it does
+            // reasonably choose "X=y" here. The invariant under test is that nothing is DELETED.
+            Assert.Contains(fragment, got, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [ModelFact("punct")]
+    public void Uppercase_input_is_not_destroyed_by_the_lowercase_vocabulary()
+    {
+        // Every capital encodes to <unk> in a lowercase-only vocabulary, so text that arrives
+        // already cased used to lose whole words ("Zurich" -> "<unk>urich"). The stage lowercases
+        // first and lets the model predict casing, which is what it is for.
+        using var stage = new PunctCapSeg(PunctAssets.Model!, new OnnxSessionFactory());
+        string got = stage.Apply("I flew to Zurich on Monday");
+        Assert.DoesNotContain("<unk>", got);
+        Assert.Contains("urich", got);
+    }
+
+    [ModelFact("punct")]
     public void Capitalization_is_per_character_not_per_token()
     {
         // The whole reason reconstruction walks characters. A per-token implementation produces

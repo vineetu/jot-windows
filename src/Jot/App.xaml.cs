@@ -1675,11 +1675,15 @@ public partial class App : System.Windows.Application
         string outPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "jot-transcribe-result.txt");
         try
         {
-            var backend = useDml
-                ? Transcription.Onnx.ComputeBackend.DirectML
-                : Transcription.Onnx.ComputeBackend.Cpu;
-            using var transcriber = new ParakeetTranscriber(
-                new ParakeetModel(), new Transcription.Onnx.OnnxSessionFactory(), backend);
+            // The ggml engine, because it is the one that ships. This constructed the ONNX
+            // ParakeetTranscriber until 2026-09-03 — an engine deleted in c581031 whose model no
+            // install still carries, so every run of this hook failed with "The speech model isn't
+            // installed yet" whatever was on disk. `--dml` is accepted and ignored: there is no
+            // DirectML path left to benchmark.
+            var options = Transcription.Ggml.GgmlEngineOptions.Resolve(new JotSettings());
+            string backend = $"ggml/{options.Backend}" + (useDml ? " (--dml ignored)" : "");
+            using var transcriber = new Transcription.Ggml.GgmlNemotronTranscriber(
+                new Transcription.Ggml.NemotronGgufModel(), options);
 
             float[] samples = WavAudio.ReadMono16k(wavPath);
 
