@@ -29,16 +29,25 @@ public sealed class LanguageRoutedTranscriber : ITranscriber, IStreamingTranscri
     private readonly ITranscriber _english;
     private readonly ITranscriber _other;
     private readonly Action<string>? _log;
+    private readonly Func<string> _englishLabel;
 
     private string _language = "";
     private string? _lastRouteLogged;
 
+    /// <param name="englishLabel">What the English route IS, for the log line. Passed in because the
+    /// router cannot tell: the English engine is Granite on one install and punctuation-restored ggml
+    /// on another, and a hardcoded "granite" would name the wrong engine on the second — the one
+    /// place a reader looks to find out what actually ran. Evaluated at LOG time, not construction,
+    /// because the punctuation toggle can change what runs without rebuilding anything; the label
+    /// changing is itself a route change worth a line.</param>
     public LanguageRoutedTranscriber(ITranscriber english, ITranscriber other,
-                                     Action<string>? log = null)
+                                     Action<string>? log = null,
+                                     Func<string>? englishLabel = null)
     {
         _english = english;
         _other = other;
         _log = log;
+        _englishLabel = englishLabel ?? (() => "granite (English)");
     }
 
     /// <summary>The multilingual engine behind the router. Exposed because callers that need the
@@ -102,7 +111,7 @@ public sealed class LanguageRoutedTranscriber : ITranscriber, IStreamingTranscri
     /// first thing worth knowing from a log, and repeating it every dictation buries everything else.</summary>
     private void LogRoute(ITranscriber engine)
     {
-        string name = ReferenceEquals(engine, _english) ? "granite (English)" : "ggml";
+        string name = ReferenceEquals(engine, _english) ? _englishLabel() : "ggml";
         if (name == _lastRouteLogged) return;
         _lastRouteLogged = name;
         _log?.Invoke($"engine route: {name} for language '{_language}'");

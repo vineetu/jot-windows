@@ -12,12 +12,16 @@ namespace Jot.Transcription;
 /// selection or of the downcast below would drift, and a drifted CLI silently transcribes with the
 /// wrong engine or the wrong language.
 ///
-/// Jot now has TWO engines and the split is by language, not by device:
-///   * English  -> Granite Speech 5.0 TurboCTC on ONNX Runtime (CPU), punctuated by punct_cap_seg_en.
-///   * anything else, and "auto" -> Nemotron 3.5 via ggml, which is the multilingual one.
+/// The split is by language, not by device, and the English route has three shapes depending on
+/// what is downloaded:
+///   * Granite + punct_cap_seg_en  -> Granite Speech 5.0 TurboCTC on ONNX Runtime (CPU). Punctuation
+///     is mandatory here; that head emits no marks or casing at all.
+///   * punct_cap_seg_en alone      -> the ggml engine with English punctuation RESTORED over its own.
+///     A quality setting (default on), not a repair, and a pass-through when switched off.
+///   * neither                     -> ggml untouched.
+/// Anything not English, and "auto", is ggml in every case — the punctuation model is English-only.
 /// The models are REQUIRED parameters rather than optional ones so a new call site cannot silently
-/// lose the English engine by forgetting to pass it; when the Granite assets are missing the router
-/// falls back to ggml on its own.
+/// lose the English engine by forgetting to pass it.
 /// </summary>
 public static class TranscriberFactory
 {
@@ -29,7 +33,8 @@ public static class TranscriberFactory
         GraniteModel granite,
         PunctCapSegModel punct,
         Action<string>? log = null,
-        Func<string, string?>? env = null)
+        Func<string, string?>? env = null,
+        Func<bool>? restoreEnglishPunctuation = null)
     {
         env ??= Environment.GetEnvironmentVariable;
         var ggmlOpts = GgmlEngineOptions.Resolve(s, env);
@@ -47,17 +52,44 @@ public static class TranscriberFactory
 
         var multilingual = new GgmlNemotronTranscriber(gguf, ggmlOpts);
         var sessions = new OnnxSessionFactory();
-        ITranscriber english = new GraniteTranscriber(granite, sessions);
 
-        // Punctuation is not optional for this engine — Granite's CTC head emits no casing or marks
-        // at all — so without the punctuation model the English engine is NOT offered and English
-        // stays on ggml, which punctuates itself. Half of the pair is worse than neither.
-        if (punct.IsInstalled)
-            english = new PunctuatingTranscriber(english, new PunctCapSeg(punct, sessions));
+        ITranscriber english;
+        if (granite.IsInstalled && punct.IsInstalled)
+        {
+            // Granite needs punctuation unconditionally: its CTC head emits no casing or marks at
+            // all, so half of the pair is worse than neither.
+            english = new PunctuatingTranscriber(new GraniteTranscriber(granite, sessions),
+                                                 new PunctCapSeg(punct, sessions));
+        }
+        else if (punct.IsInstalled)
+        {
+            // No Granite, but the punctuation model is here: restore English on the MULTILINGUAL
+            // engine instead. ggml already punctuates, so this is a quality upgrade rather than a
+            // repair, and it is a setting — read per utterance, since Settings changes it without
+            // rebuilding DI — which is why the app passes a LIVE accessor rather than letting this
+            // close over `s`, a snapshot taken once at construction. The CLI passes nothing and gets
+            // the snapshot, which is correct for a one-shot process. ownsInner is false because
+            // `multilingual` is also the non-English route; disposing it here would tear down an
+            // engine still in use.
+            english = new PunctuatingTranscriber(
+                multilingual, new PunctCapSeg(punct, sessions),
+                enabled: restoreEnglishPunctuation ?? (() => s.RestoreEnglishPunctuation),
+                ownsInner: false);
+
+        }
         else
+        {
+            // Nothing to add. Reporting not-installed routes English to ggml untouched, which is
+            // exactly today's behaviour.
             english = new UninstalledTranscriber();
+        }
 
-        var routed = new LanguageRoutedTranscriber(english, multilingual, log);
+        Func<bool> restoring = restoreEnglishPunctuation ?? (() => s.RestoreEnglishPunctuation);
+        var routed = new LanguageRoutedTranscriber(
+            english, multilingual, log,
+            englishLabel: () => granite.IsInstalled ? "granite (English)"
+                              : restoring() ? "ggml + punctuation (English)"
+                                            : "ggml (English, punctuation off)");
         routed.SetLanguage(s.Language);
         return routed;
     }

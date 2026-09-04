@@ -2336,12 +2336,20 @@ public partial class App : System.Windows.Application
         services.AddSingleton<Text.PunctCapSegModelInstaller>();
         services.AddSingleton<Transcription.Granite.EnglishEngineInstaller>();
         services.AddSingleton<EnglishModelDownload>();
+        // The punctuation model on its own — a 209 MB English quality upgrade over the multilingual
+        // engine, with no engine swap. Same folder as the bundle above, so either satisfies both.
+        services.AddSingleton<PunctuationDownload>();
         services.AddSingleton<ITranscriber>(sp => Transcription.TranscriberFactory.Create(
             sp.GetRequiredService<ISettingsStore>().Current,
             sp.GetRequiredService<Transcription.Ggml.NemotronGgufModel>(),
             sp.GetRequiredService<Transcription.Granite.GraniteModel>(),
             sp.GetRequiredService<Text.PunctCapSegModel>(),
-            JotLog.Info));   // the per-launch `engine: …` line must keep landing in the app log
+            JotLog.Info,     // the per-launch `engine: …` line must keep landing in the app log
+            env: null,
+            // Live, not the snapshot above: the Settings toggle must take effect on the next
+            // dictation without restarting the app.
+            restoreEnglishPunctuation: () =>
+                sp.GetRequiredService<ISettingsStore>().Current.RestoreEnglishPunctuation));
         // Vocabulary (SHIPS VISIBLE inside Advanced features, master toggle default off). All three
         // stores take the SAME
         // containerRoot — the data folder — and append `Vocabulary\` themselves, so the one folder

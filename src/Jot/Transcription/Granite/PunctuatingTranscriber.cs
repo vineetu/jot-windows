@@ -7,9 +7,19 @@ using Jot.Text;
 namespace Jot.Transcription.Granite;
 
 /// <summary>
-/// Adds punctuation, casing and sentence breaks to an engine that emits none. Wraps the Granite
-/// English engine only — the ggml multilingual engine punctuates on its own and must not be run
-/// through this.
+/// Restores punctuation, casing and sentence breaks on ENGLISH, with punct_cap_seg_en.
+///
+/// It wraps two very different engines and the difference is what <c>enabled</c> encodes:
+///   * GRANITE, which emits no marks at all. Not a preference — without this the user gets a
+///     lowercase run-on, so it is always on and both models are required.
+///   * GGML/NEMOTRON, which punctuates perfectly well on its own. Here this is a QUALITY choice
+///     rather than a necessity: Jot for iOS measured the same model beating Parakeet's native
+///     punctuation 31–16 with three blind judges on 420 real recordings, so it is offered as a
+///     setting, defaults on, and degrades to the engine's own marks when off or when the model is
+///     not downloaded.
+///
+/// Never wrap a NON-English route in this: the model is English-only and would re-punctuate German
+/// as though it were English.
 ///
 /// It is a decorator rather than a step inside <see cref="GraniteTranscriber"/> so that the raw
 /// model output stays independently testable, and a decorator rather than a stage in the caller's
@@ -27,16 +37,42 @@ public sealed class PunctuatingTranscriber : ITranscriber, IStreamingTranscriber
 {
     private readonly ITranscriber _inner;
     private readonly PunctCapSeg _punctuation;
+    private readonly Func<bool>? _enabled;
+    private readonly bool _ownsInner;
 
-    public PunctuatingTranscriber(ITranscriber inner, PunctCapSeg punctuation)
+    /// <param name="enabled">Read per utterance, not captured once, because Settings changes the
+    /// toggle without rebuilding the DI graph. Null means always on — the Granite path, where this
+    /// is not a preference: that engine emits no marks at all, so switching it off would hand the
+    /// user a lowercase run-on rather than a plainer sentence.</param>
+    /// <param name="ownsInner">False when the inner engine is SHARED with the language router — the
+    /// ggml engine is both the multilingual route and the thing being punctuated for English, and
+    /// disposing it here would tear down the engine the other route is still using.</param>
+    public PunctuatingTranscriber(ITranscriber inner, PunctCapSeg punctuation,
+                                  Func<bool>? enabled = null, bool ownsInner = true)
     {
         _inner = inner;
         _punctuation = punctuation;
+        _enabled = enabled;
+        _ownsInner = ownsInner;
     }
 
-    /// <summary>Both models must be present: punctuation is not optional polish for this engine,
-    /// it is the difference between a sentence and a lowercase run-on.</summary>
-    public bool IsModelInstalled => _inner.IsModelInstalled && _punctuation.IsModelInstalled;
+    /// <summary>
+    /// Whether restoration actually runs right now. Off ⇒ this decorator is a pass-through and the
+    /// inner engine's own punctuation is what ships. Toggle FIRST: when the user has switched
+    /// restoration off there is no reason to ask the punctuation stage anything, including whether
+    /// its model is on disk.
+    /// </summary>
+    private bool Active => (_enabled?.Invoke() ?? true) && _punctuation.IsModelInstalled;
+
+    /// <summary>
+    /// Reports the INNER engine when restoration is only a polish pass over an engine that already
+    /// punctuates, and requires both models when it is not optional. Getting this wrong either way
+    /// is user-visible: too strict and a CLI refuses a language it can transcribe, too loose and
+    /// the router picks an engine whose model is missing.
+    /// </summary>
+    public bool IsModelInstalled =>
+        _enabled is null ? _inner.IsModelInstalled && _punctuation.IsModelInstalled
+                         : _inner.IsModelInstalled;
 
     public async Task<string> TranscribeAsync(float[] samples, int sampleRate,
                                               CancellationToken ct = default)
@@ -47,7 +83,7 @@ public sealed class PunctuatingTranscriber : ITranscriber, IStreamingTranscriber
         _inner.WarmUp();
         // Warm the punctuation graph too. Skipping it moves a ~400 ms model load onto the end of
         // the user's first dictation, i.e. straight into the gap before the paste.
-        if (_punctuation.IsModelInstalled) _punctuation.Apply("warm up the punctuation model");
+        if (Active) _punctuation.Apply("warm up the punctuation model");
     }
 
     public IStreamingSession OpenStream()
@@ -64,7 +100,7 @@ public sealed class PunctuatingTranscriber : ITranscriber, IStreamingTranscriber
     /// </summary>
     private string Restore(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return text;
+        if (string.IsNullOrWhiteSpace(text) || !Active) return text;
         try
         {
             return _punctuation.Apply(text);
@@ -88,11 +124,15 @@ public sealed class PunctuatingTranscriber : ITranscriber, IStreamingTranscriber
         }
 
         /// <summary>
-        /// True regardless of what the inner engine reports: punctuation lands in one pass at
-        /// Finish, so the final text re-cases and re-punctuates words the partials already showed.
-        /// Even wrapping a strictly append-only engine, THIS session revises.
+        /// True whenever restoration will actually run: punctuation lands in one pass at Finish, so
+        /// the final text re-cases and re-punctuates words the partials already showed. Even
+        /// wrapping a strictly append-only engine, THIS session revises.
+        ///
+        /// It falls back to the inner engine's own answer when the toggle is off, because then this
+        /// decorator is a pass-through — claiming revision anyway would cost ggml the append-only
+        /// guarantee the CLI's finals-only protocol relies on, for no reason.
         /// </summary>
-        public bool RevisesText => true;
+        public bool RevisesText => _owner.Active || _inner.RevisesText;
 
         /// <summary>Raw — see the class remarks.</summary>
         public string Accept(float[] newSamples) => _inner.Accept(newSamples);
@@ -102,7 +142,7 @@ public sealed class PunctuatingTranscriber : ITranscriber, IStreamingTranscriber
 
     public void Dispose()
     {
-        (_inner as IDisposable)?.Dispose();
+        if (_ownsInner) (_inner as IDisposable)?.Dispose();
         _punctuation.Dispose();
     }
 }

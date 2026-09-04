@@ -29,6 +29,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ModelDownload _download;
     private readonly CtcModelDownload _vocabularyDownload;
     private readonly EnglishModelDownload _englishDownload;
+    private readonly PunctuationDownload _punctuationDownload;
     /// <summary>Every model-download surface this page owns, so anything that invalidates "is it on
     /// disk?" refreshes ALL of them. Replaces the individually-named `Refresh()` calls, which were
     /// already one short: a data-folder move refreshed only <see cref="_download"/>.</summary>
@@ -89,6 +90,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _language = "English";
     [ObservableProperty] private string _transcriptionDevice = Jot.Transcription.TranscriptionDevices.Auto;
     [ObservableProperty] private bool _liveCaptions = true;
+    [ObservableProperty] private bool _restoreEnglishPunctuation = true;
     [ObservableProperty] private bool _offlineCleanupEnabled = true;
     [ObservableProperty] private bool _autoPaste;
     [ObservableProperty] private bool _autoEnter;
@@ -117,6 +119,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>The optional English engine (Granite + punctuation). Bound by its own Settings row;
     /// nothing starts it automatically, exactly like the vocabulary model.</summary>
     public EnglishModelDownload EnglishDownload => _englishDownload;
+
+    /// <summary>The punctuation model alone — the English quality upgrade that needs no engine
+    /// swap. Shares a folder with <see cref="EnglishDownload"/>, so installing either ticks both.</summary>
+    public PunctuationDownload PunctuationDownload => _punctuationDownload;
 
     /// <summary>Moves the model + recordings + library when the Save location changes — the Save-location
     /// row binds its progress bar and status here. Shared singleton (also finishes interrupted moves on launch).</summary>
@@ -227,6 +233,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public SettingsViewModel(ISettingsStore store, IThemeService theme,
         ModelDownload download, CtcModelDownload vocabularyDownload,
         EnglishModelDownload englishDownload,
+        PunctuationDownload punctuationDownload,
         DataFolderMigrator migrator,
         ITranscriber transcriber, IAiClient ai, AiCredentials credentials, PfbAuth pfb, ISoundService sound,
         VocabularyStore vocabulary, IVocabularySpotter spotter)
@@ -236,7 +243,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         _download = download;
         _vocabularyDownload = vocabularyDownload;
         _englishDownload = englishDownload;
-        _downloads = [download, vocabularyDownload, englishDownload];
+        _punctuationDownload = punctuationDownload;
+        _downloads = [download, vocabularyDownload, englishDownload, punctuationDownload];
         _migrator = migrator;
         _transcriber = transcriber;
         _ai = ai;
@@ -256,6 +264,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _language = NemotronLocales.Normalize(S.Language); // legacy names → codes so the picker matches
         _transcriptionDevice = S.TranscriptionDevice;
         _liveCaptions = S.LiveCaptions;
+        _restoreEnglishPunctuation = S.RestoreEnglishPunctuation;
         _offlineCleanupEnabled = S.OfflineCleanupEnabled;
         _autoPaste = S.AutoPaste;
         _autoEnter = S.AutoEnter;
@@ -328,6 +337,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
     partial void OnTranscriptionDeviceChanged(string value) { S.TranscriptionDevice = value; Save(); }
     partial void OnLiveCaptionsChanged(bool value) { S.LiveCaptions = value; Save(); }
+    // No engine rebuild: the factory reads this through a live accessor, so it lands on the next
+    // dictation.
+    partial void OnRestoreEnglishPunctuationChanged(bool value) { S.RestoreEnglishPunctuation = value; Save(); }
     partial void OnOfflineCleanupEnabledChanged(bool value) { S.OfflineCleanupEnabled = value; Save(); }
     partial void OnAutoPasteChanged(bool value) { S.AutoPaste = value; Save(); }
     partial void OnAutoEnterChanged(bool value) { S.AutoEnter = value; Save(); }
@@ -640,6 +652,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     [RelayCommand]
     private async Task DownloadEnglishModel() => await _englishDownload.EnsureAsync();
+
+    /// <summary>Fetches the punctuation model alone. Idempotent, resumable and never throws, like
+    /// every other download row.</summary>
+    [RelayCommand]
+    private async Task DownloadPunctuationModel() => await _punctuationDownload.EnsureAsync();
 
     [RelayCommand]
     private async Task DownloadVocabularyModel()

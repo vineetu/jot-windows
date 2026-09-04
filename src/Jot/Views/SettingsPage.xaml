@@ -254,6 +254,30 @@
                                      Visibility="{Binding EnglishDownload.IsDownloading, Converter={StaticResource BoolToVis}}" />
                     </StackPanel>
                 </ctl:SettingRow>
+                <!-- The punctuation model on its own: an English quality upgrade over the speech
+                     model's own marks, no engine swap. Toggle and download in one row because
+                     either alone is a dead control - the switch does nothing without the model,
+                     and the model does nothing with the switch off. -->
+                <ctl:SettingRow Title="Better punctuation (English)"
+                                Description="Restore punctuation, capitalization and sentence breaks on English dictation with a dedicated model, instead of the speech model's own. Needs a one-time download; without it the speech model punctuates as before.">
+                    <StackPanel MinWidth="280">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:ToggleSwitch IsChecked="{Binding RestoreEnglishPunctuation, Mode=TwoWay}" />
+                            <ui:SymbolIcon Symbol="CheckmarkCircle24" Margin="12,0,0,0"
+                                           Foreground="{DynamicResource JotSuccessBrush}"
+                                           Visibility="{Binding PunctuationDownload.IsInstalled, Converter={StaticResource BoolToVis}}" />
+                            <TextBlock Text="{Binding PunctuationDownload.StatusText}" Margin="8,0,0,0"
+                                       VerticalAlignment="Center" TextWrapping="Wrap" />
+                            <ui:Button Content="{Binding PunctuationDownload.ButtonText}" Margin="12,0,0,0"
+                                       Command="{Binding DownloadPunctuationModelCommand}"
+                                       AutomationProperties.Name="Download the punctuation model"
+                                       Visibility="{Binding PunctuationDownload.ShowButton, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+                        <ProgressBar Margin="0,8,0,0" Minimum="0" Maximum="100"
+                                     Value="{Binding PunctuationDownload.Progress}"
+                                     Visibility="{Binding PunctuationDownload.IsDownloading, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </ctl:SettingRow>
                 <ctl:SettingRow Title="Processing"
                                 Description="Auto uses Vulkan when the graphics driver supports it, otherwise the same model on CPU. GPU (Vulkan) forces the graphics card. Applies on the next dictation after the model is ready.">
                     <ComboBox MinWidth="180" ItemsSource="{Binding TranscriptionDevices}"

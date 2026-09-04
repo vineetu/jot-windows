@@ -40,6 +40,7 @@ public sealed class JotSettings
     public bool GpuUpgradeBalloonShown { get; set; }          // the one informational "GPU ready" balloon fires once
     public bool LiveCaptions { get; set; } = true;            // show a running transcript in the pill while recording
     public bool OfflineCleanupEnabled { get; set; } = true;   // on-device, non-AI tidy of every transcript (filler/casing/numbers)
+    public bool RestoreEnglishPunctuation { get; set; } = true;  // re-punctuate + re-case English with punct_cap_seg_en (needs its model)
     public bool AutoPaste { get; set; } = true;
     public bool AutoEnter { get; set; }
     public bool KeepInClipboard { get; set; }
